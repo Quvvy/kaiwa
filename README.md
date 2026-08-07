@@ -2,7 +2,7 @@
 
 Personal Japanese AI conversation partner — turn-based chat, Practice, and a self-assessment placement check.
 
-**Repo:** `E:\cursor\kaiwa`  
+**Repo:** [github.com/Quvvy/kaiwa](https://github.com/Quvvy/kaiwa) (`E:\cursor\kaiwa`)  
 **Wiki:** tagged `kaiwa` in `C:\Users\elifs\Projects\llm-wiki`
 
 ## Stack
