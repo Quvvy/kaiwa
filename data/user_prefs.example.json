@@ -1,0 +1,15 @@
+{
+  "correction_style": "gentle",
+  "personality_id": "patient_tutor",
+  "personality_custom": "",
+  "max_sentences": 3,
+  "language_policy": "adaptive",
+  "speech_register": "casual",
+  "naturalness_tips": true,
+  "help_language": "en",
+  "tts_engine": "aivisspeech",
+  "voicevox_speaker_id": 888753760,
+  "goal_level": "pre_n5",
+  "topic_preferences": [],
+  "model_routing": "auto"
+}

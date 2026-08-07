@@ -1,0 +1,18 @@
+{
+  "comfort": {
+    "preferred_name": "",
+    "vibe_notes": "",
+    "do": [],
+    "dont": []
+  },
+  "topics": [],
+  "vocab": [],
+  "grammar_notes": [],
+  "stats": {
+    "chat_turns": 0,
+    "chat_turns_since_extract": 0,
+    "last_extract_turn": 0,
+    "total_extracts": 0
+  },
+  "updated_at": ""
+}

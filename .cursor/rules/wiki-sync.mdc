@@ -1,0 +1,45 @@
+---
+description: After Kaiwa repo changes, sync llm-wiki only when the change warrants it
+alwaysApply: true
+---
+
+# Kaiwa → llm-wiki sync
+
+Wiki vault: `C:\Users\elifs\Projects\llm-wiki`  
+Follow that vault's `AGENTS.md`. Tag pages with `kaiwa`. Never edit wiki `raw/` except by copying from this repo's canonical docs. Use `[[wikilinks]]` in wiki pages.
+
+## After every change in this repo
+
+1. **Decide** whether the change affects durable project knowledge (architecture, decisions, roadmap, stack, goals, status, or user-facing README facts).
+2. **If yes** — sync + ingest before ending the turn:
+   - Copy changed canonical docs into `raw/kaiwa/` (table below)
+   - Update matching `wiki/sources/*`, `wiki/entities/kaiwa` / related entities, and concepts as needed
+   - Update `wiki/index.md` + append `wiki/log.md` (`## [YYYY-MM-DD] sync | Kaiwa …` or `ingest | …`)
+   - Touch `wiki/overview.md` / `[[japanese-immersion-stack]]` only if the big picture changed
+3. **If no** — **do not** modify the wiki (no date bumps, no empty log lines, no raw copies).
+
+## Sync map
+
+| This repo | Wiki raw |
+|-----------|----------|
+| `README.md` | `raw/kaiwa/README.md` |
+| `docs/ARCHITECTURE.md` | `raw/kaiwa/ARCHITECTURE.md` |
+| `docs/DECISIONS.md` | `raw/kaiwa/DECISIONS.md` |
+| `docs/ROADMAP.md` | `raw/kaiwa/ROADMAP.md` |
+| `docs/WIKI_SYNC.md` | `raw/kaiwa/WIKI_SYNC.md` |
+
+## Usually warrants wiki update
+
+- Stack / pipeline / model / TTS / STT decisions
+- Roadmap phase changes or new non-goals
+- README purpose/status changes
+- New durable docs under `docs/`
+
+## Usually does **not** warrant wiki update
+
+- Pure implementation churn with no design/status change (formatting, refactors, dependency bumps, bugfixes that don't change architecture)
+- Secrets, `.env`, local recordings, generated caches
+- Transient experiments you are about to discard
+- This rule firing with nothing knowledge-worthy
+
+When unsure: prefer a short log + source refresh over silence if a decision changed; prefer silence over ritual updates if only code moved.

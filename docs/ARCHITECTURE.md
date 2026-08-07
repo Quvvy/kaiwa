@@ -1,0 +1,157 @@
+# Architecture
+
+## Product scope (personal use)
+
+| Scope | Effort | Notes |
+|-------|--------|-------|
+| Text chat partner | 1–3 evenings | Useful, not voice |
+| Turn-based voice | ~1 weekend | Target MVP |
+| Realtime barge-in voice | 1–3 weeks | Closer to Pingo feel |
+| Pingo-like product | weeks–months | Scenarios, memory, pronunciation scoring — **out of scope for v0** |
+
+v0 = turn-based speaking practice + optional **Practice** intelligibility mode.
+Skip app-store polish, accounts, 200 scenarios, and pitch-accent grading.
+
+## Pipeline (chosen)
+
+```
+Mic → local faster-whisper (ja) → DeepSeek V4 API → local JP TTS → speakers
+```
+
+Practice mode (separate):
+
+```
+Target text → VOICEVOX preview
+User audio → Whisper → kana-normalized similarity vs target → optional DeepSeek tip
+```
+
+Self-assessment placement (onboarding):
+
+```
+Fixed questions → user self-ratings → speaking_level / comprehension_level / goal_level
+```
+
+### Phase 1 concrete defaults
+
+| Piece | Default |
+|-------|---------|
+| App | FastAPI + Chat / Practice / Place me / Settings tabs on port **8787** |
+| STT | `faster-whisper` / `large-v3-turbo` / `cuda` / `float16` |
+| LLM | `deepseek-v4-flash` with `thinking: disabled` |
+| TTS | **AivisSpeech** HTTP API at `http://127.0.0.1:10101` (default); VOICEVOX at `:50021` as fallback |
+| Practice score | Intelligibility only (`score_kind: intelligibility`) via pykakasi + Levenshtein |
+| Tutor prefs | `data/user_prefs.json` — correction, language, register, naturalness, goals, routing, personality, voice, max sentences |
+| Learner profile | `data/learner_profile.json` — live speaking/comprehension estimates |
+| Long-term memory | `data/learner_memory.json` — comfort, topics, vocab, grammar |
+| Sessions | `sessions/<id>.jsonl` with `mode: chat` or `mode: practice` |
+
+### Phase 2 tutor prefs
+
+Settings tab edits server-side prefs used to assemble the chat system prompt each turn:
+
+- `correction_style`: `gentle` | `critique`
+- `language_policy`: `immerse` | `adaptive` (default adaptive — brief English only when struggling)
+- `speech_register`: `formal` | `casual` (applies on top of personality)
+- `naturalness_tips`: bool — flag grammatical-but-stiff phrasing for the selected register
+- `personality_id`: built-in id, `user_…` custom preset, or `custom`
+- `personality_custom`: optional notes appended on top of the selected preset
+- `max_sentences`: hard length cap in the prompt (1–6)
+- `help_language`: currently `en` (forward-compat)
+- `voicevox_speaker_id`: speaker/style id for the active engine (Settings voice picker; `GET /api/voices`)
+- `tts_engine`: `aivisspeech` | `voicevox` (default `aivisspeech`)
+- `goal_level`: `pre_n5` | `n5` | `n4` (pacing ceiling)
+- `topic_preferences`: up to 8 short topic strings
+- `model_routing`: `auto` (Flash + Pro on hard turns) | `flash_only`
+
+Learner profile (`data/learner_profile.json`) tracks estimated `speaking_level` / `comprehension_level`, confidence, notes, and topic tags. Updated from chat struggle signals, practice scores, occasional Flash JSON assess, and the **self-assessment Place me** flow. Injected into the tutor prompt each turn. `GET/PUT /api/profile`.
+
+Long-term memory (`data/learner_memory.json`) stores comfort/personality prefs (name, vibe, do/dont), observed topics, vocab phrases, and recurring grammar notes. Occasional Flash extract after chat turns (post-TTS). Injected into the tutor prompt on top of the selected personality. `GET/PUT /api/memory`.
+
+Placement APIs: `POST /api/quiz/start`, `/api/quiz/answer`, `/api/quiz/finish` (self-assessment; no `/speak`).
+
+User-named presets live in `data/user_personalities.json` with CRUD:
+
+- `GET /api/personalities`
+- `POST /api/personalities`
+- `PUT /api/personalities/{id}`
+- `DELETE /api/personalities/{id}`
+
+Also: `GET /api/prefs`, `PUT /api/prefs`.
+
+Replies are cleaned of stage-direction emotes (`(smiles)`, `*claps*`, etc.) before chat display and TTS.
+
+Chat turns log `timing: {stt_ms, llm_ms, tts_ms, total_ms}` in session JSONL and return it on `/api/turn`. Summarize with `scripts/eval_turn_latency.py`.
+
+### Why hybrid
+
+- **Local Whisper:** RTX 3090 runs `large-v3` / `large-v3-turbo` easily; accurate enough for conversation; not a pronunciation scorer.
+- **DeepSeek V4 API:** V4 is **text-only** (no native audio I/O). Strong Japanese + cheap. Flash for snappy chat; Pro for deeper grammar explanations.
+- **Local JP TTS:** Japanese-native voicebanks beat generic multilingual cloud voices for tutoring feel; $0 ongoing.
+
+### Why not full local LLM
+
+A 3090 cannot host DeepSeek V4-Pro competitively. Local 14B–32B (e.g. Qwen) can be “good enough” tutors but usually won’t beat hosted V4 quality. Owner is fine paying for DeepSeek → prefer API brain.
+
+### Why not full realtime API first
+
+Realtime speech-to-speech (OpenAI Realtime, Gemini Live) feels more Pingo-like but costs more and is less controllable. **Phase 3 decision: stay turn-based**; re-evaluate only if daily practice latency feels bad (`scripts/eval_turn_latency.py`).
+
+## Latency
+
+Turn-based stack typically **~1.5–4+ seconds** per turn (STT + LLM + TTS). Fine for practice; not phone-call natural.
+
+Whisper on 3090: usually sub-second to a couple seconds per short utterance.
+
+## Whisper accuracy notes
+
+**Helps:** quiet room, headset mic, full phrases, `vad_filter=True`, larger models. Practice forces `language="ja"`. Chat auto-detects: clear English stays English; otherwise Japanese-forced (avoids Whisper “translating” English into JP).
+
+**Hurts:** noise, mumbling, heavy code-switching, non-native pronunciation.
+
+Whisper may “correct” learner speech toward native forms — good for conversation flow, **bad** as a pronunciation judge. Do not treat transcripts as pitch-accent ground truth.
+
+## TTS options
+
+### Local (preferred)
+
+| Engine | Japanese quality | Notes |
+|--------|------------------|-------|
+| **AivisSpeech** | Excellent | **Phase 3 default**; VOICEVOX-compatible API on `:10101` |
+| VOICEVOX | Good–great | Fallback; clear JP; anime/voicebank feel (`:50021`) |
+| Style-Bert-VITS2 | Top JP prosody | More setup; expressive — not wired |
+| Qwen3-TTS | Very good | Cloning; Apache-friendly — not wired |
+| Fish Speech | Often top naturalness | Heavier/slower; check licenses — not wired |
+
+### Cloud (cheap personal volume)
+
+| Service | Price vibe | Notes |
+|---------|------------|-------|
+| OpenAI TTS | ~$15/1M chars | Simple; often a few $/mo at personal use |
+| Google / Azure Neural | ~$4–16/1M chars | Strong JP voice catalogs |
+| ElevenLabs | Much more expensive | Premium human feel; not DeepSeek-comparable thrift |
+
+At ~10–20 min AI speech/day, OpenAI/Google neural is usually single-digit monthly dollars. Prefer local JP TTS unless setup friction wins.
+
+## Cost ballpark (personal ~30 min practice/day)
+
+| Stack | Monthly feel |
+|-------|----------------|
+| Local Whisper + DeepSeek + local TTS | mostly DeepSeek pennies–low dollars |
+| Same + OpenAI/Google TTS | still usually low single digits–teens |
+| OpenAI Realtime flagship | can jump to tens–hundreds |
+
+## Prompt posture (tutor)
+
+- Patient Japanese conversation partner
+- Adapt to stated level (e.g. early beginner / JLPT target)
+- Keep replies short (1–3 sentences) for TTS
+- Gentle corrections; optional short English notes when asked
+- Prefer spoken natural Japanese over lecture dumps
+
+## Out of scope (v0)
+
+- Pronunciation / pitch-accent scoring
+- Mobile app stores
+- Multi-user / accounts / cloud sync
+- Cloning Pingo’s full scenario catalog
+- Running DeepSeek V4-Pro locally

@@ -1,0 +1,63 @@
+# OS
+Thumbs.db
+Desktop.ini
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+*.pem
+*api*key*
+*apikey*
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+src/*.egg-info/
+
+# Models / large local assets
+models/
+tools/aivisspeech/
+*.bin
+*.gguf
+*.onnx
+*.pt
+*.pth
+*.safetensors
+whisper-cache/
+huggingface/
+
+# Audio / session dumps
+recordings/
+sessions/
+data/user_prefs.json
+data/user_personalities.json
+data/learner_profile.json
+data/learner_memory.json
+*.wav
+*.mp3
+*.ogg
+*.flac
+
+# Node (if web UI later)
+node_modules/
+dist/
+.next/
+.turbo/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS / Cursor
+.DS_Store
+.cursor/*
+!.cursor/rules/
+!.cursor/rules/**
