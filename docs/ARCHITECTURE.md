@@ -40,9 +40,10 @@ Fixed questions → user self-ratings → speaking_level / comprehension_level /
 | LLM | `deepseek-v4-flash` with `thinking: disabled` |
 | TTS | **AivisSpeech** HTTP API at `http://127.0.0.1:10101` (default); VOICEVOX at `:50021` as fallback |
 | Practice score | Intelligibility only (`score_kind: intelligibility`) via pykakasi + Levenshtein |
-| Tutor prefs | `data/user_prefs.json` — correction, language, register, naturalness, goals, routing, personality, voice, max sentences |
-| Learner profile | `data/learner_profile.json` — live speaking/comprehension estimates |
-| Long-term memory | `data/learner_memory.json` — comfort, topics, vocab, grammar |
+| Tutor prefs | Active profile’s `user_prefs.json` — correction, language, register, naturalness, goals, routing, personality, voice, max sentences |
+| Learner profile | Active profile’s `learner_profile.json` — live speaking/comprehension estimates |
+| Long-term memory | Active profile’s `learner_memory.json` — comfort, topics, vocab, grammar, soft `recycle_items` |
+| User profiles | `data/profiles.json` registry + `data/profiles/<id>/` (prefs, learner profile, memory, custom personalities). Chat `sessions/*.jsonl` stay global. |
 | Sessions | `sessions/<id>.jsonl` with `mode: chat` or `mode: practice` |
 
 ### Phase 2 tutor prefs
@@ -55,7 +56,7 @@ Settings tab edits server-side prefs used to assemble the chat system prompt eac
 - `naturalness_tips`: bool — flag grammatical-but-stiff phrasing for the selected register
 - `personality_id`: built-in id, `user_…` custom preset, or `custom`
 - `personality_custom`: optional notes appended on top of the selected preset
-- `max_sentences`: hard length cap in the prompt (1–6)
+- `max_sentences`: kept in prefs for backward compatibility; **not** used as a hard prompt cap anymore — reply length is adaptive (see length guidance in `persona.py`)
 - `help_language`: currently `en` (forward-compat)
 - `voicevox_speaker_id`: speaker/style id for the active engine (Settings voice picker; `GET /api/voices`)
 - `tts_engine`: `aivisspeech` | `voicevox` (default `aivisspeech`)
@@ -63,13 +64,15 @@ Settings tab edits server-side prefs used to assemble the chat system prompt eac
 - `topic_preferences`: up to 8 short topic strings
 - `model_routing`: `auto` (Flash + Pro on hard turns) | `flash_only`
 
-Learner profile (`data/learner_profile.json`) tracks estimated `speaking_level` / `comprehension_level`, confidence, notes, and topic tags. Updated from chat struggle signals, practice scores, occasional Flash JSON assess, and the **self-assessment Place me** flow. Injected into the tutor prompt each turn. `GET/PUT /api/profile`.
+Learner profile (per active user profile) tracks estimated `speaking_level` / `comprehension_level`, confidence, notes, and topic tags. Updated from chat struggle signals, practice scores, occasional Flash JSON assess, and the **self-assessment Place me** flow. Injected into the tutor prompt each turn. `GET/PUT /api/profile`.
 
-Long-term memory (`data/learner_memory.json`) stores comfort/personality prefs (name, vibe, do/dont), observed topics, vocab phrases, and recurring grammar notes. Occasional Flash extract after chat turns (post-TTS). Injected into the tutor prompt on top of the selected personality. `GET/PUT /api/memory`.
+Long-term memory (per active user profile) stores comfort/personality prefs (name, vibe, do/dont), observed topics, vocab phrases, recurring grammar notes, and soft `recycle_items` for optional “say again” Practice. Occasional Flash extract after chat turns (post-TTS). Injected into the tutor prompt on top of the selected personality. `GET/PUT /api/memory`.
+
+Practice (`GET /api/practice/next`) sources: `bank` | `last_reply` | `vocab` (from memory) | `recycle` (soft retries; falls through to vocab → last reply). Chat is the main loop; Practice is an optional warm-up — not a quiz gate. Chat UI **Replay** re-plays the last TTS reply from a client cache (falls back to `POST /api/practice/speak` if audio was lost after refresh).
 
 Placement APIs: `POST /api/quiz/start`, `/api/quiz/answer`, `/api/quiz/finish` (self-assessment; no `/speak`).
 
-User-named presets live in `data/user_personalities.json` with CRUD:
+User-named presets live in the active profile’s `user_personalities.json` with CRUD:
 
 - `GET /api/personalities`
 - `POST /api/personalities`
@@ -77,6 +80,20 @@ User-named presets live in `data/user_personalities.json` with CRUD:
 - `DELETE /api/personalities/{id}`
 
 Also: `GET /api/prefs`, `PUT /api/prefs`.
+
+### User profiles (named learner state)
+
+A **profile** is one learner’s Kaiwa state (not an account): prefs, learner profile, memory, and custom personalities. Registry: `data/profiles.json`; files under `data/profiles/<id>/`. Flat `data/*.json` migrate once into `profiles/default/`. Sessions stay global; switching clears browser chat session id.
+
+API:
+
+- `GET /api/profiles` — list + `active_id`
+- `POST /api/profiles` — create (`label`, optional `activate`)
+- `POST /api/profiles/{id}/activate` — switch active; returns prefs/profile/memory for UI refresh
+- `DELETE /api/profiles/{id}` — refuse if last; auto-switch if deleting active
+- `POST /api/profiles/{id}/reset` — wipe four files to defaults (keep id/label)
+- `GET /api/profiles/{id}/export` — versioned `kaiwa-profile` JSON download
+- `POST /api/profiles/import` — JSON body or multipart file; always creates a new profile
 
 Replies are cleaned of stage-direction emotes (`(smiles)`, `*claps*`, etc.) before chat display and TTS.
 

@@ -292,9 +292,33 @@ def personality_block(prefs: UserPrefs) -> str:
     return "性格設定:\n" + "\n".join(parts) + "\n"
 
 
-def length_block(max_sentences: int) -> str:
-    n = max(1, min(6, int(max_sentences)))
-    return f"長さ: 返事は最大{n}文。それ以上は書かない。\n"
+def length_block(learner_state: str | None = None) -> str:
+    """Soft conversation length — no hard sentence quota."""
+    state = (learner_state or "flowing").strip().lower()
+    if state == "struggling":
+        bias = (
+            "今は苦しい様子。返事はごく短く・はっきり。やさしい一文＋簡単な質問1つで十分。"
+            "長い説明やたくさんの例は出さない。"
+        )
+    elif state == "help_request":
+        bias = (
+            "助けを求めている。短い答え（必要ならごく短い例を1つ）のあと、すぐ会話の番を渡す。"
+            "講義にしない。"
+        )
+    else:
+        bias = (
+            "流れが良いときは、ごく自然なテンポで。短いやりとりなら1文＋軽い問いかけでよい。"
+            "ちゃんとした質問や中身のある発言には、必要なときだけ2〜3の短い文まで。"
+        )
+    return f"""\
+長さ（会話のテンポ）:
+- 目標は口頭の会話。読み上げやすい短い発話。段落・長い説明・箇条書きの講義は禁止。
+- 基本は1〜2の短い文。TTSで聞きやすい長さを優先。
+- ユーザーが「うん」「はい」など極端に短い／相づちだけ → 短い返事＋軽いフォロー質問1つ。
+- ユーザーが質問やまとまった発言をした → 必要なら2〜3の短い文まで。それ以上は書かない。
+- 訂正が必要でも、会話部分は短く保ち、ユーザーがまた話せる余白を残す。
+- {bias}
+"""
 
 
 def level_and_profile_block(prefs: UserPrefs, profile: Any | None = None) -> str:
@@ -303,12 +327,48 @@ def level_and_profile_block(prefs: UserPrefs, profile: Any | None = None) -> str
     if profile is None:
         profile = LearnerProfile()
     assert isinstance(profile, LearnerProfile)
+
+    if not profile.placement_completed:
+        return """\
+学習者レベル / 目標:
+- Place me 未完了。保存されている pre_n5 等の初期値は「本当の実力」ではない。信用しない。
+- レベルは unknown。実力を仮定しない。超短く・やさしく・ゆっくり。
+- 語彙は最小限。長い文・難しい表現・早口の想定は禁止。
+- 訂正はごく軽く。講義にしない。ユーザーが話せる余白を残す。
+- Place me を勧める必要はない（会話の邪魔をしない）。
+"""
+
     speech_pitch = effective_speech_level(prefs, profile)
     topics_goal = ", ".join(prefs.topic_preferences) if prefs.topic_preferences else "(none)"
     topics_live = ", ".join(profile.topic_tags) if profile.topic_tags else "(none)"
     notes = (profile.notes or "").strip() or "(none)"
+    placement = profile.placement if isinstance(profile.placement, dict) else {}
+    bullets: list[str] = []
+    if placement.get("kana"):
+        bullets.append(f"かな: {placement['kana']}")
+    if placement.get("reading"):
+        bullets.append(f"読む: {placement['reading']}")
+    if placement.get("follow"):
+        bullets.append(f"ゆっくり音声の理解: {placement['follow']}")
+    if placement.get("grammar"):
+        bullets.append(f"文法・助詞: {placement['grammar']}")
+    if placement.get("topics"):
+        t = placement["topics"]
+        if isinstance(t, list):
+            bullets.append("希望トピック: " + ", ".join(str(x) for x in t[:5]))
+        elif t:
+            bullets.append(f"希望トピック: {t}")
+    if placement.get("help_style"):
+        bullets.append(f"助け方の希望: {placement['help_style']}")
+    if placement.get("pace"):
+        bullets.append(f"ペース: {placement['pace']}")
+    if placement.get("free_note"):
+        bullets.append(f"本人メモ: {placement['free_note']}")
+    detail = "\n".join(f"- {b}" for b in bullets[:7]) or "- (詳細なし)"
+
     return f"""\
-学習者レベル / 目標:
+学習者レベル / 目標（Place me 信頼）:
+- Place me 済み。自己評価をしばらく強く信頼する。すぐレベルを上げ下げしない。
 - 目標レベル (goal): {prefs.goal_level}
 - 推定スピーキング: {profile.speaking_level}
 - 推定理解力: {profile.comprehension_level}
@@ -317,6 +377,8 @@ def level_and_profile_block(prefs: UserPrefs, profile: Any | None = None) -> str
 - 希望トピック: {topics_goal}
 - プロファイル・トピック: {topics_live}
 - メモ: {notes}
+- Place me 詳細:
+{detail}
 - 語彙・テンポは推定理解力に合わせる。訂正はスピーキング推定に合わせる。難しすぎる表現は避ける。
 """
 
@@ -327,12 +389,14 @@ def build_tutor_system_prompt(
     last_user_text: str | None = None,
     profile: Any | None = None,
     memory: Any | None = None,
+    learner_state: str | None = None,
 ) -> str:
     style = prefs.correction_style if prefs.correction_style in CORRECTION_BLOCKS else "gentle"
     from kaiwa.learner_memory import LearnerMemory, memory_prompt_block
 
     if memory is None:
         memory = LearnerMemory()
+    state = learner_state or infer_learner_state(last_user_text)
     parts = [
         BASE_RULES.strip(),
         "",
@@ -352,11 +416,11 @@ def build_tutor_system_prompt(
         "",
         NO_EMOTES_BLOCK.strip(),
         "",
-        length_block(prefs.max_sentences).strip(),
+        length_block(state).strip(),
     ]
-    state = learner_state_block(prefs, last_user_text).strip()
-    if state:
-        parts.extend(["", state])
+    state_line = learner_state_block(prefs, last_user_text).strip()
+    if state_line:
+        parts.extend(["", state_line])
     return "\n".join(parts)
 
 
@@ -375,12 +439,14 @@ def build_practice_tip_system_prompt(prefs: UserPrefs) -> str:
         lang = "やさしい日本語。必要なら短い英語を1つ足してよい。"
 
     return f"""\
-あなたは日本語の発話練習コーチです。学習者が目標文を繰り返しました。
+あなたは日本語の会話パートナーの補助です。学習者がチャットで出た言い回しを、気軽にもう一度言ってみました。
 アプリは「聞こえた文字起こし」と目標文を比べています（音の高低・ピッチアクセントは判定していません）。
 
 ルール:
 - 1〜2文だけ。{lang}
+- やさしく。クイズ感・ダメ出し感を出さない。うまくいったら短く喜ぶ。
 - 文字起こしの違いから、言い方のヒントを出す（音・区切り・言い直し）。
+- 「もう一度やって」と強制しない。任意のウォームアップだとわかっている。
 - ピッチアクセントや「ネイティブ発音スコア」の話はしない。
 - ト書きや（笑顔）などの演出は書かない。
 - {tone}

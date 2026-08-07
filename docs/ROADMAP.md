@@ -27,7 +27,7 @@
 
 - [x] Correction style swap: **Gentle | Critique**
 - [x] Personality editor: presets + custom notes (`data/user_prefs.json`)
-- [x] Short-reply enforcement via `max_sentences` in assembled prompt
+- [x] Short-reply enforcement via assembled prompt (now soft/adaptive length; `max_sentences` deprecated for prompting)
 - [x] Settings tab + `GET/PUT /api/prefs`
 - [x] Built-ins: Anime club mate + Funny friend (loving roast → correct)
 - [x] User-created named presets CRUD (`data/user_personalities.json`)
@@ -52,14 +52,19 @@
 
 Core loop is usable. Prefer friction-killers and learning feedback over new product surface.
 
+**Done**
+
+- [x] Named user profiles — create/switch/delete/reset + JSON import/export (`data/profiles/`)
+- [x] Soft phrase reuse — optional Practice warm-up from last reply / memory vocab / say-again recycle (not drill/quiz)
+- [x] One-click / tray desktop — `kaiwa-desktop` system tray; Open starts TTS+Kaiwa window; Close stops services and returns to tray
+- [x] Per-profile soft first-run Place me — auto-open when incomplete; Skip; expanded English self-assessment; prompt trusts placement / treats level as unknown until done
+
 **Priority**
 
-1. First-run flow — prompt Place me / basic Settings on first launch
-2. One-click startup — start AivisSpeech (+ optional VOICEVOX) and Kaiwa together
-3. Clearer engine-down / TTS errors in UI
-4. Practice from chat weaknesses — drill last reply / memory vocab
-5. Stronger correction surfacing (gentle diffs without breaking immersion)
-6. Settings / tab UX cleanup (dense Settings panel)
+1. ~~First-run flow — prompt Place me / basic Settings on first launch~~ **done** (per-profile soft Place me; Skip allowed; expanded self-assessment)
+2. Clearer engine-down / TTS errors in UI
+3. Stronger correction surfacing (gentle diffs without breaking immersion)
+4. Settings / tab UX cleanup (dense Settings panel)
 
 **Only if needed later**
 

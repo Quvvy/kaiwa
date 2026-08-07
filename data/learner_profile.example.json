@@ -11,5 +11,7 @@
     "flow_streak": 0,
     "last_assess_turn": 0
   },
-  "updated_at": ""
+  "updated_at": "",
+  "placement_completed": false,
+  "placement": {}
 }

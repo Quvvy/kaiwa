@@ -19,8 +19,9 @@ VALID_LEVELS = set(LEVEL_ORDER)
 
 MAX_PRACTICE_SCORES = 20
 MAX_TOPIC_TAGS = 8
-MAX_NOTES = 400
+MAX_NOTES = 500
 ASSESS_EVERY_N_TURNS = 8
+PLACEMENT_PROTECT_TURNS = 15
 
 
 @dataclass
@@ -44,6 +45,9 @@ class LearnerProfile:
     notes: str = ""
     stats: ProfileStats = field(default_factory=ProfileStats)
     updated_at: str = ""
+    # Fresh create/reset: False. Missing on load → grandfather True (see profile_from_dict).
+    placement_completed: bool = False
+    placement: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -54,6 +58,8 @@ class LearnerProfile:
             "notes": self.notes,
             "stats": self.stats.to_dict(),
             "updated_at": self.updated_at,
+            "placement_completed": bool(self.placement_completed),
+            "placement": dict(self.placement) if self.placement else {},
         }
 
 
@@ -62,8 +68,23 @@ def _now_iso() -> str:
 
 
 def default_profile() -> LearnerProfile:
-    return LearnerProfile(updated_at=_now_iso())
+    """Fresh profile defaults — Place me not done yet."""
+    return LearnerProfile(updated_at=_now_iso(), placement_completed=False, placement={})
 
+
+def placement_levels_locked(profile: LearnerProfile) -> bool:
+    """True while we should not nudge levels after a fresh Place me."""
+    if not profile.placement_completed:
+        return False
+    if profile.confidence < 0.8:
+        return False
+    baseline = 0
+    raw = profile.placement.get("chat_turns_at_complete") if isinstance(profile.placement, dict) else None
+    try:
+        baseline = max(0, int(raw or 0))
+    except (TypeError, ValueError):
+        baseline = 0
+    return (profile.stats.chat_turns - baseline) < PLACEMENT_PROTECT_TURNS
 
 def level_index(level: str) -> int:
     try:
@@ -149,6 +170,19 @@ def _parse_stats(raw: Any) -> ProfileStats:
     )
 
 
+def _parse_placement(raw: Any) -> dict[str, Any]:
+    if not isinstance(raw, dict):
+        return {}
+    out: dict[str, Any] = {}
+    for key, val in raw.items():
+        k = str(key)[:40]
+        if isinstance(val, (str, int, float, bool)):
+            out[k] = val if not isinstance(val, str) else val[:120]
+        elif isinstance(val, list):
+            out[k] = [str(x)[:40] for x in val[:MAX_TOPIC_TAGS] if str(x).strip()]
+    return out
+
+
 def profile_from_dict(raw: dict[str, Any]) -> LearnerProfile:
     try:
         confidence = float(raw.get("confidence", 0.35))
@@ -156,6 +190,11 @@ def profile_from_dict(raw: dict[str, Any]) -> LearnerProfile:
         confidence = 0.35
     confidence = max(0.0, min(1.0, confidence))
     notes = str(raw.get("notes", "") or "")[:MAX_NOTES]
+    # Grandfather existing profiles that predate the flag.
+    if "placement_completed" in raw:
+        placement_completed = bool(raw.get("placement_completed"))
+    else:
+        placement_completed = True
     return LearnerProfile(
         speaking_level=clamp_level(str(raw.get("speaking_level", "pre_n5"))),
         comprehension_level=clamp_level(str(raw.get("comprehension_level", "pre_n5"))),
@@ -164,15 +203,19 @@ def profile_from_dict(raw: dict[str, Any]) -> LearnerProfile:
         notes=notes,
         stats=_parse_stats(raw.get("stats")),
         updated_at=str(raw.get("updated_at") or _now_iso()),
+        placement_completed=placement_completed,
+        placement=_parse_placement(raw.get("placement")),
     )
 
 
 def load_profile(path: Path | None = None) -> LearnerProfile:
-    prefs_path = path or PROFILE_PATH
-    if not prefs_path.exists():
+    from kaiwa.profiles import learner_profile_path
+
+    profile_file = path or learner_profile_path()
+    if not profile_file.exists():
         return default_profile()
     try:
-        raw = json.loads(prefs_path.read_text(encoding="utf-8"))
+        raw = json.loads(profile_file.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError, ValueError, TypeError):
         return default_profile()
     if not isinstance(raw, dict):
@@ -184,10 +227,12 @@ def load_profile(path: Path | None = None) -> LearnerProfile:
 
 
 def save_profile(profile: LearnerProfile, path: Path | None = None) -> LearnerProfile:
-    prefs_path = path or PROFILE_PATH
-    prefs_path.parent.mkdir(parents=True, exist_ok=True)
+    from kaiwa.profiles import learner_profile_path
+
+    profile_file = path or learner_profile_path()
+    profile_file.parent.mkdir(parents=True, exist_ok=True)
     profile.updated_at = _now_iso()
-    prefs_path.write_text(
+    profile_file.write_text(
         json.dumps(profile.to_dict(), ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
@@ -228,27 +273,30 @@ def apply_chat_signals(
 ) -> LearnerProfile:
     profile.stats.chat_turns += 1
     state = (learner_state or "flowing").strip().lower()
+    # Pending placement: track streaks only — do not invent a level.
+    # Fresh placement: protect levels for PLACEMENT_PROTECT_TURNS.
+    lock_levels = (not profile.placement_completed) or placement_levels_locked(profile)
 
     if state in {"struggling", "help_request"}:
         profile.stats.struggle_streak += 1
         profile.stats.flow_streak = 0
         if profile.stats.struggle_streak >= 3:
-            # Nudge down at most one band via heuristics.
-            if profile.stats.struggle_streak == 3:
+            if not lock_levels and profile.stats.struggle_streak == 3:
                 profile.speaking_level = nudge_level(profile.speaking_level, -1)
                 profile.comprehension_level = nudge_level(profile.comprehension_level, -1)
-            profile.confidence = max(0.15, profile.confidence - 0.05)
+            if not lock_levels:
+                profile.confidence = max(0.15, profile.confidence - 0.05)
     else:
         profile.stats.flow_streak += 1
         profile.stats.struggle_streak = 0
         if profile.stats.flow_streak >= 5:
-            if profile.stats.flow_streak == 5:
+            if not lock_levels and profile.stats.flow_streak == 5:
                 profile.speaking_level = nudge_level(profile.speaking_level, 1)
-            profile.confidence = min(0.85, profile.confidence + 0.03)
+            if not lock_levels:
+                profile.confidence = min(0.85, profile.confidence + 0.03)
 
-    # Very long JP turns slightly raise speaking estimate confidence.
     jp_chars = len(re.findall(r"[\u3040-\u30ff\u3400-\u9fff]", transcript or ""))
-    if jp_chars >= 20 and state == "flowing":
+    if jp_chars >= 20 and state == "flowing" and not lock_levels:
         profile.confidence = min(0.9, profile.confidence + 0.01)
 
     return profile
@@ -260,17 +308,19 @@ def apply_practice_score(profile: LearnerProfile, score: int, band: str) -> Lear
     scores.append(score)
     profile.stats.practice_scores = scores[-MAX_PRACTICE_SCORES:]
 
+    lock_levels = (not profile.placement_completed) or placement_levels_locked(profile)
     mean = sum(profile.stats.practice_scores) / len(profile.stats.practice_scores)
-    if mean >= 85 and len(profile.stats.practice_scores) >= 3:
-        profile.speaking_level = nudge_level(profile.speaking_level, 1)
-        profile.confidence = min(0.9, profile.confidence + 0.04)
-    elif mean < 50 and len(profile.stats.practice_scores) >= 3:
-        profile.speaking_level = nudge_level(profile.speaking_level, -1)
-        profile.confidence = max(0.15, profile.confidence - 0.04)
+    if not lock_levels:
+        if mean >= 85 and len(profile.stats.practice_scores) >= 3:
+            profile.speaking_level = nudge_level(profile.speaking_level, 1)
+            profile.confidence = min(0.9, profile.confidence + 0.04)
+        elif mean < 50 and len(profile.stats.practice_scores) >= 3:
+            profile.speaking_level = nudge_level(profile.speaking_level, -1)
+            profile.confidence = max(0.15, profile.confidence - 0.04)
 
-    if band == "unclear":
+    if band == "unclear" and profile.placement_completed and not placement_levels_locked(profile):
         profile.confidence = max(0.15, profile.confidence - 0.02)
-    elif band == "clear":
+    elif band == "clear" and profile.placement_completed and not placement_levels_locked(profile):
         profile.confidence = min(0.9, profile.confidence + 0.01)
 
     return profile
@@ -280,6 +330,10 @@ def should_assess(profile: LearnerProfile, prefs: UserPrefs) -> bool:
     if prefs.model_routing == "flash_only":
         # Still allow assess on Flash — routing only gates Pro for chat replies.
         pass
+    if not profile.placement_completed:
+        return False
+    if placement_levels_locked(profile):
+        return False
     if profile.confidence < 0.5:
         return True
     turns = profile.stats.chat_turns
@@ -379,11 +433,18 @@ def run_assess(
     """Occasional Flash JSON assess. Fails soft on errors."""
     from kaiwa.llm import _completion
 
+    placement_hint = ""
+    if profile.placement_completed and isinstance(profile.placement, dict) and profile.placement:
+        placement_hint = (
+            "Respect recent Place-me self-ratings unless this utterance clearly contradicts them.\n"
+            f"placement: {json.dumps(profile.placement, ensure_ascii=False)[:400]}\n"
+        )
     user = (
         f"goal_level: {prefs.goal_level}\n"
         f"learner_state: {learner_state}\n"
         f"current_speaking: {profile.speaking_level}\n"
         f"current_comprehension: {profile.comprehension_level}\n"
+        f"{placement_hint}"
         f"utterance: {transcript}\n"
         f"recent_practice_scores: {profile.stats.practice_scores[-5:]}\n"
     )

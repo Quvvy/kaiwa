@@ -14,7 +14,7 @@ GoalLevel = Literal["pre_n5", "n5", "n4"]
 ModelRouting = Literal["flash_only", "auto"]
 TtsEngine = Literal["aivisspeech", "voicevox"]
 
-PREFS_PATH = ROOT / "data" / "user_prefs.json"
+PREFS_PATH = ROOT / "data" / "user_prefs.json"  # legacy flat path (migration only)
 EXAMPLE_PREFS_PATH = ROOT / "data" / "user_prefs.example.json"
 
 VALID_CORRECTION = {"gentle", "critique"}
@@ -163,11 +163,13 @@ def validate_prefs_dict(raw: dict[str, Any]) -> UserPrefs:
 
 
 def load_prefs(path: Path | None = None) -> UserPrefs:
-    prefs_path = path or PREFS_PATH
-    if not prefs_path.exists():
+    from kaiwa.profiles import prefs_path as active_prefs_path
+
+    prefs_file = path or active_prefs_path()
+    if not prefs_file.exists():
         return default_prefs()
     try:
-        raw = json.loads(prefs_path.read_text(encoding="utf-8"))
+        raw = json.loads(prefs_file.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError, ValueError, TypeError):
         return default_prefs()
     if not isinstance(raw, dict):
@@ -179,9 +181,11 @@ def load_prefs(path: Path | None = None) -> UserPrefs:
 
 
 def save_prefs(prefs: UserPrefs, path: Path | None = None) -> UserPrefs:
-    prefs_path = path or PREFS_PATH
-    prefs_path.parent.mkdir(parents=True, exist_ok=True)
-    prefs_path.write_text(
+    from kaiwa.profiles import prefs_path as active_prefs_path
+
+    prefs_file = path or active_prefs_path()
+    prefs_file.parent.mkdir(parents=True, exist_ok=True)
+    prefs_file.write_text(
         json.dumps(prefs.to_dict(), ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )

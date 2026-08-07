@@ -1,19 +1,21 @@
 from __future__ import annotations
 
+import asyncio
 import base64
+import json
 import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from kaiwa.config import ROOT, get_settings
-from kaiwa import llm, stt, tts
+from kaiwa import llm, profiles, stt, tts
 from kaiwa.persona import PERSONALITY_PRESETS, infer_learner_state, preset_public_list
 from kaiwa.personalities_store import (
     create_user_preset,
@@ -36,7 +38,10 @@ from kaiwa.learner_memory import (
     apply_manual_memory,
     load_memory,
     maybe_run_extract,
+    next_recycle_target,
+    next_vocab_target,
     note_chat_turn,
+    note_practice_result,
     reset_memory,
     save_memory,
 )
@@ -62,6 +67,19 @@ app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 # In-memory chat history keyed by browser session id.
 _sessions: dict[str, list[dict[str, str]]] = {}
 _practice_cursor: dict[str, str] = {}
+
+
+@app.on_event("startup")
+async def _warm_stt() -> None:
+    """Load Whisper in a worker thread so the first chat turn doesn't freeze the server."""
+
+    def _load() -> None:
+        try:
+            stt.get_model(settings)
+        except Exception:
+            pass
+
+    asyncio.create_task(asyncio.to_thread(_load))
 
 
 class SpeakRequest(BaseModel):
@@ -106,7 +124,9 @@ class MemoryUpdate(BaseModel):
 class QuizAnswerRequest(BaseModel):
     session_id: str = Field(min_length=1)
     item_id: str = Field(min_length=1)
-    choice_index: int
+    choice_index: int | None = None
+    choice_indices: list[int] | None = None
+    text: str | None = Field(default=None, max_length=300)
 
 
 class QuizFinishRequest(BaseModel):
@@ -123,6 +143,36 @@ class PersonalityUpdate(BaseModel):
     label: str = Field(min_length=1, max_length=60)
     description: str = Field(default="", max_length=200)
     prompt_blurb: str = Field(min_length=1, max_length=2000)
+
+
+class ProfileCreateBody(BaseModel):
+    label: str = Field(min_length=1, max_length=60)
+    activate: bool = False
+
+
+class TextTurnRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=500)
+    session_id: str = ""
+
+
+def _active_state_payload() -> dict[str, Any]:
+    prefs = load_prefs()
+    listing = profiles.list_profiles()
+    return {
+        **listing,
+        "prefs": prefs.to_dict(),
+        "personalities": preset_public_list(),
+        "profile": load_profile().to_dict(),
+        "memory": load_memory().to_dict(),
+        "goal_level": prefs.goal_level,
+        "topic_preferences": prefs.topic_preferences,
+    }
+
+
+def _export_filename(label: str) -> str:
+    safe = "".join(ch if ch.isalnum() or ch in "-_" else "-" for ch in label.strip())
+    safe = safe.strip("-_") or "profile"
+    return f"kaiwa-profile-{safe[:40]}.json"
 
 
 def _last_assistant_text(session_id: str) -> str | None:
@@ -174,9 +224,14 @@ def get_voices() -> dict[str, Any]:
 @app.get("/api/prefs")
 def get_prefs() -> dict[str, Any]:
     prefs = load_prefs()
+    profile = load_profile()
+    listing = profiles.list_profiles()
     return {
         "prefs": prefs.to_dict(),
         "personalities": preset_public_list(),
+        "profile": profile.to_dict(),
+        "placement_completed": profile.placement_completed,
+        "active_id": listing.get("active_id") or listing.get("active") or "",
     }
 
 
@@ -323,6 +378,137 @@ def remove_personality(preset_id: str) -> dict[str, Any]:
     }
 
 
+@app.get("/api/profiles")
+def get_profiles() -> dict[str, Any]:
+    return profiles.list_profiles()
+
+
+@app.post("/api/profiles")
+def post_profile(body: ProfileCreateBody) -> dict[str, Any]:
+    try:
+        meta = profiles.create_profile(body.label, activate=body.activate)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    payload = profiles.list_profiles()
+    if body.activate:
+        return {**_active_state_payload(), "created": meta.to_dict()}
+    return {**payload, "created": meta.to_dict()}
+
+
+@app.post("/api/profiles/{profile_id}/activate")
+def activate_profile(profile_id: str) -> dict[str, Any]:
+    try:
+        meta = profiles.switch_profile(profile_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {**_active_state_payload(), "activated": meta.to_dict()}
+
+
+@app.delete("/api/profiles/{profile_id}")
+def remove_user_profile(profile_id: str) -> dict[str, Any]:
+    try:
+        new_active = profiles.delete_profile(profile_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {
+        **_active_state_payload(),
+        "deleted": profile_id,
+        "active_id": new_active,
+    }
+
+
+@app.post("/api/profiles/{profile_id}/reset")
+def reset_user_profile(profile_id: str) -> dict[str, Any]:
+    try:
+        meta = profiles.reset_profile(profile_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    if profile_id == profiles.active_profile_id():
+        return {**_active_state_payload(), "reset": meta.to_dict()}
+    return {**profiles.list_profiles(), "reset": meta.to_dict()}
+
+
+@app.get("/api/profiles/{profile_id}/export")
+def export_user_profile(profile_id: str) -> Response:
+    try:
+        bundle = profiles.export_bundle(profile_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    filename = _export_filename(str(bundle.get("label") or profile_id))
+    body = json.dumps(bundle, ensure_ascii=False, indent=2) + "\n"
+    return Response(
+        content=body.encode("utf-8"),
+        media_type="application/json; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@app.post("/api/profiles/import")
+async def import_user_profile(request: Request) -> dict[str, Any]:
+    content_type = (request.headers.get("content-type") or "").lower()
+    bundle: dict[str, Any] | None = None
+    use_label: str | None = None
+    use_activate = False
+
+    if "multipart/form-data" in content_type:
+        form = await request.form()
+        upload = form.get("file")
+        if upload is None or not hasattr(upload, "read"):
+            raise HTTPException(status_code=400, detail="multipart import requires a file field")
+        raw_bytes = await upload.read()
+        try:
+            parsed = json.loads(raw_bytes.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise HTTPException(status_code=400, detail="invalid JSON file") from exc
+        if not isinstance(parsed, dict):
+            raise HTTPException(status_code=400, detail="bundle must be a JSON object")
+        bundle = parsed
+        label_val = form.get("label")
+        if isinstance(label_val, str) and label_val.strip():
+            use_label = label_val.strip()
+        act_val = form.get("activate")
+        if isinstance(act_val, str):
+            use_activate = act_val.strip().lower() in {"1", "true", "yes", "on"}
+        elif isinstance(act_val, bool):
+            use_activate = act_val
+    else:
+        try:
+            data = await request.json()
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail="invalid JSON body") from exc
+        if not isinstance(data, dict):
+            raise HTTPException(status_code=400, detail="body must be a JSON object")
+        # Accept either wrapped {bundle, label, activate} or a raw export bundle
+        if data.get("format") == profiles.BUNDLE_FORMAT or (
+            "prefs" in data and "learner_profile" in data
+        ):
+            bundle = data
+            use_label = str(data.get("label") or "").strip() or None
+        else:
+            raw_bundle = data.get("bundle")
+            if not isinstance(raw_bundle, dict):
+                raise HTTPException(status_code=400, detail="provide bundle object or raw export JSON")
+            bundle = raw_bundle
+            if data.get("label"):
+                use_label = str(data["label"]).strip() or None
+            use_activate = bool(data.get("activate", False))
+
+    try:
+        meta = profiles.import_bundle(bundle, label=use_label)
+        if use_activate:
+            profiles.switch_profile(meta.id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    if use_activate:
+        return {**_active_state_payload(), "imported": meta.to_dict()}
+    return {**profiles.list_profiles(), "imported": meta.to_dict()}
+
+
 @app.post("/api/turn")
 async def turn(
     audio: UploadFile = File(...),
@@ -336,7 +522,15 @@ async def turn(
     suffix = Path(audio.filename or "utterance.webm").suffix or ".webm"
     t0 = time.perf_counter()
     try:
-        transcript = stt.transcribe_audio_bytes(settings, raw, suffix=suffix, mode="chat")
+        transcript = await asyncio.to_thread(
+            stt.transcribe_audio_bytes,
+            settings,
+            raw,
+            suffix=suffix,
+            mode="chat",
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"STT failed: {exc}") from exc
     stt_ms = int((time.perf_counter() - t0) * 1000)
@@ -344,6 +538,22 @@ async def turn(
     if not transcript:
         raise HTTPException(status_code=400, detail="Could not hear any speech")
 
+    return await _run_chat_turn(sid, transcript, stt_ms=stt_ms)
+
+
+@app.post("/api/turn/text")
+async def turn_text(body: TextTurnRequest) -> dict[str, Any]:
+    text = (body.text or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="text is required")
+    if len(text) > 500:
+        raise HTTPException(status_code=400, detail="text must be ≤ 500 characters")
+    sid = (body.session_id or "").strip() or uuid.uuid4().hex
+    return await _run_chat_turn(sid, text, stt_ms=0)
+
+
+async def _run_chat_turn(sid: str, transcript: str, *, stt_ms: int) -> dict[str, Any]:
+    t0 = time.perf_counter()
     history = _sessions.setdefault(sid, [])
     history.append({"role": "user", "content": transcript})
     prefs = load_prefs()
@@ -351,7 +561,8 @@ async def turn(
     memory = load_memory()
     learner_state = infer_learner_state(transcript)
     profile = apply_chat_signals(profile, learner_state, transcript)
-    profile = maybe_run_assess(
+    profile = await asyncio.to_thread(
+        maybe_run_assess,
         settings,
         profile,
         transcript=transcript,
@@ -362,7 +573,8 @@ async def turn(
 
     t1 = time.perf_counter()
     try:
-        reply, model_used = llm.chat(
+        reply, model_used = await asyncio.to_thread(
+            llm.chat,
             settings,
             history,
             prefs=prefs,
@@ -382,7 +594,8 @@ async def turn(
     tts_error = None
     t2 = time.perf_counter()
     try:
-        wav = tts.synthesize(
+        wav = await asyncio.to_thread(
+            tts.synthesize,
             settings,
             reply,
             speaker_id=prefs.voicevox_speaker_id,
@@ -392,7 +605,7 @@ async def turn(
     except Exception as exc:
         tts_error = str(exc)
     tts_ms = int((time.perf_counter() - t2) * 1000)
-    total_ms = int((time.perf_counter() - t0) * 1000)
+    total_ms = int((time.perf_counter() - t0) * 1000) + int(stt_ms)
     timing = {
         "stt_ms": stt_ms,
         "llm_ms": llm_ms,
@@ -400,9 +613,9 @@ async def turn(
         "total_ms": total_ms,
     }
 
-    # Post-TTS memory extract so chat latency stays snappy.
     memory = note_chat_turn(memory)
-    memory, memory_updated = maybe_run_extract(
+    memory, memory_updated = await asyncio.to_thread(
+        maybe_run_extract,
         settings,
         memory,
         prefs=prefs,
@@ -430,6 +643,7 @@ async def turn(
             "model_used": model_used,
             "memory_updated": memory_updated,
             "timing": timing,
+            "input": "text" if stt_ms == 0 else "voice",
         },
     )
 
@@ -457,28 +671,68 @@ def practice_next(
 ) -> dict[str, Any]:
     sid = session_id.strip()
     src = (source or "bank").strip().lower()
+    after = after_id.strip()
 
     if src == "last_reply":
         text = _last_assistant_text(sid) if sid else None
         if not text:
             raise HTTPException(
                 status_code=404,
-                detail="No chat reply to practice yet. Chat first, or use the phrase bank.",
+                detail="Chat a little first, then you can say the last reply again.",
             )
         # Prefer first sentence for repeat practice.
         short = text.split("。")[0].strip()
         if short and not short.endswith("。") and "。" in text:
             short = short + "。"
         target = short or text
-        return {"phrase_id": "last_reply", "text": target, "source": "last_reply"}
+        return {"phrase_id": "last_reply", "text": target, "source": "last_reply", "note": ""}
 
-    after = after_id.strip() or _practice_cursor.get(sid or "_", "")
-    phrase = next_phrase(after or None)
+    if src == "vocab":
+        memory = load_memory()
+        picked = next_vocab_target(memory, after_id=after)
+        if not picked:
+            raise HTTPException(
+                status_code=404,
+                detail="Chat a little more — useful lines will show up here.",
+            )
+        return picked
+
+    if src == "recycle":
+        memory = load_memory()
+        picked = next_recycle_target(memory, after_id=after)
+        if picked:
+            return picked
+        picked = next_vocab_target(memory, after_id="")
+        if picked:
+            return picked
+        text = _last_assistant_text(sid) if sid else None
+        if text:
+            short = text.split("。")[0].strip()
+            if short and not short.endswith("。") and "。" in text:
+                short = short + "。"
+            return {
+                "phrase_id": "last_reply",
+                "text": short or text,
+                "source": "last_reply",
+                "note": "",
+            }
+        raise HTTPException(
+            status_code=404,
+            detail="Nothing to say again yet — chat a bit, or try a light phrase from the bank.",
+        )
+
+    after_bank = after or _practice_cursor.get(sid or "_", "")
+    phrase = next_phrase(after_bank or None)
     if sid:
         _practice_cursor[sid] = phrase["id"]
     else:
         _practice_cursor["_"] = phrase["id"]
-    return {"phrase_id": phrase["id"], "text": phrase["text"], "source": "bank"}
+    return {
+        "phrase_id": phrase["id"],
+        "text": phrase["text"],
+        "source": "bank",
+        "note": "",
+    }
 
 
 @app.post("/api/practice/speak")
@@ -511,6 +765,7 @@ async def practice(
     audio: UploadFile = File(...),
     target_text: str = Form(...),
     session_id: str = Form(default=""),
+    practice_source: str = Form(default=""),
 ) -> dict[str, Any]:
     sid = session_id.strip() or uuid.uuid4().hex
     target = (target_text or "").strip()
@@ -523,7 +778,15 @@ async def practice(
 
     suffix = Path(audio.filename or "utterance.webm").suffix or ".webm"
     try:
-        heard = stt.transcribe_audio_bytes(settings, raw, suffix=suffix, mode="ja")
+        heard = await asyncio.to_thread(
+            stt.transcribe_audio_bytes,
+            settings,
+            raw,
+            suffix=suffix,
+            mode="ja",
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"STT failed: {exc}") from exc
 
@@ -535,6 +798,15 @@ async def practice(
     profile = load_profile()
     profile = apply_practice_score(profile, result.score, result.band)
     save_profile(profile)
+
+    memory = load_memory()
+    memory = note_practice_result(
+        memory,
+        target=target,
+        band=result.band,
+        practice_source=practice_source,
+    )
+    save_memory(memory)
 
     tip = ""
     tip_error = None
@@ -566,6 +838,7 @@ async def practice(
             "heard_norm": result.heard_norm,
             "tip": tip,
             "tip_error": tip_error,
+            "practice_source": (practice_source or "").strip() or "bank",
             "speaking_level": profile.speaking_level,
             "comprehension_level": profile.comprehension_level,
         },
@@ -604,7 +877,13 @@ def quiz_answer(body: QuizAnswerRequest) -> dict[str, Any]:
     if session is None:
         raise HTTPException(status_code=404, detail="Placement session not found or expired")
     try:
-        result = answer_item(session, body.item_id.strip(), int(body.choice_index))
+        result = answer_item(
+            session,
+            body.item_id.strip(),
+            choice_index=body.choice_index,
+            choice_indices=body.choice_indices,
+            text=body.text,
+        )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
@@ -658,8 +937,13 @@ def quiz_finish(body: QuizFinishRequest) -> dict[str, Any]:
         "speaking_level": profile.speaking_level,
         "comprehension_level": profile.comprehension_level,
         "goal_level": prefs.goal_level,
+        "placement_completed": profile.placement_completed,
         "profile": profile.to_dict(),
-        "prefs": {"goal_level": prefs.goal_level},
+        "prefs": {
+            "goal_level": prefs.goal_level,
+            "language_policy": prefs.language_policy,
+            "topic_preferences": prefs.topic_preferences,
+        },
         "message": profile.notes,
     }
 

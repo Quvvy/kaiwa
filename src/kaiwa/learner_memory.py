@@ -21,6 +21,9 @@ MAX_VIBE = 300
 MAX_DO_DONT = 5
 MAX_NAME = 40
 MAX_NOTE = 120
+MAX_RECYCLE = 12
+MAX_RECYCLE_TEXT = 80
+CLEARS_TO_EASE = 1
 EXTRACT_EVERY_N = 6
 
 
@@ -62,6 +65,20 @@ class GrammarNote:
 
 
 @dataclass
+class RecycleItem:
+    """Soft “say again” line — not a fail log."""
+
+    text: str
+    reason: str = "retry"  # retry | vocab
+    attempts: int = 0
+    clears: int = 0
+    last_seen: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
 class MemoryStats:
     chat_turns: int = 0
     chat_turns_since_extract: int = 0
@@ -78,6 +95,7 @@ class LearnerMemory:
     topics: list[str] = field(default_factory=list)
     vocab: list[VocabItem] = field(default_factory=list)
     grammar_notes: list[GrammarNote] = field(default_factory=list)
+    recycle_items: list[RecycleItem] = field(default_factory=list)
     stats: MemoryStats = field(default_factory=MemoryStats)
     updated_at: str = ""
 
@@ -87,6 +105,7 @@ class LearnerMemory:
             "topics": list(self.topics),
             "vocab": [v.to_dict() for v in self.vocab],
             "grammar_notes": [g.to_dict() for g in self.grammar_notes],
+            "recycle_items": [r.to_dict() for r in self.recycle_items],
             "stats": self.stats.to_dict(),
             "updated_at": self.updated_at,
         }
@@ -188,6 +207,41 @@ def _parse_grammar(raw: Any) -> list[GrammarNote]:
     return out
 
 
+def _parse_recycle(raw: Any) -> list[RecycleItem]:
+    if not isinstance(raw, list):
+        return []
+    out: list[RecycleItem] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        text = _clip(str(item.get("text", "")), MAX_RECYCLE_TEXT)
+        if not text:
+            continue
+        reason = str(item.get("reason") or "retry").strip().lower()
+        if reason not in {"retry", "vocab"}:
+            reason = "retry"
+        try:
+            attempts = max(0, int(item.get("attempts", 0)))
+        except (TypeError, ValueError):
+            attempts = 0
+        try:
+            clears = max(0, int(item.get("clears", 0)))
+        except (TypeError, ValueError):
+            clears = 0
+        out.append(
+            RecycleItem(
+                text=text,
+                reason=reason,
+                attempts=attempts,
+                clears=clears,
+                last_seen=str(item.get("last_seen") or ""),
+            )
+        )
+        if len(out) >= MAX_RECYCLE:
+            break
+    return out
+
+
 def _parse_stats(raw: Any) -> MemoryStats:
     if not isinstance(raw, dict):
         return MemoryStats()
@@ -212,17 +266,20 @@ def memory_from_dict(raw: dict[str, Any]) -> LearnerMemory:
         topics=_normalize_topics(raw.get("topics")),
         vocab=_parse_vocab(raw.get("vocab")),
         grammar_notes=_parse_grammar(raw.get("grammar_notes")),
+        recycle_items=_parse_recycle(raw.get("recycle_items")),
         stats=_parse_stats(raw.get("stats")),
         updated_at=str(raw.get("updated_at") or _now_iso()),
     )
 
 
 def load_memory(path: Path | None = None) -> LearnerMemory:
-    mem_path = path or MEMORY_PATH
-    if not mem_path.exists():
+    from kaiwa.profiles import memory_path as active_memory_path
+
+    mem_file = path or active_memory_path()
+    if not mem_file.exists():
         return default_memory()
     try:
-        raw = json.loads(mem_path.read_text(encoding="utf-8"))
+        raw = json.loads(mem_file.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError, ValueError, TypeError):
         return default_memory()
     if not isinstance(raw, dict):
@@ -234,10 +291,12 @@ def load_memory(path: Path | None = None) -> LearnerMemory:
 
 
 def save_memory(memory: LearnerMemory, path: Path | None = None) -> LearnerMemory:
-    mem_path = path or MEMORY_PATH
-    mem_path.parent.mkdir(parents=True, exist_ok=True)
+    from kaiwa.profiles import memory_path as active_memory_path
+
+    mem_file = path or active_memory_path()
+    mem_file.parent.mkdir(parents=True, exist_ok=True)
     memory.updated_at = _now_iso()
-    mem_path.write_text(
+    mem_file.write_text(
         json.dumps(memory.to_dict(), ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
@@ -530,3 +589,139 @@ def memory_prompt_block(memory: LearnerMemory, prefs: UserPrefs) -> str:
 - 語彙/文法は自然なときに1つだけ軽くリサイクル（クイズ化しない）。
 - 親しみは増やすが、選ばれた性格プリセットは壊さない。
 """
+
+
+def _text_id(prefix: str, text: str) -> str:
+    import hashlib
+
+    digest = hashlib.sha1(text.encode("utf-8")).hexdigest()[:10]
+    return f"{prefix}:{digest}"
+
+
+def _trim_recycle(items: list[RecycleItem]) -> list[RecycleItem]:
+    if len(items) <= MAX_RECYCLE:
+        return items
+    # Keep freshest / most attempted; drop stale cleared-ish first
+    ranked = sorted(
+        items,
+        key=lambda r: (r.clears, r.last_seen or "", -r.attempts),
+    )
+    return ranked[:MAX_RECYCLE]
+
+
+def _find_recycle(memory: LearnerMemory, text: str) -> RecycleItem | None:
+    needle = _clip(text, MAX_RECYCLE_TEXT)
+    for row in memory.recycle_items:
+        if row.text == needle:
+            return row
+    return None
+
+
+def _find_vocab(memory: LearnerMemory, text: str) -> VocabItem | None:
+    needle = _clip(text, 60)
+    if not needle:
+        return None
+    for row in memory.vocab:
+        if row.surface == needle:
+            return row
+    for row in memory.vocab:
+        if row.surface and row.surface in needle:
+            return row
+    return None
+
+
+def next_vocab_target(
+    memory: LearnerMemory,
+    *,
+    after_id: str = "",
+) -> dict[str, str] | None:
+    if not memory.vocab:
+        return None
+    ordered = sorted(memory.vocab, key=lambda v: (v.hits, v.last_seen or ""))
+    ids = [_text_id("vocab", v.surface) for v in ordered]
+    start = 0
+    if after_id:
+        try:
+            start = (ids.index(after_id) + 1) % len(ordered)
+        except ValueError:
+            start = 0
+    item = ordered[start]
+    return {
+        "phrase_id": ids[start],
+        "text": item.surface,
+        "source": "vocab",
+        "note": item.note or "",
+    }
+
+
+def next_recycle_target(
+    memory: LearnerMemory,
+    *,
+    after_id: str = "",
+) -> dict[str, str] | None:
+    active = [r for r in memory.recycle_items if r.clears < CLEARS_TO_EASE]
+    if not active:
+        return None
+    # Prefer more attempts (worth another try) then oldest
+    ordered = sorted(active, key=lambda r: (-r.attempts, r.last_seen or ""))
+    ids = [_text_id("recycle", r.text) for r in ordered]
+    start = 0
+    if after_id:
+        try:
+            start = (ids.index(after_id) + 1) % len(ordered)
+        except ValueError:
+            start = 0
+    item = ordered[start]
+    return {
+        "phrase_id": ids[start],
+        "text": item.text,
+        "source": "recycle",
+        "note": "",
+    }
+
+
+def note_practice_result(
+    memory: LearnerMemory,
+    *,
+    target: str,
+    band: str,
+    practice_source: str = "",
+) -> LearnerMemory:
+    """Soft update after a practice attempt — no shame counters exposed to UI."""
+    now = _now_iso()
+    text = _clip(target, MAX_RECYCLE_TEXT)
+    if not text:
+        return memory
+    band_n = (band or "").strip().lower()
+    src = (practice_source or "").strip().lower()
+
+    vocab = _find_vocab(memory, text)
+    if vocab and (src == "vocab" or vocab.surface == text):
+        if band_n == "clear":
+            vocab.hits += 1
+            vocab.last_seen = now
+
+    if band_n in {"unclear", "close"}:
+        reason = "vocab" if src == "vocab" or (vocab and vocab.surface == text) else "retry"
+        row = _find_recycle(memory, text)
+        if row:
+            row.attempts += 1
+            row.last_seen = now
+            if reason == "vocab":
+                row.reason = "vocab"
+        else:
+            memory.recycle_items.append(
+                RecycleItem(text=text, reason=reason, attempts=1, clears=0, last_seen=now)
+            )
+        memory.recycle_items = _trim_recycle(memory.recycle_items)
+    elif band_n == "clear":
+        row = _find_recycle(memory, text)
+        if row:
+            row.clears += 1
+            row.last_seen = now
+            if row.clears >= CLEARS_TO_EASE:
+                memory.recycle_items = [r for r in memory.recycle_items if r.text != row.text]
+            else:
+                memory.recycle_items = _trim_recycle(memory.recycle_items)
+
+    return memory

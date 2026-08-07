@@ -37,7 +37,9 @@ def _slugify(label: str) -> str:
 
 
 def _load_raw(path: Path | None = None) -> list[dict[str, Any]]:
-    prefs_path = path or USER_PERSONALITIES_PATH
+    from kaiwa.profiles import personalities_path
+
+    prefs_path = path or personalities_path()
     if not prefs_path.exists():
         return []
     try:
@@ -51,7 +53,9 @@ def _load_raw(path: Path | None = None) -> list[dict[str, Any]]:
 
 
 def _save_raw(presets: list[dict[str, Any]], path: Path | None = None) -> None:
-    prefs_path = path or USER_PERSONALITIES_PATH
+    from kaiwa.profiles import personalities_path
+
+    prefs_path = path or personalities_path()
     prefs_path.parent.mkdir(parents=True, exist_ok=True)
     prefs_path.write_text(
         json.dumps({"presets": presets}, ensure_ascii=False, indent=2) + "\n",

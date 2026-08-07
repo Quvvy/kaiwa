@@ -124,6 +124,12 @@ def transcribe_audio_bytes(
       - ``ja`` — force Japanese (Practice)
       - ``chat`` — auto-detect English vs Japanese (Chat)
     """
+    if not data or len(data) < 256:
+        raise ValueError(
+            "Audio clip was empty or too short — hold to talk a bit longer, then release"
+        )
+    if not suffix.startswith("."):
+        suffix = "." + suffix
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
         tmp.write(data)
         tmp_path = Path(tmp.name)
@@ -131,6 +137,14 @@ def transcribe_audio_bytes(
         if mode == "chat":
             return transcribe_chat_file(settings, tmp_path)
         return transcribe_file(settings, tmp_path, language="ja")
+    except Exception as exc:
+        msg = str(exc)
+        # PyAV / FFmpeg EOF on truncated MediaRecorder webm (common on tiny holds / WebView2)
+        if "541478725" in msg or "End of file" in msg or "Invalid data" in msg:
+            raise ValueError(
+                "Couldn't read that recording — hold a little longer and speak clearly, then release"
+            ) from exc
+        raise
     finally:
         tmp_path.unlink(missing_ok=True)
 

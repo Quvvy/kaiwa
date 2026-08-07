@@ -72,16 +72,31 @@ Extra AivisSpeech voices (from AivisHub):
 
 5. Run the app:
 
+**Desktop (system tray, recommended on Windows):**
+
+```powershell
+.\.venv\Scripts\pip install -e ".[desktop]"
+.\.venv\Scripts\kaiwa-desktop
+# or: .\.venv\Scripts\python.exe -m kaiwa.desktop
+```
+
+- Tray icon only while idle (no Whisper / TTS / server).
+- **Open Kaiwa** — starts the TTS engine from your Settings prefs (AivisSpeech or VOICEVOX), starts Kaiwa, opens a desktop window.
+- **Close the window** — returns to tray and stops Kaiwa + the TTS engine *we* started.
+- **Quit** (tray menu) — exits completely.
+
+**Or run the server alone:**
+
 ```powershell
 .\.venv\Scripts\python.exe -m kaiwa.app
 ```
 
 Open **http://127.0.0.1:8787**
 
-- **Chat** — hold to talk, free conversation (status shows turn timing)
-- **Practice** — play model audio, hold to repeat, see intelligibility score + tip
-- **Place me** — short self-rating onboarding (not a test)
-- **Settings** — goals, corrections, language help, register, naturalness, personalities, TTS engine/voice, Flash/Pro routing, live learner profile, long-term memory
+- **Chat** — hold to talk, free conversation; type a short line if Whisper misses you; **Replay** re-plays Kaiwa’s last line (status shows turn timing)
+- **Practice** — optional warm-up: last reply / from our chats / say again; play model, hold to repeat (not a quiz)
+- **Place me** — per-profile soft first-run (auto-open when new/reset; Skip anytime); expanded English self-ratings that shape how Kaiwa talks
+- **Settings** — profiles (switch/backup), goals, corrections, language help, register, naturalness, personalities, TTS engine/voice, Flash/Pro routing, live learner profile, long-term memory
 
 Default port is **8787** (8765 often used by Anki on this machine).
 
@@ -99,4 +114,4 @@ Default port is **8787** (8765 often used by Anki on this machine).
 - On Windows, `nvidia-cublas-cu12` / `nvidia-cudnn-cu12` are installed so CUDA Whisper works without a full CUDA Toolkit.
 - Practice scores measure **what the app heard**, not native pitch accent.
 - Phase 3 stays **turn-based** (no OpenAI Realtime); pitch-accent grading remains deferred.
-- **Next (Phase 4):** first-run onboarding, one-click TTS+app startup, practice from chat weaknesses — see [docs/ROADMAP.md](docs/ROADMAP.md).
+- **Next (Phase 4):** first-run onboarding, clearer TTS errors, gentler correction surfacing — see [docs/ROADMAP.md](docs/ROADMAP.md). Tray desktop launcher + profiles + soft phrase reuse are already in.

@@ -104,6 +104,28 @@
     button:disabled { opacity: 0.5; cursor: not-allowed; }
     button.recording { background: var(--accent-hot); }
     #status, #practiceStatus, #settingsStatus { color: var(--muted); font-size: 0.9rem; }
+    .chat-text-row {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+      margin-top: 0.65rem;
+      width: 100%;
+    }
+    .chat-text-row input {
+      flex: 1;
+      min-width: 0;
+      background: #1a222c;
+      border: 1px solid #3a4654;
+      border-radius: 999px;
+      color: var(--text);
+      padding: 0.55rem 1rem;
+      font-size: 0.95rem;
+    }
+    .chat-text-row input::placeholder { color: var(--muted); }
+    .chat-text-row button {
+      padding: 0.55rem 1.1rem;
+      font-size: 0.9rem;
+    }
     .target {
       font-size: 1.35rem;
       line-height: 1.6;
@@ -185,21 +207,30 @@
       <div class="panel" id="log" aria-live="polite"></div>
       <div class="panel controls">
         <button id="talk" type="button">Hold to talk</button>
+        <button id="replayLast" class="secondary" type="button" disabled>Replay</button>
         <span id="status">Ready</span>
+        <div class="chat-text-row">
+          <input id="chatText" type="text" maxlength="500" placeholder="Type if Whisper missed you…" autocomplete="off" />
+          <button id="chatTextSend" class="secondary" type="button">Send</button>
+        </div>
       </div>
     </section>
 
     <section class="mode" id="modePractice">
       <div class="panel">
-        <div class="meta">Target phrase</div>
+        <div class="meta">Say it again (optional warm-up)</div>
         <p class="target" id="targetText">…</p>
+        <p class="preset-desc" id="targetNote" hidden></p>
         <div class="controls">
           <button id="playModel" class="secondary" type="button">Play model</button>
-          <button id="nextPhrase" class="secondary" type="button">Next phrase</button>
-          <button id="practiceLast" class="secondary" type="button">Practice last reply</button>
+          <button id="nextPhrase" class="secondary" type="button">Light phrase</button>
+          <button id="practiceLast" class="secondary" type="button">Last reply</button>
+          <button id="practiceVocab" class="secondary" type="button">From our chats</button>
+          <button id="practiceRecycle" class="secondary" type="button">Say again</button>
         </div>
         <p class="disclaimer">
-          Score = intelligibility (what the app heard vs the target). Not pitch-accent or native pronunciation accuracy.
+          Optional — chat is the main thing. This is just a low-stakes “say that line again.”
+          Score only means what the app heard vs the target (not a grade).
         </p>
       </div>
       <div class="panel controls">
@@ -207,7 +238,7 @@
         <span id="practiceStatus">Ready</span>
       </div>
       <div class="panel" id="practiceResult" hidden>
-        <div class="meta">Intelligibility (what the app heard)</div>
+        <div class="meta">What the app heard</div>
         <div class="score-wrap">
           <strong id="scoreLabel">—</strong>
           <div class="score-bar"><div class="score-fill" id="scoreFill"></div></div>
@@ -218,24 +249,33 @@
     </section>
 
     <section class="mode" id="modeQuiz">
-      <div class="panel">
+      <div class="panel" id="quizIntro">
         <div class="meta">Where you’re at</div>
-        <p class="disclaimer">
+        <p class="disclaimer" id="quizIntroCopy">
           Tell Kaiwa where you’re at — no test, just a few self-ratings.
           This sets how hard chat aims (you can change it anytime in Settings).
         </p>
+        <p class="disclaimer" id="quizSoftBanner" hidden style="color:var(--accent)">
+          Quick setup for this profile — Skip anytime. Chat still works; Kaiwa won’t assume your level until you finish.
+        </p>
         <div class="controls">
           <button id="quizStart" type="button">Start</button>
+          <button id="quizSkip" class="secondary" type="button">Skip for now</button>
           <span id="quizStatus">Ready when you are</span>
         </div>
       </div>
       <div class="panel" id="quizActive" hidden>
-        <div class="meta" id="quizProgress">Question 1 of 4</div>
+        <div class="meta" id="quizProgress">Question 1 of 9</div>
         <p class="target" id="quizPrompt" style="margin:0.5rem 0 0.85rem">—</p>
         <div id="quizChoices" class="controls" style="flex-direction:column;align-items:stretch"></div>
+        <div id="quizExtra" class="field" hidden style="margin-top:0.75rem">
+          <input id="quizOtherInput" type="text" maxlength="120" placeholder="Your topic…" autocomplete="off" />
+          <textarea id="quizNoteInput" maxlength="300" rows="3" placeholder="Optional — anything helpful for Kaiwa…" hidden></textarea>
+        </div>
         <p class="preset-desc" id="quizFeedback"></p>
         <div class="controls">
           <button id="quizNext" type="button" hidden>Continue</button>
+          <button id="quizSkipActive" class="secondary" type="button">Skip for now</button>
         </div>
       </div>
       <div class="panel" id="quizResults" hidden>
@@ -244,11 +284,36 @@
         <p class="disclaimer" id="quizResultNote"></p>
         <div class="controls">
           <button id="quizRetake" type="button">Try again</button>
+          <button id="quizDoneChat" class="secondary" type="button">Go to Chat</button>
         </div>
       </div>
     </section>
 
     <section class="mode" id="modeSettings">
+      <div class="panel">
+        <div class="meta">Profiles</div>
+        <p class="disclaimer">
+          Each profile stores your settings, learner level, memory, and custom personalities.
+          Chat logs stay shared. Switching clears the current chat session.
+        </p>
+        <div class="field">
+          <label for="profileSelect">Active profile</label>
+          <select id="profileSelect"></select>
+          <p class="preset-desc" id="profileActiveBadge"></p>
+        </div>
+        <div class="controls">
+          <button id="switchProfileBtn" class="secondary" type="button">Switch</button>
+          <button id="newProfileBtn" type="button">New</button>
+          <button id="resetUserProfileBtn" class="secondary" type="button">Reset</button>
+          <button id="deleteProfileBtn" class="secondary" type="button">Delete</button>
+        </div>
+        <div class="controls" style="margin-top:0.6rem">
+          <button id="exportProfileBtn" class="secondary" type="button">Export</button>
+          <button id="importProfileBtn" class="secondary" type="button">Import</button>
+          <input id="importProfileFile" type="file" accept="application/json,.json" hidden />
+          <span id="profilesStatus"></span>
+        </div>
+      </div>
       <div class="panel">
         <div class="field">
           <label>Correction style</label>
@@ -333,10 +398,6 @@
             <button id="previewVoice" class="secondary" type="button">Preview voice</button>
             <span id="voiceStatus"></span>
           </div>
-        </div>
-        <div class="field">
-          <label for="maxSentences">Max sentences per reply</label>
-          <input id="maxSentences" type="number" min="1" max="6" value="3" />
         </div>
         <div class="controls">
           <button id="savePrefs" type="button">Save settings</button>
@@ -443,10 +504,17 @@
 
   <script>
     const talkBtn = document.getElementById("talk");
+    const replayLastBtn = document.getElementById("replayLast");
+    const chatTextInput = document.getElementById("chatText");
+    const chatTextSendBtn = document.getElementById("chatTextSend");
     const practiceTalkBtn = document.getElementById("practiceTalk");
     const statusEl = document.getElementById("status");
     const practiceStatusEl = document.getElementById("practiceStatus");
     const settingsStatusEl = document.getElementById("settingsStatus");
+    const profilesStatusEl = document.getElementById("profilesStatus");
+    const profileSelect = document.getElementById("profileSelect");
+    const profileActiveBadge = document.getElementById("profileActiveBadge");
+    const importProfileFile = document.getElementById("importProfileFile");
     const logEl = document.getElementById("log");
     const targetTextEl = document.getElementById("targetText");
     const practiceResultEl = document.getElementById("practiceResult");
@@ -457,7 +525,6 @@
     const personalitySelect = document.getElementById("personalitySelect");
     const personalityDesc = document.getElementById("personalityDesc");
     const personalityCustom = document.getElementById("personalityCustom");
-    const maxSentences = document.getElementById("maxSentences");
     const voiceSelect = document.getElementById("voiceSelect");
     const voiceHelp = document.getElementById("voiceHelp");
     const voiceStatusEl = document.getElementById("voiceStatus");
@@ -474,12 +541,18 @@
     const saveUserPresetBtn = document.getElementById("saveUserPreset");
 
     let sessionId = localStorage.getItem("kaiwa_session_id") || "";
+    let lastAudioB64 = sessionStorage.getItem("kaiwa_last_audio") || "";
     let mode = "chat";
     let mediaRecorder = null;
     let chunks = [];
     let recording = false;
+    let recordStartMs = 0;
+    let recordWantsStop = false;
+    let recordStarting = false;
     let currentPhraseId = "";
     let currentTarget = "";
+    let currentPracticeSource = "bank";
+    const targetNoteEl = document.getElementById("targetNote");
     let activeTalkBtn = talkBtn;
     let activeStatusEl = statusEl;
     let correctionStyle = "gentle";
@@ -516,7 +589,7 @@
         if (!currentTarget) loadNextPhrase().catch(() => {});
       }
       if (next === "settings") {
-        loadPrefsIntoForm().catch((err) => {
+        loadPrefsIntoForm({ skipPlacementOffer: true }).catch((err) => {
           settingsStatusEl.textContent = String(err.message || err);
         });
       }
@@ -546,36 +619,141 @@
       audio.play().catch(() => setStatus("Audio ready (allow sound if blocked)"));
     }
 
+    function updateReplayButton() {
+      const hasAudio = Boolean(lastAudioB64);
+      const hasText = Boolean(localStorage.getItem("kaiwa_last_reply"));
+      replayLastBtn.disabled = !(hasAudio || hasText);
+    }
+
+    function cacheLastAudio(b64) {
+      lastAudioB64 = b64 || "";
+      if (lastAudioB64) {
+        try {
+          sessionStorage.setItem("kaiwa_last_audio", lastAudioB64);
+        } catch (_) {
+          // sessionStorage may be full (large WAV); memory cache still works
+        }
+      } else {
+        sessionStorage.removeItem("kaiwa_last_audio");
+      }
+      updateReplayButton();
+    }
+
+    function clearLastAudioCache() {
+      lastAudioB64 = "";
+      sessionStorage.removeItem("kaiwa_last_audio");
+      updateReplayButton();
+    }
+
+    async function replayLastReply() {
+      if (lastAudioB64) {
+        setStatus("Playing…");
+        playWavBase64(lastAudioB64);
+        setStatus("Ready");
+        return;
+      }
+      const text = (localStorage.getItem("kaiwa_last_reply") || "").trim();
+      if (!text) {
+        setStatus("Nothing to replay yet — chat first");
+        updateReplayButton();
+        return;
+      }
+      setStatus("Playing…");
+      replayLastBtn.disabled = true;
+      try {
+        const res = await fetch("/api/practice/speak", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "Could not replay");
+        if (!data.audio_base64) throw new Error("No audio returned");
+        cacheLastAudio(data.audio_base64);
+        playWavBase64(data.audio_base64);
+        setStatus("Ready");
+      } catch (err) {
+        setStatus(String(err.message || err));
+      } finally {
+        updateReplayButton();
+      }
+    }
+
     async function startRecording() {
-      if (recording || mode === "settings") return;
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      chunks = [];
-      const mime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
-        ? "audio/webm;codecs=opus"
-        : "audio/webm";
-      mediaRecorder = new MediaRecorder(stream, { mimeType: mime });
-      mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunks.push(e.data);
-      };
-      mediaRecorder.onstop = async () => {
-        stream.getTracks().forEach((t) => t.stop());
-        const blob = new Blob(chunks, { type: mediaRecorder.mimeType || "audio/webm" });
-        if (mode === "chat") await sendTurn(blob);
-        else if (mode === "practice") await sendPractice(blob);
-      };
-      mediaRecorder.start();
-      recording = true;
-      activeTalkBtn.classList.add("recording");
-      activeTalkBtn.textContent = "Listening…";
-      setStatus("Recording — release to send");
+      if (recording || recordStarting || mode === "settings") return;
+      recordStarting = true;
+      recordWantsStop = false;
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            channelCount: 1,
+          },
+        });
+        if (recordWantsStop) {
+          // Released before mic was ready — don't send an empty clip
+          stream.getTracks().forEach((t) => t.stop());
+          setStatus("Hold a bit longer, then speak");
+          return;
+        }
+        chunks = [];
+        const mimeCandidates = [
+          "audio/webm;codecs=opus",
+          "audio/webm",
+          "audio/mp4",
+        ];
+        const mime = mimeCandidates.find((m) => MediaRecorder.isTypeSupported(m)) || "";
+        mediaRecorder = mime
+          ? new MediaRecorder(stream, { mimeType: mime })
+          : new MediaRecorder(stream);
+        mediaRecorder.ondataavailable = (e) => {
+          if (e.data && e.data.size > 0) chunks.push(e.data);
+        };
+        mediaRecorder.onstop = async () => {
+          stream.getTracks().forEach((t) => t.stop());
+          const blobType = (mediaRecorder && mediaRecorder.mimeType) || mime || "audio/webm";
+          const blob = new Blob(chunks, { type: blobType });
+          const heldMs = Date.now() - recordStartMs;
+          if (blob.size < 800 || heldMs < 280) {
+            setStatus("Hold to talk a bit longer, then release");
+            return;
+          }
+          const ext = blobType.includes("mp4") ? "m4a" : "webm";
+          if (mode === "chat") await sendTurn(blob, ext);
+          else if (mode === "practice") await sendPractice(blob, ext);
+        };
+        // Timeslice so we get chunks even on short holds (helps WebView2/Edge)
+        mediaRecorder.start(250);
+        recordStartMs = Date.now();
+        recording = true;
+        activeTalkBtn.classList.add("recording");
+        activeTalkBtn.textContent = "Listening…";
+        setStatus("Recording — release to send");
+        if (recordWantsStop) stopRecording();
+      } finally {
+        recordStarting = false;
+      }
     }
 
     function stopRecording() {
+      if (recordStarting) {
+        recordWantsStop = true;
+        return;
+      }
       if (!recording || !mediaRecorder) return;
       recording = false;
       activeTalkBtn.classList.remove("recording");
       activeTalkBtn.textContent = mode === "chat" ? "Hold to talk" : "Hold to repeat";
-      mediaRecorder.stop();
+      try {
+        if (mediaRecorder.state === "recording") {
+          mediaRecorder.requestData();
+          mediaRecorder.stop();
+        }
+      } catch (_) {
+        setStatus("Ready");
+        return;
+      }
       setStatus("Thinking…");
     }
 
@@ -876,7 +1054,6 @@
       setTtsEngineUI(prefs.tts_engine || "aivisspeech");
       topicPrefsInput.value = (prefs.topic_preferences || []).join(", ");
       personalityCustom.value = prefs.personality_custom || "";
-      maxSentences.value = prefs.max_sentences || 3;
       if (prefs.voicevox_speaker_id != null && voiceSelect.options.length) {
         const want = String(prefs.voicevox_speaker_id);
         const exists = [...voiceSelect.options].some((o) => o.value === want);
@@ -1071,7 +1248,7 @@
       settingsStatusEl.textContent = "Settings updated";
     }
 
-    async function loadPrefsIntoForm() {
+    async function loadPrefsIntoForm(opts) {
       const res = await fetch("/api/prefs");
       let data = {};
       try {
@@ -1097,17 +1274,253 @@
       await loadMemoryIntoForm().catch((err) => {
         document.getElementById("memoryStatus").textContent = String(err.message || err);
       });
+      await loadProfilesIntoForm().catch((err) => {
+        profilesStatusEl.textContent = String(err.message || err);
+      });
+      if (data.prefs) {
+        localStorage.setItem(
+          "kaiwa_saved_voice_id",
+          String(data.prefs.voicevox_speaker_id != null ? data.prefs.voicevox_speaker_id : "")
+        );
+        localStorage.setItem("kaiwa_saved_tts_engine", data.prefs.tts_engine || "");
+      }
+      if (data.active_id) activeProfileId = data.active_id;
+      if (data.profile) {
+        placementCompleted = !!data.profile.placement_completed;
+      } else if (typeof data.placement_completed === "boolean") {
+        placementCompleted = data.placement_completed;
+      }
       settingsStatusEl.textContent = "Loaded";
+      if (!(opts && opts.skipPlacementOffer)) {
+        maybeOfferPlacement(data.profile || { placement_completed: placementCompleted }, {
+          profileId: activeProfileId,
+        });
+      }
     }
+
+    function clearChatSessionLocal() {
+      localStorage.removeItem("kaiwa_session_id");
+      localStorage.removeItem("kaiwa_last_reply");
+      sessionStorage.removeItem("kaiwa_last_audio");
+      lastAudioB64 = "";
+      sessionId = "";
+      logEl.innerHTML = "";
+      updateReplayButton();
+    }
+
+    function fillProfilesSelect(listing) {
+      const profilesList = (listing && listing.profiles) || [];
+      const activeId = (listing && listing.active_id) || "";
+      profileSelect.innerHTML = "";
+      profilesList.forEach((p) => {
+        const opt = document.createElement("option");
+        opt.value = p.id;
+        opt.textContent = p.label + (p.id === activeId ? " (active)" : "");
+        profileSelect.appendChild(opt);
+      });
+      if (activeId) profileSelect.value = activeId;
+      const active = profilesList.find((p) => p.id === activeId);
+      profileActiveBadge.textContent = active
+        ? "Active: " + active.label + " · id " + active.id
+        : "No active profile";
+    }
+
+    async function loadProfilesIntoForm() {
+      const res = await fetch("/api/profiles");
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Failed to load profiles");
+      fillProfilesSelect(data);
+    }
+
+    async function applyActiveProfileState(data, statusMsg) {
+      fillProfilesSelect(data);
+      if (data.active_id) activeProfileId = data.active_id;
+      if (data.prefs) {
+        applyPrefsToForm(data.prefs);
+        fillPersonalitySelect(data.personalities || [], data.prefs.personality_id || "patient_tutor");
+        await loadVoicesIntoForm(data.prefs.voicevox_speaker_id);
+        applyPrefsToForm(data.prefs);
+      }
+      if (data.profile) applyProfileToForm(data.profile);
+      if (data.memory) applyMemoryToForm(data.memory);
+      profilesStatusEl.textContent = statusMsg || "Profile updated";
+      settingsStatusEl.textContent = statusMsg || "Profile updated";
+      const profilePayload = data.profile || {};
+      if (typeof profilePayload.placement_completed === "boolean") {
+        placementCompleted = profilePayload.placement_completed;
+      }
+      // New / reset / switch to incomplete profile → offer Place me (clear prior dismiss).
+      if (!placementCompleted) {
+        clearPlacementDismiss(activeProfileId);
+      }
+      maybeOfferPlacement(profilePayload, { profileId: activeProfileId, forceOpen: !placementCompleted });
+    }
+
+    async function switchSelectedProfile() {
+      const id = profileSelect.value;
+      if (!id) return;
+      profilesStatusEl.textContent = "Switching…";
+      const res = await fetch("/api/profiles/" + encodeURIComponent(id) + "/activate", {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Switch failed");
+      clearChatSessionLocal();
+      await applyActiveProfileState(data, "Switched to " + ((data.activated && data.activated.label) || id));
+    }
+
+    async function createNewProfile() {
+      const label = prompt("Name for the new profile:");
+      if (!label || !label.trim()) return;
+      const activate = confirm("Switch to the new profile now?");
+      profilesStatusEl.textContent = "Creating…";
+      const res = await fetch("/api/profiles", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ label: label.trim(), activate }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Create failed");
+      if (activate) {
+        clearChatSessionLocal();
+        await applyActiveProfileState(data, "Created and activated " + label.trim());
+      } else {
+        fillProfilesSelect(data);
+        profilesStatusEl.textContent = "Created " + label.trim();
+      }
+    }
+
+    async function resetSelectedUserProfile() {
+      const id = profileSelect.value;
+      const label = profileSelect.options[profileSelect.selectedIndex]
+        ? profileSelect.options[profileSelect.selectedIndex].textContent
+        : id;
+      if (!confirm("Reset profile “" + label + "” to defaults? Settings, level, memory, and custom personalities will be wiped.")) {
+        return;
+      }
+      profilesStatusEl.textContent = "Resetting…";
+      const res = await fetch("/api/profiles/" + encodeURIComponent(id) + "/reset", {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Reset failed");
+      if (data.prefs) {
+        clearChatSessionLocal();
+        await applyActiveProfileState(data, "Profile reset");
+      } else {
+        fillProfilesSelect(data);
+        profilesStatusEl.textContent = "Profile reset";
+      }
+    }
+
+    async function deleteSelectedProfile() {
+      const id = profileSelect.value;
+      if (!id) return;
+      const label = profileSelect.options[profileSelect.selectedIndex]
+        ? profileSelect.options[profileSelect.selectedIndex].textContent
+        : id;
+      if (!confirm("Delete profile “" + label + "”? This cannot be undone.")) return;
+      profilesStatusEl.textContent = "Deleting…";
+      const res = await fetch("/api/profiles/" + encodeURIComponent(id), { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Delete failed");
+      clearChatSessionLocal();
+      await applyActiveProfileState(data, "Deleted " + id);
+    }
+
+    async function exportSelectedProfile() {
+      const id = profileSelect.value;
+      if (!id) return;
+      profilesStatusEl.textContent = "Exporting…";
+      const res = await fetch("/api/profiles/" + encodeURIComponent(id) + "/export");
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.detail || "Export failed");
+      }
+      const blob = await res.blob();
+      const disp = res.headers.get("Content-Disposition") || "";
+      const match = /filename=\"([^\"]+)\"/.exec(disp);
+      const filename = (match && match[1]) || ("kaiwa-profile-" + id + ".json");
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      profilesStatusEl.textContent = "Exported " + filename;
+    }
+
+    async function importProfileFromFile(file) {
+      if (!file) return;
+      const activate = confirm("Import “" + file.name + "” and switch to it now?");
+      profilesStatusEl.textContent = "Importing…";
+      const form = new FormData();
+      form.append("file", file);
+      form.append("activate", activate ? "true" : "false");
+      const res = await fetch("/api/profiles/import", { method: "POST", body: form });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Import failed");
+      if (activate) {
+        clearChatSessionLocal();
+        await applyActiveProfileState(
+          data,
+          "Imported " + ((data.imported && data.imported.label) || file.name)
+        );
+      } else {
+        fillProfilesSelect(data);
+        profilesStatusEl.textContent =
+          "Imported " + ((data.imported && data.imported.label) || file.name) + " (not active)";
+      }
+    }
+
+    document.getElementById("switchProfileBtn").addEventListener("click", () => {
+      switchSelectedProfile().catch((err) => {
+        profilesStatusEl.textContent = String(err.message || err);
+      });
+    });
+    document.getElementById("newProfileBtn").addEventListener("click", () => {
+      createNewProfile().catch((err) => {
+        profilesStatusEl.textContent = String(err.message || err);
+      });
+    });
+    document.getElementById("resetUserProfileBtn").addEventListener("click", () => {
+      resetSelectedUserProfile().catch((err) => {
+        profilesStatusEl.textContent = String(err.message || err);
+      });
+    });
+    document.getElementById("deleteProfileBtn").addEventListener("click", () => {
+      deleteSelectedProfile().catch((err) => {
+        profilesStatusEl.textContent = String(err.message || err);
+      });
+    });
+    document.getElementById("exportProfileBtn").addEventListener("click", () => {
+      exportSelectedProfile().catch((err) => {
+        profilesStatusEl.textContent = String(err.message || err);
+      });
+    });
+    document.getElementById("importProfileBtn").addEventListener("click", () => {
+      importProfileFile.click();
+    });
+    importProfileFile.addEventListener("change", () => {
+      const file = importProfileFile.files && importProfileFile.files[0];
+      importProfileFile.value = "";
+      importProfileFromFile(file).catch((err) => {
+        profilesStatusEl.textContent = String(err.message || err);
+      });
+    });
 
     async function savePrefs() {
       settingsStatusEl.textContent = "Saving…";
       const topics = topicPrefsInput.value.split(",").map((t) => t.trim()).filter(Boolean);
+      const prevVoice = Number(localStorage.getItem("kaiwa_saved_voice_id") || "");
+      const prevEngine = localStorage.getItem("kaiwa_saved_tts_engine") || "";
       const body = {
         correction_style: correctionStyle,
         personality_id: personalitySelect.value,
         personality_custom: personalityCustom.value,
-        max_sentences: Number(maxSentences.value || 3),
+        max_sentences: 3,
         language_policy: languagePolicy,
         speech_register: speechRegister,
         naturalness_tips: naturalnessTips,
@@ -1129,10 +1542,25 @@
       applyPrefsToForm(data.prefs);
       await loadVoicesIntoForm(data.prefs && data.prefs.voicevox_speaker_id);
       applyPrefsToForm(data.prefs);
+      const savedVoice = Number(data.prefs && data.prefs.voicevox_speaker_id);
+      const savedEngine = (data.prefs && data.prefs.tts_engine) || "";
+      localStorage.setItem("kaiwa_saved_voice_id", String(savedVoice || ""));
+      localStorage.setItem("kaiwa_saved_tts_engine", savedEngine);
+      // Drop cached chat audio so Replay / next listen uses the new voice
+      if (savedVoice !== prevVoice || savedEngine !== prevEngine) {
+        clearLastAudioCache();
+      }
       settingsStatusEl.textContent = "Saved — applies to next chat turn";
     }
 
     document.getElementById("savePrefs").addEventListener("click", () => {
+      savePrefs().catch((err) => {
+        settingsStatusEl.textContent = String(err.message || err);
+      });
+    });
+    voiceSelect.addEventListener("change", () => {
+      // Persist immediately so the next chat turn / Replay uses this voice
+      // (engine toggle already auto-saves; voice was easy to forget).
       savePrefs().catch((err) => {
         settingsStatusEl.textContent = String(err.message || err);
       });
@@ -1175,52 +1603,158 @@
     });
     cancelEditPresetBtn.addEventListener("click", clearPresetEditor);
 
-    async function sendTurn(blob) {
-      talkBtn.disabled = true;
+    replayLastBtn.addEventListener("click", () => {
+      replayLastReply().catch((err) => {
+        setStatus(String(err.message || err));
+      });
+    });
+    updateReplayButton();
+
+    function applyChatTurnResult(data) {
+      sessionId = data.session_id;
+      localStorage.setItem("kaiwa_session_id", sessionId);
+      if (data.reply_text) {
+        localStorage.setItem("kaiwa_last_reply", data.reply_text);
+      }
+      addBubble("you", data.transcript);
+      addBubble("bot", data.reply_text);
+      if (data.audio_base64) {
+        cacheLastAudio(data.audio_base64);
+        playWavBase64(data.audio_base64);
+      } else {
+        updateReplayButton();
+      }
+      let status = data.tts_error ? ("TTS issue: " + data.tts_error) : "Ready";
+      if (data.timing && data.timing.total_ms != null) {
+        status += " · " + data.timing.total_ms + "ms"
+          + " (stt " + data.timing.stt_ms
+          + " / llm " + data.timing.llm_ms
+          + " / tts " + data.timing.tts_ms + ")";
+      }
+      setStatus(status);
+    }
+
+    function setChatBusy(busy) {
+      talkBtn.disabled = busy;
+      chatTextSendBtn.disabled = busy;
+      chatTextInput.disabled = busy;
+      if (!busy) updateReplayButton();
+    }
+
+    async function sendTurn(blob, ext) {
+      setChatBusy(true);
       const form = new FormData();
-      form.append("audio", blob, "utterance.webm");
+      const filename = "utterance." + (ext || "webm");
+      form.append("audio", blob, filename);
       form.append("session_id", sessionId);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 120000);
       try {
-        const res = await fetch("/api/turn", { method: "POST", body: form });
+        const res = await fetch("/api/turn", {
+          method: "POST",
+          body: form,
+          signal: controller.signal,
+        });
         const data = await res.json();
         if (!res.ok) throw new Error(data.detail || "Request failed");
-        sessionId = data.session_id;
-        localStorage.setItem("kaiwa_session_id", sessionId);
-        if (data.reply_text) {
-          localStorage.setItem("kaiwa_last_reply", data.reply_text);
-        }
-        addBubble("you", data.transcript);
-        addBubble("bot", data.reply_text);
-        playWavBase64(data.audio_base64);
-        let status = data.tts_error ? ("TTS issue: " + data.tts_error) : "Ready";
-        if (data.timing && data.timing.total_ms != null) {
-          status += " · " + data.timing.total_ms + "ms"
-            + " (stt " + data.timing.stt_ms
-            + " / llm " + data.timing.llm_ms
-            + " / tts " + data.timing.tts_ms + ")";
-        }
-        setStatus(status);
+        applyChatTurnResult(data);
       } catch (err) {
-        setStatus(String(err.message || err));
+        if (err && err.name === "AbortError") {
+          setStatus("Timed out — is the server still starting Whisper, or is DeepSeek/TTS down?");
+        } else {
+          setStatus(String(err.message || err));
+        }
       } finally {
-        talkBtn.disabled = false;
+        clearTimeout(timeoutId);
+        setChatBusy(false);
       }
     }
 
-    async function loadNextPhrase() {
+    async function sendChatText() {
+      const text = (chatTextInput.value || "").trim();
+      if (!text) {
+        setStatus("Type a short line first");
+        return;
+      }
+      setChatBusy(true);
+      setStatus("Thinking…");
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 120000);
+      try {
+        const res = await fetch("/api/turn/text", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text, session_id: sessionId }),
+          signal: controller.signal,
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "Request failed");
+        chatTextInput.value = "";
+        applyChatTurnResult(data);
+      } catch (err) {
+        if (err && err.name === "AbortError") {
+          setStatus("Timed out — check DeepSeek/TTS");
+        } else {
+          setStatus(String(err.message || err));
+        }
+      } finally {
+        clearTimeout(timeoutId);
+        setChatBusy(false);
+        chatTextInput.focus();
+      }
+    }
+
+    chatTextSendBtn.addEventListener("click", () => {
+      sendChatText().catch((err) => setStatus(String(err.message || err)));
+    });
+    chatTextInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        sendChatText().catch((err) => setStatus(String(err.message || err)));
+      }
+    });
+
+    function setPracticeTarget(data, fallbackSource) {
+      currentPhraseId = data.phrase_id || "";
+      currentTarget = data.text || "";
+      currentPracticeSource = data.source || fallbackSource || "bank";
+      targetTextEl.textContent = currentTarget || "…";
+      const note = (data.note || "").trim();
+      if (note) {
+        targetNoteEl.hidden = false;
+        targetNoteEl.textContent = note;
+      } else {
+        targetNoteEl.hidden = true;
+        targetNoteEl.textContent = "";
+      }
+      practiceResultEl.hidden = true;
+      practiceStatusEl.textContent = "Ready — play the model, then hold to repeat";
+    }
+
+    function softBandStatus(band, score) {
+      if (band === "clear") return "Nice — that came through clearly";
+      if (band === "close") return "Close — play the model and try once more if you want";
+      if (band === "unclear") return "Tricky this time — play the model and try again whenever you like";
+      return "Ready";
+    }
+
+    async function loadPracticeSource(source) {
       const params = new URLSearchParams({
-        source: "bank",
+        source: source,
         session_id: sessionId,
-        after_id: currentPhraseId,
+        after_id: currentPracticeSource === source ? currentPhraseId : "",
       });
       const res = await fetch("/api/practice/next?" + params.toString());
       const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || "Could not load phrase");
-      currentPhraseId = data.phrase_id;
-      currentTarget = data.text;
-      targetTextEl.textContent = currentTarget;
-      practiceResultEl.hidden = true;
-      practiceStatusEl.textContent = "Ready";
+      if (!res.ok) {
+        const detail = data.detail || "Could not load a line";
+        throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+      }
+      setPracticeTarget(data, source);
+    }
+
+    async function loadNextPhrase() {
+      await loadPracticeSource("bank");
     }
 
     async function loadLastReply() {
@@ -1233,18 +1767,20 @@
       if (!res.ok) {
         const local = localStorage.getItem("kaiwa_last_reply");
         if (local) {
-          currentPhraseId = "last_reply";
-          currentTarget = local.split("。")[0].trim() + (local.includes("。") ? "。" : "");
-          targetTextEl.textContent = currentTarget;
-          practiceResultEl.hidden = true;
+          setPracticeTarget(
+            {
+              phrase_id: "last_reply",
+              text: local.split("。")[0].trim() + (local.includes("。") ? "。" : ""),
+              source: "last_reply",
+              note: "",
+            },
+            "last_reply"
+          );
           return;
         }
-        throw new Error(data.detail || "No last reply");
+        throw new Error(data.detail || "Chat a little first");
       }
-      currentPhraseId = data.phrase_id;
-      currentTarget = data.text;
-      targetTextEl.textContent = currentTarget;
-      practiceResultEl.hidden = true;
+      setPracticeTarget(data, "last_reply");
     }
 
     async function playModel() {
@@ -1258,19 +1794,20 @@
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || "TTS failed");
       playWavBase64(data.audio_base64);
-      practiceStatusEl.textContent = "Ready";
+      practiceStatusEl.textContent = "Ready — hold to repeat";
     }
 
-    async function sendPractice(blob) {
+    async function sendPractice(blob, ext) {
       if (!currentTarget) {
-        practiceStatusEl.textContent = "Load a phrase first";
+        practiceStatusEl.textContent = "Pick a line first (Last reply / From our chats / Light phrase)";
         return;
       }
       practiceTalkBtn.disabled = true;
       const form = new FormData();
-      form.append("audio", blob, "utterance.webm");
+      form.append("audio", blob, "utterance." + (ext || "webm"));
       form.append("target_text", currentTarget);
       form.append("session_id", sessionId);
+      form.append("practice_source", currentPracticeSource || "bank");
       try {
         const res = await fetch("/api/practice", { method: "POST", body: form });
         const data = await res.json();
@@ -1278,12 +1815,15 @@
         sessionId = data.session_id;
         localStorage.setItem("kaiwa_session_id", sessionId);
         practiceResultEl.hidden = false;
-        scoreLabelEl.textContent = data.score + " / 100 · " + data.band;
-        scoreFillEl.style.width = data.score + "%";
-        scoreFillEl.className = "score-fill " + (data.band || "");
+        const band = data.band || "";
+        const bandLabel =
+          band === "clear" ? "clear" : band === "close" ? "close" : band === "unclear" ? "a bit unclear" : band;
+        scoreLabelEl.textContent = (data.score != null ? data.score + " / 100" : "—") + (bandLabel ? " · " + bandLabel : "");
+        scoreFillEl.style.width = (data.score || 0) + "%";
+        scoreFillEl.className = "score-fill " + band;
         heardTextEl.textContent = data.heard_text || "";
         tipTextEl.textContent = data.tip || (data.tip_error ? "(tip unavailable)" : "");
-        practiceStatusEl.textContent = "Ready";
+        practiceStatusEl.textContent = softBandStatus(band, data.score);
       } catch (err) {
         practiceStatusEl.textContent = String(err.message || err);
       } finally {
@@ -1301,6 +1841,16 @@
         practiceStatusEl.textContent = String(err.message || err);
       });
     });
+    document.getElementById("practiceVocab").addEventListener("click", () => {
+      loadPracticeSource("vocab").catch((err) => {
+        practiceStatusEl.textContent = String(err.message || err);
+      });
+    });
+    document.getElementById("practiceRecycle").addEventListener("click", () => {
+      loadPracticeSource("recycle").catch((err) => {
+        practiceStatusEl.textContent = String(err.message || err);
+      });
+    });
     document.getElementById("playModel").addEventListener("click", () => {
       playModel().catch((err) => {
         practiceStatusEl.textContent = String(err.message || err);
@@ -1308,6 +1858,10 @@
     });
 
     const quizStartBtn = document.getElementById("quizStart");
+    const quizSkipBtn = document.getElementById("quizSkip");
+    const quizSkipActiveBtn = document.getElementById("quizSkipActive");
+    const quizSoftBanner = document.getElementById("quizSoftBanner");
+    const quizIntro = document.getElementById("quizIntro");
     const quizStatusEl = document.getElementById("quizStatus");
     const quizActive = document.getElementById("quizActive");
     const quizResults = document.getElementById("quizResults");
@@ -1323,15 +1877,74 @@
     let quizItems = [];
     let quizIndex = 0;
     let quizLocked = false;
+    let quizMultiSelected = [];
+    let activeProfileId = "";
+    let placementCompleted = true;
+
+    function placementDismissKey(profileId) {
+      return "kaiwa_placement_dismissed_" + (profileId || "default");
+    }
+
+    function isPlacementDismissed(profileId) {
+      return localStorage.getItem(placementDismissKey(profileId)) === "1";
+    }
+
+    function dismissPlacement(profileId) {
+      localStorage.setItem(placementDismissKey(profileId), "1");
+    }
+
+    function clearPlacementDismiss(profileId) {
+      localStorage.removeItem(placementDismissKey(profileId));
+    }
+
+    function maybeOfferPlacement(profilePayload, opts) {
+      const forceOpen = !!(opts && opts.forceOpen);
+      const completed = profilePayload && profilePayload.placement_completed;
+      if (typeof completed === "boolean") {
+        placementCompleted = completed;
+      }
+      const pid =
+        (opts && opts.profileId) ||
+        activeProfileId ||
+        (profilePayload && profilePayload.id) ||
+        "";
+      if (pid) activeProfileId = pid;
+      quizSoftBanner.hidden = placementCompleted;
+      if (placementCompleted) return;
+      if (!forceOpen && isPlacementDismissed(activeProfileId)) return;
+      setMode("quiz");
+    }
+
+    function skipPlacement() {
+      dismissPlacement(activeProfileId);
+      quizStatusEl.textContent = "Skipped — you can finish Place me anytime";
+      resetQuizUi();
+      setMode("chat");
+    }
 
     function resetQuizUi() {
       quizActive.hidden = true;
       quizResults.hidden = true;
+      quizIntro.hidden = false;
       quizFeedback.textContent = "";
       quizNextBtn.hidden = true;
       quizChoices.innerHTML = "";
       quizPrompt.textContent = "—";
       quizStatusEl.textContent = "Ready when you are";
+      quizMultiSelected = [];
+      quizLocked = false;
+      const extra = document.getElementById("quizExtra");
+      const otherIn = document.getElementById("quizOtherInput");
+      const noteIn = document.getElementById("quizNoteInput");
+      if (extra) extra.hidden = true;
+      if (otherIn) {
+        otherIn.value = "";
+        otherIn.hidden = true;
+      }
+      if (noteIn) {
+        noteIn.value = "";
+        noteIn.hidden = true;
+      }
     }
 
     function levelLabel(level) {
@@ -1340,15 +1953,68 @@
       return "Just starting (pre-N5)";
     }
 
+    function otherSelected(item) {
+      if (!item || item.other_index == null) return false;
+      return quizMultiSelected.indexOf(item.other_index) >= 0;
+    }
+
+    function updateMultiContinueState(item) {
+      const maxSel = item.max_select || 3;
+      const otherIn = document.getElementById("quizOtherInput");
+      const needOther = otherSelected(item);
+      if (needOther) {
+        document.getElementById("quizExtra").hidden = false;
+        otherIn.hidden = false;
+        document.getElementById("quizNoteInput").hidden = true;
+      } else {
+        otherIn.hidden = true;
+        if (!item.free_text) document.getElementById("quizExtra").hidden = true;
+      }
+      const otherOk = !needOther || !!(otherIn.value || "").trim();
+      quizNextBtn.disabled = quizMultiSelected.length === 0 || !otherOk;
+      quizFeedback.textContent =
+        quizMultiSelected.length === 0
+          ? "Pick up to " + maxSel + ", then Continue."
+          : needOther && !otherOk
+            ? "Type your topic for Other…"
+            : "Selected " + quizMultiSelected.length + " · Continue when ready.";
+    }
+
     function renderQuizQuestion() {
       const item = quizItems[quizIndex];
       if (!item) return;
       quizLocked = false;
+      quizMultiSelected = [];
       quizProgress.textContent = "Question " + (quizIndex + 1) + " of " + quizItems.length;
       quizPrompt.textContent = item.prompt || "";
-      quizFeedback.textContent = "";
-      quizNextBtn.hidden = true;
+      const extra = document.getElementById("quizExtra");
+      const otherIn = document.getElementById("quizOtherInput");
+      const noteIn = document.getElementById("quizNoteInput");
+      otherIn.value = "";
+      noteIn.value = "";
       quizChoices.innerHTML = "";
+
+      if (item.free_text) {
+        quizFeedback.textContent = "Optional — leave blank to skip.";
+        quizNextBtn.hidden = false;
+        quizNextBtn.disabled = false;
+        quizNextBtn.textContent = quizIndex + 1 >= quizItems.length ? "See my levels" : "Continue";
+        extra.hidden = false;
+        otherIn.hidden = true;
+        noteIn.hidden = false;
+        noteIn.focus();
+        return;
+      }
+
+      noteIn.hidden = true;
+      extra.hidden = true;
+      otherIn.hidden = true;
+      quizFeedback.textContent = item.multi ? "Pick up to " + (item.max_select || 3) + ", then Continue." : "";
+      quizNextBtn.hidden = !item.multi;
+      if (item.multi) {
+        quizNextBtn.textContent = quizIndex + 1 >= quizItems.length ? "See my levels" : "Continue";
+        quizNextBtn.disabled = true;
+      }
       (item.choices || []).forEach((text, idx) => {
         const btn = document.createElement("button");
         btn.type = "button";
@@ -1356,16 +2022,39 @@
         btn.style.textAlign = "left";
         btn.textContent = text;
         btn.addEventListener("click", () => {
-          submitQuizAnswer(idx).catch((err) => {
-            quizFeedback.textContent = String(err.message || err);
-          });
+          if (item.multi) {
+            toggleQuizMulti(idx, btn, item);
+          } else {
+            submitQuizAnswer(idx).catch((err) => {
+              quizFeedback.textContent = String(err.message || err);
+            });
+          }
         });
         quizChoices.appendChild(btn);
       });
     }
 
+    function toggleQuizMulti(idx, btn, item) {
+      const maxSel = item.max_select || 3;
+      const pos = quizMultiSelected.indexOf(idx);
+      if (pos >= 0) {
+        quizMultiSelected.splice(pos, 1);
+        btn.style.outline = "";
+      } else {
+        if (quizMultiSelected.length >= maxSel) {
+          quizFeedback.textContent = "Pick up to " + maxSel;
+          return;
+        }
+        quizMultiSelected.push(idx);
+        btn.style.outline = "2px solid var(--ok)";
+      }
+      updateMultiContinueState(item);
+    }
+
     async function startQuiz() {
+      clearPlacementDismiss(activeProfileId);
       resetQuizUi();
+      quizIntro.hidden = true;
       quizStatusEl.textContent = "Setting up…";
       const res = await fetch("/api/quiz/start", { method: "POST" });
       const data = await res.json();
@@ -1401,15 +2090,93 @@
       });
       quizFeedback.textContent = "Got it.";
       quizNextBtn.hidden = false;
+      quizNextBtn.disabled = false;
       quizNextBtn.textContent = quizIndex + 1 >= quizItems.length ? "See my levels" : "Continue";
     }
 
+    async function submitQuizMultiAnswer() {
+      if (quizLocked) return true;
+      const item = quizItems[quizIndex];
+      if (!item || !item.multi) return true;
+      if (!quizMultiSelected.length) {
+        quizFeedback.textContent = "Pick at least one";
+        return false;
+      }
+      const otherIn = document.getElementById("quizOtherInput");
+      const payload = {
+        session_id: quizSessionId,
+        item_id: item.id,
+        choice_indices: quizMultiSelected,
+      };
+      if (otherSelected(item)) {
+        payload.text = (otherIn.value || "").trim();
+        if (!payload.text) {
+          quizFeedback.textContent = "Type your topic for Other…";
+          return false;
+        }
+      }
+      quizLocked = true;
+      const res = await fetch("/api/quiz/answer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        quizLocked = false;
+        throw new Error(data.detail || "Could not save answer");
+      }
+      [...quizChoices.querySelectorAll("button")].forEach((btn) => {
+        btn.disabled = true;
+      });
+      otherIn.disabled = true;
+      quizFeedback.textContent = "Got it.";
+      return true;
+    }
+
+    async function submitQuizFreeText() {
+      if (quizLocked) return true;
+      const item = quizItems[quizIndex];
+      if (!item || !item.free_text) return true;
+      quizLocked = true;
+      const noteIn = document.getElementById("quizNoteInput");
+      const res = await fetch("/api/quiz/answer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          session_id: quizSessionId,
+          item_id: item.id,
+          text: (noteIn.value || "").trim(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        quizLocked = false;
+        throw new Error(data.detail || "Could not save note");
+      }
+      noteIn.disabled = true;
+      quizFeedback.textContent = (noteIn.value || "").trim() ? "Got it." : "Skipped.";
+      return true;
+    }
+
     async function quizAdvance() {
+      const item = quizItems[quizIndex];
+      if (item && item.free_text && !quizLocked) {
+        const ok = await submitQuizFreeText();
+        if (!ok) return;
+      } else if (item && item.multi && !quizLocked) {
+        const ok = await submitQuizMultiAnswer();
+        if (!ok) return;
+      }
       if (quizIndex + 1 >= quizItems.length) {
         await finishQuiz();
         return;
       }
       quizIndex += 1;
+      const otherIn = document.getElementById("quizOtherInput");
+      const noteIn = document.getElementById("quizNoteInput");
+      otherIn.disabled = false;
+      noteIn.disabled = false;
       renderQuizQuestion();
     }
 
@@ -1423,6 +2190,7 @@
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || "Could not finish placement");
       quizActive.hidden = true;
+      quizIntro.hidden = true;
       quizResults.hidden = false;
       const speaking = data.speaking_level || "pre_n5";
       const listening = data.comprehension_level || "pre_n5";
@@ -1435,7 +2203,10 @@
         "Kaiwa will use these as your starting point — tweak them anytime in Settings.";
       quizStatusEl.textContent = "Done";
       quizSessionId = "";
-      loadPrefsIntoForm().catch(() => {});
+      placementCompleted = true;
+      clearPlacementDismiss(activeProfileId);
+      quizSoftBanner.hidden = true;
+      loadPrefsIntoForm({ skipPlacementOffer: true }).catch(() => {});
     }
 
     quizStartBtn.addEventListener("click", () => {
@@ -1443,15 +2214,23 @@
         quizStatusEl.textContent = String(err.message || err);
       });
     });
+    quizSkipBtn.addEventListener("click", () => skipPlacement());
+    quizSkipActiveBtn.addEventListener("click", () => skipPlacement());
     document.getElementById("quizRetake").addEventListener("click", () => {
       startQuiz().catch((err) => {
         quizStatusEl.textContent = String(err.message || err);
       });
     });
+    document.getElementById("quizDoneChat").addEventListener("click", () => setMode("chat"));
     quizNextBtn.addEventListener("click", () => {
       quizAdvance().catch((err) => {
         quizFeedback.textContent = String(err.message || err);
+        quizLocked = false;
       });
+    });
+    document.getElementById("quizOtherInput").addEventListener("input", () => {
+      const item = quizItems[quizIndex];
+      if (item && item.multi && item.allow_other) updateMultiContinueState(item);
     });
 
     loadPrefsIntoForm().catch((err) => {

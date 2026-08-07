@@ -18,7 +18,12 @@ from kaiwa.prefs import UserPrefs, load_prefs
 
 
 def make_client(settings: Settings) -> OpenAI:
-    return OpenAI(api_key=settings.deepseek_api_key, base_url=settings.deepseek_base_url)
+    # Explicit timeout — default OpenAI client can hang forever on a bad network path.
+    return OpenAI(
+        api_key=settings.deepseek_api_key,
+        base_url=settings.deepseek_base_url,
+        timeout=90.0,
+    )
 
 
 def _completion(
@@ -70,6 +75,7 @@ def chat(
         last_user_text=last_user,
         profile=profile,
         memory=memory,
+        learner_state=state,
     )
     use_pro = needs_pro_routing(prefs, profile, state)
     model = settings.deepseek_model_pro if use_pro else settings.deepseek_model
