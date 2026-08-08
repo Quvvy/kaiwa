@@ -6,7 +6,7 @@ Personal Japanese AI conversation partner — turn-based chat, Practice, and a s
 **Wiki:** tagged `kaiwa` in `C:\Users\elifs\Projects\llm-wiki`  
 **Version:** **1.0.0**
 
-## For friends (Windows)
+## For installation (Windows)
 
 1. Download **`KaiwaSetup-1.0.0.exe`** from the [latest GitHub Release](https://github.com/Quvvy/kaiwa/releases/latest).
 2. Run the installer → open **Kaiwa** from the Start Menu.
