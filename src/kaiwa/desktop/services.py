@@ -209,8 +209,23 @@ def _aivis_candidates() -> list[Path]:
 
 
 def find_engine(engine: AivisOrVoicevox) -> Path | None:
-    candidates = _aivis_candidates() if engine == "aivisspeech" else VOICEVOX_CANDIDATES
-    for path in candidates:
+    if engine == "aivisspeech":
+        from kaiwa.bootstrap import recorded_aivis_path
+
+        recorded = recorded_aivis_path()
+        # Prefer the path bootstrap already verified (is_file in runtime Python).
+        if recorded is not None and recorded.is_file():
+            return recorded
+        for path in _aivis_candidates():
+            if path.exists() or path.is_file():
+                return path
+        # Frozen Kaiwa.exe has been observed to miss AppData via exists()/is_file()
+        # right after bootstrap reported ready — trust the recorded path for Popen.
+        if recorded is not None:
+            return recorded
+        return None
+
+    for path in VOICEVOX_CANDIDATES:
         if path.exists():
             return path
     return None
@@ -255,9 +270,23 @@ def start_tts_engine(engine: AivisOrVoicevox, registry: ServiceRegistry) -> None
     exe = find_engine(engine)
     if exe is None:
         label = "AivisSpeech" if engine == "aivisspeech" else "VOICEVOX"
+        hint = ""
+        if engine == "aivisspeech":
+            try:
+                from kaiwa.bootstrap import recorded_aivis_path
+
+                recorded = recorded_aivis_path()
+                cands = [str(p) for p in _aivis_candidates()[:4]]
+                hint = (
+                    f" Recorded aivis_path={recorded!s}; "
+                    f"tried={cands}."
+                )
+            except Exception:
+                hint = ""
         raise FileNotFoundError(
             f"{label} TTS engine not found on disk. Relaunch Kaiwa so first-run "
             "setup can install it, or install the engine yourself."
+            + hint
         )
 
     proc = subprocess.Popen(

@@ -208,6 +208,7 @@ Captured from the 2026-08-05 planning conversation (Pingo-like personal Japanese
 
 94. Phase **6.8** shipped: version **1.0.0**; annotated tag `v1.0.0`; GitHub Release attaches `KaiwaSetup-1.0.0.exe`; README leads with Download → Install → paste DeepSeek key. Next: optional 6.9 in-app update checker.
 95. Phase **6.9** shipped: in-app update checker hits GitHub `releases/latest` for `Quvvy/kaiwa`, caches/snoozes under `%LocalAppData%\Kaiwa\update_check.json` (24h TTL), soft banner + Settings → About; **Update now** downloads `KaiwaSetup-*.exe` into AppData and launches via `os.startfile` (Windows only; Inno UAC wizard). No version bump in this slice.
+96. Frozen desktop shell **trusts** bootstrap.json `aivis_path` when starting AivisSpeech if candidate `exists()`/`is_file()` probes miss the AppData engine (observed after “Voice engine ready”); richer not-found error includes recorded path + tried candidates.
 
 ## Global push-to-talk (2026-08-07)
 

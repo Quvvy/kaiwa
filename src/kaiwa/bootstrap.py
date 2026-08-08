@@ -63,6 +63,14 @@ def aivis_appdata_run_exe() -> Path | None:
     return None
 
 
+def recorded_aivis_path() -> Path | None:
+    """Path saved by last successful bootstrap (`aivis_path` in bootstrap.json)."""
+    raw = str(_load_state().get("aivis_path") or "").strip()
+    if not raw:
+        return None
+    return Path(raw)
+
+
 def bootstrap_state_path() -> Path:
     return user_data_dir() / BOOTSTRAP_FILENAME
 
