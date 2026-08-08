@@ -210,6 +210,7 @@ Captured from the 2026-08-05 planning conversation (Pingo-like personal Japanese
 95. Phase **6.9** shipped: in-app update checker hits GitHub `releases/latest` for `Quvvy/kaiwa`, caches/snoozes under `%LocalAppData%\Kaiwa\update_check.json` (24h TTL), soft banner + Settings → About; **Update now** downloads `KaiwaSetup-*.exe` into AppData and launches via `os.startfile` (Windows only; Inno UAC wizard). No version bump in this slice.
 96. Frozen desktop shell **trusts** bootstrap.json `aivis_path` when starting AivisSpeech if candidate `exists()`/`is_file()` probes miss the AppData engine (observed after “Voice engine ready”); richer not-found error includes recorded path + tried candidates.
 97. Hard fix: frozen shell must **not** rely on AppData `exists()`/`is_file()`. Bootstrap subprocess emits `aivis_path` on progress JSON; `run_bootstrap` returns it; `start_tts_engine(exe_path=…)` `Popen`s that path with no exists gate. `_load_state` tries read without is_file precondition.
+98. Runtime package must include desktop `assets/*.ogg` (PTT blips). `/api/ptt/state` soft-fails when bundled blips are missing (empty path + Default label). Desktop PTT poll posts `/api/ptt/heartbeat` independently so a bad state response cannot starve `hook_alive`.
 
 ## Global push-to-talk (2026-08-07)
 

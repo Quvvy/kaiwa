@@ -44,4 +44,4 @@ kaiwa-desktop = "kaiwa.desktop.app:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-"kaiwa.desktop" = ["assets/*.png", "assets/*.ico"]
+"kaiwa.desktop" = ["assets/*.png", "assets/*.ico", "assets/*.ogg"]

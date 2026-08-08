@@ -42,11 +42,15 @@ def is_custom(which: Which) -> bool:
     return custom_blip_path(which) is not None
 
 
-def bundled_blip_path(which: Which) -> Path:
-    return asset_path(_DEFAULT_ASSET[which]).resolve()
+def bundled_blip_path(which: Which) -> Path | None:
+    """Return bundled default blip path, or None if assets are missing from the install."""
+    try:
+        return asset_path(_DEFAULT_ASSET[which]).resolve()
+    except FileNotFoundError:
+        return None
 
 
-def resolve_blip_path(which: Which) -> Path:
+def resolve_blip_path(which: Which) -> Path | None:
     custom = custom_blip_path(which)
     if custom is not None:
         return custom
@@ -97,13 +101,13 @@ def save_custom_blip(
 
 
 def blip_state() -> dict[str, object]:
-    """Fields for /api/ptt/state."""
+    """Fields for /api/ptt/state. Never raises if bundled defaults are missing."""
     out: dict[str, object] = {}
     for which in ("in", "out"):
         w: Which = which  # type: ignore[assignment]
         custom = is_custom(w)
         path = resolve_blip_path(w)
         out[f"blip_{which}_custom"] = custom
-        out[f"blip_{which}_path"] = str(path)
+        out[f"blip_{which}_path"] = str(path) if path is not None else ""
         out[f"blip_{which}_label"] = "Custom" if custom else "Default"
     return out

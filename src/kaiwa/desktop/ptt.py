@@ -167,36 +167,44 @@ class PttController:
         while not self._stop.is_set():
             try:
                 with httpx.Client(timeout=3.0) as client:
-                    prefs_payload = client.get(f"{self.api_base}/api/prefs").json()
-                    prefs = prefs_payload.get("prefs") or prefs_payload
-                    state = client.get(f"{self.api_base}/api/ptt/state").json()
-                    client.post(f"{self.api_base}/api/ptt/heartbeat")
-                with self._lock:
-                    self._prefs_enabled = bool(prefs.get("ptt_enabled"))
-                    self._prefs_binding = canonicalize_binding(
-                        str(prefs.get("ptt_binding") or "")
-                    )
-                    self._prefs_play = bool(prefs.get("ptt_play_reply", True))
-                    self._prefs_blips = bool(prefs.get("ptt_blips_enabled", True))
                     try:
-                        vol = float(prefs.get("ptt_blip_volume", 0.6))
-                    except (TypeError, ValueError):
-                        vol = 0.6
-                    self._prefs_blip_volume = max(0.0, min(5.0, vol))
-                    self._session_id = str(state.get("session_id") or "")
-                    self._bind_capture = bool(state.get("bind_capture"))
-                    new_in = str(state.get("blip_in_path") or "") or self._default_blip_path(
-                        "in"
-                    )
-                    new_out = str(state.get("blip_out_path") or "") or self._default_blip_path(
-                        "out"
-                    )
-                    if new_in != self._blip_in_path or new_out != self._blip_out_path:
-                        self._blip_cache.clear()
-                    self._blip_in_path = new_in
-                    self._blip_out_path = new_out
+                        prefs_payload = client.get(f"{self.api_base}/api/prefs").json()
+                        prefs = prefs_payload.get("prefs") or prefs_payload
+                        state = client.get(f"{self.api_base}/api/ptt/state").json()
+                        with self._lock:
+                            self._prefs_enabled = bool(prefs.get("ptt_enabled"))
+                            self._prefs_binding = canonicalize_binding(
+                                str(prefs.get("ptt_binding") or "")
+                            )
+                            self._prefs_play = bool(prefs.get("ptt_play_reply", True))
+                            self._prefs_blips = bool(prefs.get("ptt_blips_enabled", True))
+                            try:
+                                vol = float(prefs.get("ptt_blip_volume", 0.6))
+                            except (TypeError, ValueError):
+                                vol = 0.6
+                            self._prefs_blip_volume = max(0.0, min(5.0, vol))
+                            self._session_id = str(state.get("session_id") or "")
+                            self._bind_capture = bool(state.get("bind_capture"))
+                            new_in = str(state.get("blip_in_path") or "") or self._default_blip_path(
+                                "in"
+                            )
+                            new_out = str(state.get("blip_out_path") or "") or self._default_blip_path(
+                                "out"
+                            )
+                            if new_in != self._blip_in_path or new_out != self._blip_out_path:
+                                self._blip_cache.clear()
+                            self._blip_in_path = new_in
+                            self._blip_out_path = new_out
+                    except Exception as exc:
+                        self._log(f"ptt poll: {exc}")
+                    finally:
+                        # Keep hook_alive even if prefs/state fail (e.g. missing blip assets).
+                        try:
+                            client.post(f"{self.api_base}/api/ptt/heartbeat")
+                        except Exception as exc:
+                            self._log(f"ptt heartbeat: {exc}")
             except Exception as exc:
-                self._log(f"ptt poll: {exc}")
+                self._log(f"ptt poll client: {exc}")
             self._stop.wait(1.5)
 
     def _hook_loop(self) -> None:

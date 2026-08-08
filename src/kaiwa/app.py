@@ -449,7 +449,7 @@ def ptt_blip_reset(which: str) -> dict[str, Any]:
         "which": slot,
         "custom": False,
         "label": "Default",
-        "path": str(ptt_sounds.resolve_blip_path(slot)),
+        "path": str(ptt_sounds.resolve_blip_path(slot) or ""),
     }
 
 
