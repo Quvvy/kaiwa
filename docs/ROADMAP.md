@@ -107,9 +107,9 @@ Design input: real chat critique (`docs/TUTOR_EXCHANGE_CRITIQUE.md`). Teach unde
 - Realtime barge-in speech APIs
 - Larger scenario catalog
 
-## Phase 6 — Consumer prep (→ GitHub 1.0.0) (shipped through 6.8)
+## Phase 6 — Consumer prep (→ GitHub 1.0.0) (shipped)
 
-Friend-ready **Windows** **1.0.0** for a small non-technical share circle: install → launch → paste DeepSeek key → talk. Thin `.venv`-pointing `Kaiwa.exe` is **dev-only** after 6.4. **6.9** (in-app update checker) remains open.
+Friend-ready **Windows** **1.0.0** for a small non-technical share circle: install → launch → paste DeepSeek key → talk. Thin `.venv`-pointing `Kaiwa.exe` is **dev-only** after 6.4. Phase 6 includes **6.9** in-app update checker.
 
 **Constraint:** **DeepSeek only** for 1.0.0 (no multi-LLM picker). CUDA Whisper preferred; CPU fallback required.
 
@@ -123,7 +123,7 @@ Friend-ready **Windows** **1.0.0** for a small non-technical share circle: insta
 | **6.6** Hardware path | [x] | CUDA Whisper when available, else CPU; document “NVIDIA GPU recommended” |
 | **6.7** Installer + first-launch UX | [x] | Windows installer (Start Menu, uninstall); splash → bootstrap → API key → soft Place me; plain-English failures |
 | **6.8** GitHub Release 1.0.0 | [x] | Tag `v1.0.0`, release notes, attach installer, consumer README (“Download → Install → paste DeepSeek key”) |
-| **6.9** In-app update checker | [ ] | Notify when a newer GitHub release exists; download + install without visiting the releases page (Windows) |
+| **6.9** In-app update checker | [x] | Notify when a newer GitHub release exists; download + install without visiting the releases page (Windows) |
 
 **Priority**
 

@@ -141,7 +141,10 @@ def friendly_boot_message(exc: BaseException) -> str:
     if len(first) > 220:
         first = first[:217] + "…"
     if "traceback" in lower or first.startswith("File ") or "\\n" in first:
-        return "Something went wrong while starting Kaiwa. Close and relaunch, or check Kaiwa.desktop.log."
+        return (
+            "Something went wrong while starting Kaiwa. Close and relaunch, "
+            "or check %LocalAppData%\\Kaiwa\\Kaiwa.desktop.log."
+        )
     return first or "Something went wrong while starting Kaiwa."
 
 
@@ -157,6 +160,6 @@ def error_html(message: str) -> str:
     <div class="status">{safe}</div>
     <p class="hint">Check your internet connection and free disk space, then close
     this window and relaunch (downloads resume where they left off). Details are in
-    Kaiwa.desktop.log next to the app (or under LocalAppData\\Kaiwa when running from source).</p>
+    %LocalAppData%\\Kaiwa\\Kaiwa.desktop.log.</p>
   </div>
 </body></html>"""

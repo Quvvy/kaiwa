@@ -15,7 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from kaiwa.config import ROOT, get_settings, reload_settings
-from kaiwa import llm, profiles, secrets_store, stt, tts
+from kaiwa import __version__, llm, profiles, secrets_store, stt, tts, updates
 from kaiwa.persona import PERSONALITY_PRESETS, infer_learner_state, preset_public_list
 from kaiwa.personalities_store import (
     create_user_preset,
@@ -226,6 +226,7 @@ def health() -> dict[str, Any]:
     info = stt.get_stt_runtime_info()
     return {
         "status": "ok",
+        "version": __version__,
         "model": s.deepseek_model,
         "deepseek_configured": "true" if s.deepseek_api_key.strip() else "false",
         "whisper_requested": str(info.get("requested") or s.whisper_device),
@@ -235,6 +236,28 @@ def health() -> dict[str, Any]:
         "whisper_cuda_available": "true" if info.get("cuda_available") else "false",
         "whisper_local_model": "true" if info.get("local_model") else "false",
     }
+
+
+class UpdateDismissBody(BaseModel):
+    version: str = ""
+
+
+@app.get("/api/updates/check")
+def updates_check(force: int = 0) -> dict[str, Any]:
+    return updates.check_for_updates(force=bool(force))
+
+
+@app.post("/api/updates/dismiss")
+def updates_dismiss(body: UpdateDismissBody) -> dict[str, Any]:
+    try:
+        return updates.dismiss_update(body.version)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/updates/install")
+def updates_install() -> dict[str, Any]:
+    return updates.download_and_launch_installer(force_check=True)
 
 
 class DeepseekKeyBody(BaseModel):

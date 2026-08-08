@@ -14,7 +14,7 @@ Personal Japanese AI conversation partner — turn-based chat, Practice, and a s
 4. When asked, paste a [DeepSeek](https://platform.deepseek.com/) API key (saved under AppData, not in the install folder).
 5. Optional soft **Place me** quiz; then talk in Chat. **NVIDIA GPU recommended** for faster speech recognition; CPU works.
 
-Uninstall via Windows Apps keeps your key and models in `%LocalAppData%\Kaiwa\`.
+If Kaiwa fails to start, details are in `%LocalAppData%\Kaiwa\Kaiwa.desktop.log`. When a newer release exists, Kaiwa can notify you and download/run the Windows Setup from Settings → About (or the update banner). Uninstall via Windows Apps keeps your key and models in `%LocalAppData%\Kaiwa\`.
 
 ## Stack
 
@@ -142,4 +142,4 @@ Kaiwa is **MIT** — see [LICENSE](LICENSE). Third-party speech engines, models,
 - **NVIDIA GPU recommended** for faster speech recognition. Kaiwa defaults to `WHISPER_DEVICE=auto` (CUDA when a GPU and `.[cuda]` wheels are available, otherwise CPU). Owners: `pip install -e ".[desktop,cuda]"`. The portable friend runtime is **CPU-only** unless CUDA wheels are added.
 - Practice scores measure **what the app heard**, not native pitch accent.
 - Phase 3 stays **turn-based** (no OpenAI Realtime); pitch-accent grading remains deferred.
-- **Version:** `1.0.0`. **Phase 4–5** done. **Phase 6:** 6.1–6.8 done (Windows GitHub **1.0.0**); next **6.9** update checker (optional). **Phase 7:** global push-to-talk shipped — see [docs/ROADMAP.md](docs/ROADMAP.md).
+- **Version:** `1.0.0`. **Phase 4–5** done. **Phase 6:** 6.1–6.9 done (Windows GitHub **1.0.0** + in-app update checker). **Phase 7:** global push-to-talk shipped — see [docs/ROADMAP.md](docs/ROADMAP.md).

@@ -657,6 +657,37 @@
       flex-shrink: 0;
     }
 
+    .update-banner {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.75rem;
+      flex-shrink: 0;
+      margin: 0;
+      padding: 0.7rem 0.95rem;
+      border-radius: var(--radius-sm);
+      background: color-mix(in srgb, var(--accent) 12%, var(--surface-raised));
+      border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line));
+      color: var(--ink);
+      font-size: 0.88rem;
+      line-height: 1.45;
+      animation: alert-in 0.22s ease-out;
+    }
+
+    .update-banner[hidden] { display: none; }
+    .update-banner .update-banner-body { flex: 1; min-width: 0; }
+    .update-banner .update-banner-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+      flex-shrink: 0;
+    }
+    .update-banner button {
+      padding: 0.3rem 0.7rem;
+      font-size: 0.78rem;
+      font-weight: 500;
+      flex-shrink: 0;
+    }
+
     .try-saying {
       margin-top: 0.5rem;
       padding-top: 0.45rem;
@@ -1104,6 +1135,14 @@
       <button type="button" id="engineAlertDismiss" class="secondary">Dismiss</button>
     </div>
 
+    <div id="updateBanner" class="update-banner" hidden role="status">
+      <div class="update-banner-body" id="updateBannerText"></div>
+      <div class="update-banner-actions">
+        <button type="button" id="updateBannerInstall">Update now</button>
+        <button type="button" id="updateBannerLater" class="secondary">Later</button>
+      </div>
+    </div>
+
     <section class="mode active" id="modeChat">
       <div class="chat-stage">
         <div id="log" aria-live="polite"></div>
@@ -1220,6 +1259,7 @@
             <button type="button" data-settings-section="learning">Learning</button>
             <button type="button" data-settings-section="memory">Memory</button>
             <button type="button" data-settings-section="speech">Speech</button>
+            <button type="button" data-settings-section="about">About</button>
           </nav>
         </div>
         <div class="settings-pane">
@@ -1517,6 +1557,22 @@
                 </div>
               </div>
             </div>
+
+            <div class="settings-section" data-settings-section="about" hidden>
+              <h2 class="section-title">About</h2>
+              <p class="disclaimer settings-searchable" data-settings-search="about version update github release installer setup">
+                Kaiwa checks GitHub Releases for newer Windows installers. Updates download into AppData and launch Setup (UAC may ask for permission).
+              </p>
+              <div class="field settings-searchable" data-settings-search="about version kaiwa release">
+                <label>Version</label>
+                <p class="disclaimer" id="aboutVersionLabel">…</p>
+              </div>
+              <div class="controls settings-searchable" data-settings-search="check for updates update now github" style="margin-top:0.6rem; gap:0.5rem; flex-wrap:wrap; align-items:center;">
+                <button id="aboutCheckUpdatesBtn" class="secondary" type="button">Check for updates</button>
+                <button id="aboutInstallUpdateBtn" type="button" hidden>Update now</button>
+              </div>
+              <p class="disclaimer settings-searchable" data-settings-search="update status download install" id="aboutUpdateStatus" style="margin-top:0.6rem"></p>
+            </div>
           </div>
           <div class="settings-save-bar" id="settingsPrefsSaveBar" hidden>
             <button id="savePrefs" type="button">Save settings</button>
@@ -1706,6 +1762,7 @@
       "learning",
       "memory",
       "speech",
+      "about",
     ]);
     const SETTINGS_SECTION_MIGRATE = {
       themes: "appearance",
@@ -4110,6 +4167,147 @@
         st.className = "api-key-gate-status err";
       }
     });
+
+    let updateCheckState = null;
+    let updateInstallBusy = false;
+
+    function setAboutVersionLabel(version) {
+      const el = document.getElementById("aboutVersionLabel");
+      if (el) el.textContent = version ? ("Kaiwa " + version) : "Kaiwa";
+    }
+
+    function setUpdateInstallBusy(busy) {
+      updateInstallBusy = !!busy;
+      ["updateBannerInstall", "aboutInstallUpdateBtn", "aboutCheckUpdatesBtn"].forEach((id) => {
+        const btn = document.getElementById(id);
+        if (btn) btn.disabled = updateInstallBusy;
+      });
+    }
+
+    function applyUpdateCheck(data, opts) {
+      const options = opts || {};
+      updateCheckState = data || null;
+      const statusEl = document.getElementById("aboutUpdateStatus");
+      const installBtn = document.getElementById("aboutInstallUpdateBtn");
+      const banner = document.getElementById("updateBanner");
+      const bannerText = document.getElementById("updateBannerText");
+      const current = (data && data.current_version) || "";
+      if (current) setAboutVersionLabel(current);
+
+      const available = !!(data && data.update_available);
+      if (installBtn) installBtn.hidden = !available;
+
+      if (statusEl) {
+        if (options.statusText) {
+          statusEl.textContent = options.statusText;
+        } else if (!data) {
+          statusEl.textContent = "";
+        } else if (data.error && !available) {
+          statusEl.textContent = String(data.error);
+        } else if (available) {
+          statusEl.textContent =
+            "Kaiwa " + data.latest_version + " is available" +
+            (data.asset_name ? " (" + data.asset_name + ")" : "") + ".";
+        } else if (data.dismissed) {
+          statusEl.textContent = "Update " + (data.latest_version || "") + " snoozed until a newer release.";
+        } else if (data.latest_version) {
+          statusEl.textContent = "You’re up to date (latest " + data.latest_version + ").";
+        } else {
+          statusEl.textContent = "No update info yet.";
+        }
+      }
+
+      if (banner && bannerText) {
+        if (available && !options.hideBanner) {
+          bannerText.textContent = "Kaiwa " + data.latest_version + " is available.";
+          banner.hidden = false;
+        } else if (!available) {
+          banner.hidden = true;
+        }
+      }
+    }
+
+    async function checkForUpdates(force) {
+      const res = await fetch("/api/updates/check?force=" + (force ? "1" : "0"));
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.detail || data.error || "Update check failed");
+      applyUpdateCheck(data, { hideBanner: false });
+      return data;
+    }
+
+    async function dismissUpdateBanner() {
+      const ver =
+        (updateCheckState && (updateCheckState.latest_version || updateCheckState.dismissed_version)) || "";
+      const banner = document.getElementById("updateBanner");
+      if (banner) banner.hidden = true;
+      if (!ver) return;
+      const res = await fetch("/api/updates/dismiss", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ version: ver }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.detail || "Could not snooze update");
+      applyUpdateCheck(data, { hideBanner: true });
+    }
+
+    async function installAvailableUpdate() {
+      if (updateInstallBusy) return;
+      setUpdateInstallBusy(true);
+      applyUpdateCheck(updateCheckState, {
+        hideBanner: false,
+        statusText: "Downloading installer…",
+      });
+      try {
+        const res = await fetch("/api/updates/install", { method: "POST" });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.ok) {
+          throw new Error(data.detail || data.error || "Install failed");
+        }
+        applyUpdateCheck(updateCheckState, {
+          hideBanner: false,
+          statusText: data.detail || "Installer started — finish Setup and relaunch Kaiwa.",
+        });
+        const bannerText = document.getElementById("updateBannerText");
+        if (bannerText) {
+          bannerText.textContent = data.detail || "Installer started — finish Setup and relaunch Kaiwa.";
+        }
+      } catch (err) {
+        applyUpdateCheck(updateCheckState, {
+          hideBanner: false,
+          statusText: String(err.message || err),
+        });
+        throw err;
+      } finally {
+        setUpdateInstallBusy(false);
+      }
+    }
+
+    document.getElementById("updateBannerLater").addEventListener("click", () => {
+      dismissUpdateBanner().catch(() => {});
+    });
+    document.getElementById("updateBannerInstall").addEventListener("click", () => {
+      installAvailableUpdate().catch(() => {});
+    });
+    document.getElementById("aboutCheckUpdatesBtn").addEventListener("click", () => {
+      const statusEl = document.getElementById("aboutUpdateStatus");
+      if (statusEl) statusEl.textContent = "Checking…";
+      checkForUpdates(true).catch((err) => {
+        if (statusEl) statusEl.textContent = String(err.message || err);
+      });
+    });
+    document.getElementById("aboutInstallUpdateBtn").addEventListener("click", () => {
+      installAvailableUpdate().catch(() => {});
+    });
+
+    fetch("/api/health")
+      .then((res) => res.json().catch(() => ({})))
+      .then((data) => {
+        if (data && data.version) setAboutVersionLabel(data.version);
+      })
+      .catch(() => {});
+
+    checkForUpdates(false).catch(() => {});
 
     registerPttSession();
     refreshPttHookStatus();

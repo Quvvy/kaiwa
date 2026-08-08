@@ -25,13 +25,14 @@ def _bootstrap_frozen_paths() -> None:
 
 
 def _log_path() -> Path:
-    if getattr(sys, "frozen", False):
-        return Path(sys.executable).resolve().parent / "Kaiwa.desktop.log"
+    """Always prefer AppData — Program Files next to Kaiwa.exe is not writable."""
     try:
         from kaiwa.secrets_store import user_data_dir
 
         return user_data_dir() / "Kaiwa.desktop.log"
     except Exception:
+        if getattr(sys, "frozen", False):
+            return Path(sys.executable).resolve().parent / "Kaiwa.desktop.log"
         return Path.cwd() / "Kaiwa.desktop.log"
 
 
@@ -60,6 +61,7 @@ def main() -> None:
 
     _bootstrap_frozen_paths()
     set_windows_app_id()
+    _log(f"log file: {_log_path()}")
     _log("main start")
 
     lifecycle = Lifecycle()

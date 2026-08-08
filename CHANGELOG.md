@@ -7,10 +7,6 @@ and this project aims to follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-### Added
-
-- (planned) Phase **6.9**: in-app update checker for newer GitHub releases.
-
 ## [1.0.0] — 2026-08-08
 
 ### Added
@@ -23,9 +19,10 @@ and this project aims to follow [Semantic Versioning](https://semver.org/).
 - Phase **6.6**: Auto CUDA/CPU Whisper path; health reports device; NVIDIA GPU recommended.
 - Phase **6.7**: Windows Inno Setup installer (`KaiwaSetup-1.0.0.exe`); Start Menu + uninstall (keeps AppData); plain-English splash errors; Place me after API key gate.
 - Phase **6.8**: Tagged GitHub Release `v1.0.0` with Setup.exe attached; consumer README (Download → Install → paste DeepSeek key).
+- Phase **6.9**: in-app update checker (GitHub Releases) with soft banner, Settings → About, and Windows download + launch of `KaiwaSetup-*.exe`.
 - Phase 7 global push-to-talk (Windows desktop): bindable key/mouse, hold-to-talk, custom blip cues, hook heartbeat.
 - Phase 5 tutor learning quality (prompt layers): JP-first help, micro-corrections, topic stickiness, difficulty governor.
-- Settings IA: Profiles / Appearance / Tutor / Learning / Memory / Speech + search; themed blip volume slider.
+- Settings IA: Profiles / Appearance / Tutor / Learning / Memory / Speech / About + search; themed blip volume slider.
 
 ### Changed
 
@@ -35,6 +32,7 @@ and this project aims to follow [Semantic Versioning](https://semver.org/).
 - Windows CUDA Whisper packages moved to optional extra `[cuda]`.
 - Default `WHISPER_DEVICE=auto` picks CUDA when available, else CPU; `/api/health` reports the active path.
 - Friend install path is `KaiwaSetup-1.0.0.exe` from the GitHub Release (Start Menu); portable `dist/Kaiwa/` remains the build input.
+- Frozen desktop log writes to `%LocalAppData%\Kaiwa\Kaiwa.desktop.log` (Program Files next to the exe is not writable).
 
 ## [0.9.0] — 2026-08-07
 

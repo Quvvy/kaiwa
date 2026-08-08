@@ -207,6 +207,7 @@ Captured from the 2026-08-05 planning conversation (Pingo-like personal Japanese
 93. Phase **6.7** shipped: **Inno Setup** wraps portable `dist/Kaiwa/` into `dist/KaiwaSetup-*.exe` (`packaging/kaiwa.iss`, `scripts/build_installer.ps1`; needs Inno Setup 6 / `ISCC`). Install to Program Files; Start Menu (+ optional desktop); uninstall removes install dir only — **keeps** `%LocalAppData%\Kaiwa\`. Friend path is Setup.exe, not a zip folder. First-launch: plain-English splash errors; soft Place me after DeepSeek key gate.
 
 94. Phase **6.8** shipped: version **1.0.0**; annotated tag `v1.0.0`; GitHub Release attaches `KaiwaSetup-1.0.0.exe`; README leads with Download → Install → paste DeepSeek key. Next: optional 6.9 in-app update checker.
+95. Phase **6.9** shipped: in-app update checker hits GitHub `releases/latest` for `Quvvy/kaiwa`, caches/snoozes under `%LocalAppData%\Kaiwa\update_check.json` (24h TTL), soft banner + Settings → About; **Update now** downloads `KaiwaSetup-*.exe` into AppData and launches via `os.startfile` (Windows only; Inno UAC wizard). No version bump in this slice.
 
 ## Global push-to-talk (2026-08-07)
 
