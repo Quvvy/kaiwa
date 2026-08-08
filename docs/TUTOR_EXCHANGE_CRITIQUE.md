@@ -29,6 +29,33 @@ Conversation layer stays warm and short. Micro-teaching clarifies 眠い vs 眠�
 
 ## Related
 
-- Roadmap Phase 5.1–5.4
-- Decision #80 (tutor learning layers)
-- Existing hooks: `language_policy`, `TRY:`, learner profile levels
+- Roadmap Phase 5.1–5.5
+- Decision #80 (tutor learning layers), #99 (comprehensibility-first Chat)
+- Existing hooks: `language_policy`, learner profile levels, Practice tab (drills)
+
+---
+
+# Tutor exchange critique — round 2 (2026-08-08)
+
+Second critique: Kaiwa felt like a chatbot that teaches, not a tutor that converses. Core failure: responding to comprehension collapse by teaching many new items at once.
+
+## Failure modes (paraphrased)
+
+- After “lots of words I don’t understand,” Kaiwa explained 硬い / カジュアル / フォーマル / … in one turn.
+- Lone filler `and...` treated as trouble, or connector lectures when the learner was only thinking.
+- Greeting flip (こんにちは → おはよう) got a meta “you feel like morning” joke instead of following the learner.
+- Successful communication (`お元気ですか` turn-back) got premature register lectures.
+- Chat `TRY:` / “Try saying… Practice this” blurred Chat vs Practice.
+
+## What to improve (→ Phase 5.5)
+
+1. **One-item density lock** on incomprehension — simpler JP / choices over definition stacks.
+2. **Internal support ladder** with decay (not sticky simplified; not one-shot reset to normal).
+3. **help_type** — vocabulary/expression ≠ comprehension collapse.
+4. **English as rescue scaffolding**, not the conversation language; weak signal alone.
+5. **Retire Chat TRY:** — Practice stays the drill surface.
+6. **Invisible scaffolding** — never announce “simplified mode.”
+
+## Philosophy (short)
+
+Japanese teaches. English rescues. Practice drills. Conversation stays a conversation. Comprehensibility > correction > teaching density.

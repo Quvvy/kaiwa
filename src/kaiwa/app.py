@@ -78,7 +78,7 @@ def _require_deepseek_key() -> None:
         )
 
 
-app = FastAPI(title="Kaiwa", version="1.0.0")
+app = FastAPI(title="Kaiwa", version=__version__)
 static_dir = ROOT / "static"
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 

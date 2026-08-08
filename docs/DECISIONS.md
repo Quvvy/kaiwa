@@ -211,6 +211,8 @@ Captured from the 2026-08-05 planning conversation (Pingo-like personal Japanese
 96. Frozen desktop shell **trusts** bootstrap.json `aivis_path` when starting AivisSpeech if candidate `exists()`/`is_file()` probes miss the AppData engine (observed after “Voice engine ready”); richer not-found error includes recorded path + tried candidates.
 97. Hard fix: frozen shell must **not** rely on AppData `exists()`/`is_file()`. Bootstrap subprocess emits `aivis_path` on progress JSON; `run_bootstrap` returns it; `start_tts_engine(exe_path=…)` `Popen`s that path with no exists gate. `_load_state` tries read without is_file precondition.
 98. Runtime package must include desktop `assets/*.ogg` (PTT blips). `/api/ptt/state` soft-fails when bundled blips are missing (empty path + Default label). Desktop PTT poll posts `/api/ptt/heartbeat` independently so a bad state response cannot starve `hook_alive`.
+99. **Phase 5.5 — Comprehensibility-first Chat:** Kaiwa is a conversation partner first, tutor second. Internal `support_mode` ladder (`normal→light→simplified→heavy`) + per-turn `help_type` (comprehension vs vocabulary/expression/correction); density lock on incomprehension; JP teaches / EN rescues (least English needed, then back to JP); scaffolding decays on success (not one-shot reset); **never surface mode names in UI**. Chat retires `TRY:` / “Try saying…” (Practice remains the drill surface). Chat ≠ Practice; comprehensibility > correction > teaching density.
+100. Shipped **1.0.1** (`v1.0.1`, `KaiwaSetup-1.0.1.exe`) with Phase 5.5 Chat policy; in-app update checker should offer this over 1.0.0.
 
 ## Global push-to-talk (2026-08-07)
 

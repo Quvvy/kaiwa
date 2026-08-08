@@ -178,7 +178,7 @@ Two processes:
 
 User data stays under `%LocalAppData%\Kaiwa\`. **Hardware:** `WHISPER_DEVICE=auto` prefers CUDA when a GPU and nvidia wheels are present, else CPU (`int8`). Owners: `pip install -e ".[cuda]"`. Friend portable runtime is CPU unless CUDA wheels are added. Dev-only: `build_desktop.ps1 -DevVenv` points the shell at the clone `.venv`.
 
-**Installer:** `scripts/build_installer.ps1` (Inno Setup 6) packs `dist/Kaiwa/` into `dist/KaiwaSetup-1.0.0.exe` — Program Files install, Start Menu shortcut, Add/Remove Programs uninstall. Uninstall does **not** delete AppData. Friend path is the Setup.exe from the GitHub Release (portable folder remains a build intermediate).
+**Installer:** `scripts/build_installer.ps1` (Inno Setup 6) packs `dist/Kaiwa/` into `dist/KaiwaSetup-*.exe` — Program Files install, Start Menu shortcut, Add/Remove Programs uninstall. Uninstall does **not** delete AppData. Friend path is the Setup.exe from the GitHub Release (portable folder remains a build intermediate).
 
 **Updates (6.9):** UI calls `/api/updates/check` (GitHub Releases latest; 24h AppData cache). When newer, a banner + Settings → About offer **Update now**, which downloads `KaiwaSetup-*.exe` to `%LocalAppData%\Kaiwa\downloads\updates\` and launches it (`os.startfile`). Desktop log: `%LocalAppData%\Kaiwa\Kaiwa.desktop.log`.
 

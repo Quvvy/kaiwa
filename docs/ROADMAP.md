@@ -86,6 +86,7 @@ Design input: real chat critique (`docs/TUTOR_EXCHANGE_CRITIQUE.md`). Teach unde
 | **5.2** Useful micro-corrections | [x] | Acknowledge clear turns; for useful/recurring errors (word family, particles, です/だ), one soft fix via `TRY:` / brief JP — not every typo (`correction_style`) |
 | **5.3** Topic stickiness | [x] | Stay on the current thread 1–2 turns (reuse just-taught words) before jumping topics |
 | **5.4** Difficulty governor | [x] | Cap next-turn vocab/grammar by demonstrated level + profile; simpler follow-ups until complexity is earned (`speaking_level`, `goal_level`, memory vocab) |
+| **5.5** Comprehensibility-first Chat | [x] | Conversation partner first; internal support ladder + help_type; density lock; JP teaches / EN rescues; decay recovery; Chat `TRY:` retired (Practice stays drills) |
 
 **Priority** (completed)
 
@@ -93,12 +94,14 @@ Design input: real chat critique (`docs/TUTOR_EXCHANGE_CRITIQUE.md`). Teach unde
 2. ~~5.2 Useful micro-corrections~~ **done**
 3. ~~5.3 Topic stickiness~~ **done**
 4. ~~5.4 Difficulty governor~~ **done**
+5. ~~5.5 Comprehensibility-first Chat~~ **done**
 
 **Out of Phase 5**
 
 - Pitch / pronunciation APIs
 - Full UI i18n
 - Scenario catalog / realtime speech
+- Surfacing support-mode names in the UI (modes stay internal)
 
 **Only if needed later** (from Phase 4 backlog)
 

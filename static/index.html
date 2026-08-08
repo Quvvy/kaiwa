@@ -1893,30 +1893,6 @@
       body.textContent = text;
       wrap.appendChild(meta);
       wrap.appendChild(body);
-      if (who === "bot" && opts && opts.betterPhrase) {
-        const tryRow = document.createElement("div");
-        tryRow.className = "try-saying";
-        const label = document.createElement("span");
-        label.textContent = "Try saying: ";
-        const phrase = document.createElement("span");
-        phrase.className = "phrase";
-        phrase.textContent = opts.betterPhrase;
-        const useBtn = document.createElement("button");
-        useBtn.type = "button";
-        useBtn.className = "secondary";
-        useBtn.textContent = "Practice this";
-        useBtn.addEventListener("click", () => {
-          localStorage.setItem("kaiwa_last_reply", opts.betterPhrase);
-          setMode("practice");
-          loadLastReply().catch((err) => {
-            practiceStatusEl.textContent = String(err.message || err);
-          });
-        });
-        tryRow.appendChild(label);
-        tryRow.appendChild(phrase);
-        tryRow.appendChild(useBtn);
-        wrap.appendChild(tryRow);
-      }
       logEl.appendChild(wrap);
       logEl.scrollTop = logEl.scrollHeight;
     }

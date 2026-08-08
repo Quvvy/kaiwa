@@ -25,6 +25,7 @@ PLACEMENT_PROTECT_TURNS = 15
 class ProfileStats:
     chat_turns: int = 0
     practice_scores: list[int] = field(default_factory=list)
+    # Scaffolding intensity for Chat (0 normal … 3 heavy); decays on success.
     struggle_streak: int = 0
     flow_streak: int = 0
     last_assess_turn: int = 0
@@ -268,29 +269,47 @@ def apply_chat_signals(
     learner_state: str,
     transcript: str,
 ) -> LearnerProfile:
+    from kaiwa.persona import infer_help_type
+
     profile.stats.chat_turns += 1
     state = (learner_state or "flowing").strip().lower()
+    help_type = infer_help_type(transcript)
     # Pending placement: track streaks only — do not invent a level.
     # Fresh placement: protect levels for PLACEMENT_PROTECT_TURNS.
     lock_levels = (not profile.placement_completed) or placement_levels_locked(profile)
 
-    if state in {"struggling", "help_request"}:
-        profile.stats.struggle_streak += 1
+    # struggle_streak is scaffolding intensity: 0 normal, 1 light, 2 simplified, 3 heavy.
+    # Decay on success (not hard reset). Vocab/expression/correction do not escalate.
+    old_streak = max(0, min(3, int(profile.stats.struggle_streak)))
+    streak = old_streak
+    if help_type == "comprehension":
+        if streak < 2:
+            streak = 2
+        else:
+            streak = min(3, streak + 1)
         profile.stats.flow_streak = 0
-        if profile.stats.struggle_streak >= 3:
-            if not lock_levels and profile.stats.struggle_streak == 3:
-                profile.speaking_level = nudge_level(profile.speaking_level, -1)
-                profile.comprehension_level = nudge_level(profile.comprehension_level, -1)
-            if not lock_levels:
-                profile.confidence = max(0.15, profile.confidence - 0.05)
+        if streak == 3 and old_streak < 3 and not lock_levels:
+            profile.speaking_level = nudge_level(profile.speaking_level, -1)
+            profile.comprehension_level = nudge_level(profile.comprehension_level, -1)
+            profile.confidence = max(0.15, profile.confidence - 0.05)
+    elif help_type in {"vocabulary", "expression", "correction"}:
+        profile.stats.flow_streak = 0
+    elif state == "struggling":
+        streak = min(3, max(streak, 1))
+        profile.stats.flow_streak = 0
+        if streak == 3 and old_streak < 3 and not lock_levels:
+            profile.confidence = max(0.15, profile.confidence - 0.05)
     else:
+        if streak > 0:
+            streak -= 1
         profile.stats.flow_streak += 1
-        profile.stats.struggle_streak = 0
         if profile.stats.flow_streak >= 5:
             if not lock_levels and profile.stats.flow_streak == 5:
                 profile.speaking_level = nudge_level(profile.speaking_level, 1)
             if not lock_levels:
                 profile.confidence = min(0.85, profile.confidence + 0.03)
+
+    profile.stats.struggle_streak = streak
 
     jp_chars = len(re.findall(r"[\u3040-\u30ff\u3400-\u9fff]", transcript or ""))
     if jp_chars >= 20 and state == "flowing" and not lock_levels:

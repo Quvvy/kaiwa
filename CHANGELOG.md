@@ -7,6 +7,12 @@ and this project aims to follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.0.1] — 2026-08-08
+
+### Changed
+
+- Phase **5.5**: Chat is comprehensibility-first (conversation partner before tutor). Internal support ladder + help_type; density lock on incomprehension; JP teaches / EN rescues; scaffolding decays on success. Chat no longer shows “Try saying…” (`TRY:` retired from chat prompts; Practice remains the drill surface).
+
 ## [1.0.0] — 2026-08-08
 
 ### Added
