@@ -7,12 +7,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from kaiwa.config import ROOT, Settings
+from kaiwa.config import Settings
 from kaiwa.learner_profile import LearnerProfile
 from kaiwa.prefs import UserPrefs
-
-MEMORY_PATH = ROOT / "data" / "learner_memory.json"
-EXAMPLE_MEMORY_PATH = ROOT / "data" / "learner_memory.example.json"
 
 MAX_VOCAB = 12
 MAX_GRAMMAR = 8

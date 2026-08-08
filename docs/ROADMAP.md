@@ -107,22 +107,22 @@ Design input: real chat critique (`docs/TUTOR_EXCHANGE_CRITIQUE.md`). Teach unde
 - Realtime barge-in speech APIs
 - Larger scenario catalog
 
-## Phase 6 — Consumer prep (→ GitHub 1.0.0) (next)
+## Phase 6 — Consumer prep (→ GitHub 1.0.0) (shipped through 6.8)
 
-Friend-ready **Windows** release for a small non-technical share circle: install → launch → paste DeepSeek key → talk. Thin `.venv`-pointing `Kaiwa.exe` is **dev-only** after 6.4.
+Friend-ready **Windows** **1.0.0** for a small non-technical share circle: install → launch → paste DeepSeek key → talk. Thin `.venv`-pointing `Kaiwa.exe` is **dev-only** after 6.4. **6.9** (in-app update checker) remains open.
 
 **Constraint:** **DeepSeek only** for 1.0.0 (no multi-LLM picker). CUDA Whisper preferred; CPU fallback required.
 
 | Slice | Status | Goal |
 |-------|--------|------|
 | **6.1** Legal & version hygiene | [x] | `LICENSE`, third-party notices (Whisper / Aivis / deps), version toward `1.0.0`, start `CHANGELOG.md` |
-| **6.2** DeepSeek first-run key | [ ] | Launch without repo `.env`; gate until key saved under user AppData; soft validate; Settings can update key |
-| **6.3** Consumer data layout | [ ] | Profiles / prefs / sessions under `%LocalAppData%\Kaiwa\` (not repo `data/`); migrate-or-fresh for owner installs |
-| **6.4** Self-contained Windows runtime | [ ] | Runnable app without a pre-made developer `.venv`; installer/bundled runtime owns Python + deps |
-| **6.5** Model & voice bootstrap | [ ] | Install/first-run downloads Whisper weights + installs/locates AivisSpeech; progress UI; resume-safe |
-| **6.6** Hardware path | [ ] | CUDA Whisper when available, else CPU; document “NVIDIA GPU recommended” |
-| **6.7** Installer + first-launch UX | [ ] | Windows installer (Start Menu, uninstall); splash → bootstrap → API key → soft Place me; plain-English failures |
-| **6.8** GitHub Release 1.0.0 | [ ] | Tag `v1.0.0`, release notes, attach installer, consumer README (“Download → Install → paste DeepSeek key”) |
+| **6.2** DeepSeek first-run key | [x] | Launch without repo `.env`; gate until key saved under user AppData; soft validate; Settings can update key |
+| **6.3** Consumer data layout | [x] | Profiles / prefs / sessions under `%LocalAppData%\Kaiwa\` (not repo `data/`); migrate-or-fresh for owner installs |
+| **6.4** Self-contained Windows runtime | [x] | Runnable app without a pre-made developer `.venv`; installer/bundled runtime owns Python + deps |
+| **6.5** Model & voice bootstrap | [x] | Install/first-run downloads Whisper weights + installs/locates AivisSpeech; progress UI; resume-safe |
+| **6.6** Hardware path | [x] | CUDA Whisper when available, else CPU; document “NVIDIA GPU recommended” |
+| **6.7** Installer + first-launch UX | [x] | Windows installer (Start Menu, uninstall); splash → bootstrap → API key → soft Place me; plain-English failures |
+| **6.8** GitHub Release 1.0.0 | [x] | Tag `v1.0.0`, release notes, attach installer, consumer README (“Download → Install → paste DeepSeek key”) |
 | **6.9** In-app update checker | [ ] | Notify when a newer GitHub release exists; download + install without visiting the releases page (Windows) |
 
 **Priority**

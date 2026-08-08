@@ -194,6 +194,20 @@ Captured from the 2026-08-05 planning conversation (Pingo-like personal Japanese
 
 87. Phase **6.1** shipped: repo is **MIT** (`LICENSE`); third-party summary in `NOTICE.md`; package/desktop version staged at **0.9.0** (reserve `1.0.0` for slice 6.8); `CHANGELOG.md` started. Next: 6.2 DeepSeek AppData key gate.
 
+88. Phase **6.2** shipped: DeepSeek key in `%LocalAppData%\Kaiwa\secrets.json`; first-run paste gate + Settings → Profiles update; soft-validate against `/models` (warn, still save); process env overrides; one-time migrate from repo `.env`. App starts with no key. Next: 6.3 consumer data layout.
+
+89. Phase **6.3** shipped: user data under `%LocalAppData%\Kaiwa\` (`profiles.json`, `profiles/<id>/`, `sessions/`, desktop log). Optional `KAIWA_DATA_DIR` override. One-time **copy** migrate from repo `data/` + `sessions/` when AppData has no registry; otherwise fresh default profile. Repo keeps `data/*.example.json` templates only. Next: 6.4 self-contained Windows runtime.
+
+90. Phase **6.4** shipped: portable `dist/Kaiwa/` = thin `Kaiwa.exe` + private **CPU** `runtime\` venv + `static\`; relative `Kaiwa.runtime.json` (`app_root` / `python`). Shell sets `KAIWA_ROOT` when spawning API. CUDA wheels moved to optional `[cuda]` (owner: `pip install -e ".[desktop,cuda]"`); default friend runtime stays CPU (6.6 for optional CUDA). `-DevVenv` keeps absolute clone `.venv` pointer for shell-only rebuilds. Thin `.venv`-pointing exe is **dev-only**. Next: 6.5 model & voice bootstrap.
+
+91. Phase **6.5** shipped: first-run bootstrap (`python -m kaiwa.bootstrap ensure`) downloads Whisper `large-v3-turbo` into `%LocalAppData%\Kaiwa\models\whisper\` and installs AivisSpeech Engine **1.2.0** into `tts\aivisspeech\` when not already found; resume-safe HTTP/HF downloads; splash progress bar before TTS/API start. STT loads from AppData with `local_files_only` when bootstrapped. Next: 6.6 hardware path.
+
+92. Phase **6.6** shipped: `WHISPER_DEVICE=auto` (default) probes CUDA via CTranslate2 + nvidia wheels; uses CUDA/`float16` when available, else CPU/`int8` without treating a failed CUDA load as the happy path. `cpu` / `cuda` still force a path. `/api/health` reports active Whisper device + reason. NVIDIA GPU recommended in README; friend portable runtime stays CPU unless `[cuda]` wheels are present.
+
+93. Phase **6.7** shipped: **Inno Setup** wraps portable `dist/Kaiwa/` into `dist/KaiwaSetup-*.exe` (`packaging/kaiwa.iss`, `scripts/build_installer.ps1`; needs Inno Setup 6 / `ISCC`). Install to Program Files; Start Menu (+ optional desktop); uninstall removes install dir only — **keeps** `%LocalAppData%\Kaiwa\`. Friend path is Setup.exe, not a zip folder. First-launch: plain-English splash errors; soft Place me after DeepSeek key gate.
+
+94. Phase **6.8** shipped: version **1.0.0**; annotated tag `v1.0.0`; GitHub Release attaches `KaiwaSetup-1.0.0.exe`; README leads with Download → Install → paste DeepSeek key. Next: optional 6.9 in-app update checker.
+
 ## Global push-to-talk (2026-08-07)
 
 86. **Phase 7:** Windows desktop global PTT — bindable key or mouse button works while Kaiwa runs unfocused. Native hook + native mic (not webview `MediaRecorder`); reuse `/api/turn`; play reply on default output; sync transcript into Chat. Default **off** until enabled + bound. Some games/anti-cheat may block hooks. Not a 1.0.0 blocker (ships after / alongside consumer prep). No tray-idle product mode, no open-mic VAD.

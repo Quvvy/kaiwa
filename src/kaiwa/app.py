@@ -14,8 +14,8 @@ from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from kaiwa.config import ROOT, get_settings
-from kaiwa import llm, profiles, stt, tts
+from kaiwa.config import ROOT, get_settings, reload_settings
+from kaiwa import llm, profiles, secrets_store, stt, tts
 from kaiwa.persona import PERSONALITY_PRESETS, infer_learner_state, preset_public_list
 from kaiwa.personalities_store import (
     create_user_preset,
@@ -59,10 +59,26 @@ from kaiwa.quiz import (
     start_quiz_session,
 )
 
+profiles.ensure_migrated()
 settings = get_settings()
 settings.sessions_dir.mkdir(parents=True, exist_ok=True)
 
-app = FastAPI(title="Kaiwa", version="0.9.0")
+
+def _refresh_settings() -> None:
+    global settings
+    settings = reload_settings()
+    settings.sessions_dir.mkdir(parents=True, exist_ok=True)
+
+
+def _require_deepseek_key() -> None:
+    if not get_settings().deepseek_api_key.strip():
+        raise HTTPException(
+            status_code=503,
+            detail="DeepSeek API key required. Paste it on the first-run screen or in Settings → Profiles.",
+        )
+
+
+app = FastAPI(title="Kaiwa", version="1.0.0")
 static_dir = ROOT / "static"
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
@@ -205,8 +221,59 @@ def favicon() -> FileResponse:
 
 
 @app.get("/api/health")
-def health() -> dict[str, str]:
-    return {"status": "ok", "model": settings.deepseek_model}
+def health() -> dict[str, Any]:
+    s = get_settings()
+    info = stt.get_stt_runtime_info()
+    return {
+        "status": "ok",
+        "model": s.deepseek_model,
+        "deepseek_configured": "true" if s.deepseek_api_key.strip() else "false",
+        "whisper_requested": str(info.get("requested") or s.whisper_device),
+        "whisper_device": str(info.get("active_device") or ""),
+        "whisper_compute": str(info.get("active_compute") or ""),
+        "whisper_reason": str(info.get("reason") or ""),
+        "whisper_cuda_available": "true" if info.get("cuda_available") else "false",
+        "whisper_local_model": "true" if info.get("local_model") else "false",
+    }
+
+
+class DeepseekKeyBody(BaseModel):
+    api_key: str = ""
+
+
+@app.get("/api/secrets/status")
+def secrets_status() -> dict[str, Any]:
+    s = get_settings()
+    key = s.deepseek_api_key.strip()
+    source = s.deepseek_key_source if key else "none"
+    return {
+        "configured": bool(key),
+        "masked_key": secrets_store.masked_key(key) if key else "",
+        "source": source,
+    }
+
+
+@app.put("/api/secrets/deepseek")
+def secrets_put_deepseek(body: DeepseekKeyBody) -> dict[str, Any]:
+    key = (body.api_key or "").strip()
+    if not key:
+        raise HTTPException(status_code=400, detail="api_key is required")
+    try:
+        secrets_store.save_secret_key(key)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    base = get_settings().deepseek_base_url
+    validation = secrets_store.soft_validate_deepseek(key, base)
+    _refresh_settings()
+    s = get_settings()
+    return {
+        "ok": True,
+        "configured": bool(s.deepseek_api_key.strip()),
+        "masked_key": secrets_store.masked_key(s.deepseek_api_key),
+        "source": s.deepseek_key_source,
+        "validation_ok": bool(validation.get("ok")),
+        "warning": None if validation.get("ok") else str(validation.get("detail") or "Validation failed"),
+    }
 
 
 @app.get("/api/voices")
@@ -678,6 +745,7 @@ async def _run_chat_turn(
     stt_ms: int,
     client_source: str = "",
 ) -> dict[str, Any]:
+    _require_deepseek_key()
     t0 = time.perf_counter()
     history = _sessions.setdefault(sid, [])
     history.append({"role": "user", "content": transcript})
@@ -951,6 +1019,7 @@ async def practice(
     tip = ""
     tip_error = None
     try:
+        _require_deepseek_key()
         tip = llm.practice_tip(
             settings,
             target=target,
@@ -960,6 +1029,8 @@ async def practice(
             prefs=prefs,
         )
         tip = clean_reply_for_speech(tip)
+    except HTTPException as exc:
+        tip_error = str(exc.detail)
     except Exception as exc:
         tip_error = str(exc)
 

@@ -980,6 +980,71 @@
       display: none !important;
     }
 
+    /* First-run DeepSeek key gate */
+    #apiKeyGate {
+      position: fixed;
+      inset: 0;
+      z-index: 10000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1.25rem;
+      background: color-mix(in srgb, var(--bg) 82%, black);
+      backdrop-filter: blur(6px);
+    }
+
+    #apiKeyGate[hidden] {
+      display: none !important;
+    }
+
+    .api-key-gate-card {
+      width: min(26rem, 100%);
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 1.35rem 1.25rem 1.2rem;
+      box-shadow: var(--shadow-soft);
+    }
+
+    .api-key-gate-card h1 {
+      margin: 0 0 0.4rem;
+      font-family: var(--font-ui);
+      font-size: 1.25rem;
+      font-weight: 600;
+    }
+
+    .api-key-gate-card .disclaimer a {
+      color: var(--accent);
+    }
+
+    .api-key-gate-card input[type="password"],
+    .api-key-gate-card input[type="text"] {
+      width: 100%;
+      box-sizing: border-box;
+      margin-top: 0.75rem;
+    }
+
+    .api-key-gate-status {
+      margin: 0.55rem 0 0;
+      min-height: 1.2em;
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+
+    .api-key-gate-status.warn {
+      color: var(--warn);
+    }
+
+    .api-key-gate-status.err {
+      color: var(--bad);
+    }
+
+    .api-key-gate-status.ok {
+      color: var(--ok);
+    }
+      display: none !important;
+    }
+
     @media (max-width: 560px) {
       .app { padding: 0.75rem; }
       .brand { font-size: 1.35rem; }
@@ -1007,6 +1072,22 @@
   </style>
 </head>
 <body>
+  <div id="apiKeyGate" hidden>
+    <div class="api-key-gate-card" role="dialog" aria-modal="true" aria-labelledby="apiKeyGateTitle">
+      <h1 id="apiKeyGateTitle">Welcome to Kaiwa</h1>
+      <p class="disclaimer">
+        Paste your <strong>DeepSeek API key</strong> to start chatting. Get one from
+        <a href="https://platform.deepseek.com/api_keys" target="_blank" rel="noopener noreferrer">platform.deepseek.com</a>.
+        The key stays on this PC (not in the chat).
+      </p>
+      <label class="disclaimer" for="apiKeyGateInput">DeepSeek API key</label>
+      <input id="apiKeyGateInput" type="password" autocomplete="off" spellcheck="false" placeholder="sk-…" />
+      <div class="controls" style="margin-top:0.85rem">
+        <button id="apiKeyGateSave" type="button">Save and continue</button>
+      </div>
+      <p class="api-key-gate-status" id="apiKeyGateStatus"></p>
+    </div>
+  </div>
   <div class="app">
     <header class="app-header">
       <h1 class="brand"><img class="brand-mark" src="/static/icons/kaiwa-text-only.png" width="48" height="48" alt="" />Kaiwa</h1>
@@ -1165,6 +1246,15 @@
                 <button id="importProfileBtn" class="secondary" type="button">Import</button>
                 <input id="importProfileFile" type="file" accept="application/json,.json" hidden />
                 <span id="profilesStatus"></span>
+              </div>
+              <div class="field settings-searchable" data-settings-search="api key deepseek secret llm openai token" style="margin-top:1.1rem">
+                <label for="deepseekKeyInput">DeepSeek API key</label>
+                <p class="disclaimer" id="deepseekKeyMasked">Not configured</p>
+                <input id="deepseekKeyInput" type="password" autocomplete="off" spellcheck="false" placeholder="Paste new key to update…" />
+                <div class="controls" style="margin-top:0.55rem">
+                  <button id="deepseekKeySave" class="secondary" type="button">Update API key</button>
+                  <span id="deepseekKeyStatus"></span>
+                </div>
               </div>
             </div>
 
@@ -1844,6 +1934,7 @@
     }
 
     async function startRecording() {
+      if (!guardDeepseekOrExplain()) return;
       if (recording || recordStarting || mode === "settings") return;
       recordStarting = true;
       recordWantsStop = false;
@@ -3303,6 +3394,7 @@
     }
 
     async function sendTurn(blob, ext) {
+      if (!guardDeepseekOrExplain()) return;
       setChatBusy(true);
       const form = new FormData();
       const filename = "utterance." + (ext || "webm");
@@ -3334,6 +3426,7 @@
     }
 
     async function sendChatText() {
+      if (!guardDeepseekOrExplain()) return;
       const text = (chatTextInput.value || "").trim();
       if (!text) {
         setStatus("Type a short line first");
@@ -3905,6 +3998,119 @@
     loadPrefsIntoForm().catch((err) => {
       settingsStatusEl.textContent = String(err.message || err);
     });
+
+    let deepseekConfigured = false;
+
+    function setApiKeyGateVisible(show) {
+      const gate = document.getElementById("apiKeyGate");
+      if (gate) gate.hidden = !show;
+    }
+
+    function applySecretsStatus(data) {
+      deepseekConfigured = !!(data && data.configured);
+      const maskedEl = document.getElementById("deepseekKeyMasked");
+      if (maskedEl) {
+        if (deepseekConfigured) {
+          const src = data.source && data.source !== "none" ? " · " + data.source : "";
+          maskedEl.textContent = "Saved: " + (data.masked_key || "••••") + src;
+        } else {
+          maskedEl.textContent = "Not configured";
+        }
+      }
+      setApiKeyGateVisible(!deepseekConfigured);
+    }
+
+    async function refreshSecretsStatus() {
+      const res = await fetch("/api/secrets/status");
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.detail || "Could not check API key status");
+      applySecretsStatus(data);
+      return data;
+    }
+
+    async function saveDeepseekKey(rawKey, statusEl) {
+      const key = String(rawKey || "").trim();
+      if (!key) throw new Error("Paste an API key first");
+      if (statusEl) {
+        statusEl.textContent = "Saving…";
+        statusEl.className = statusEl.id === "apiKeyGateStatus" ? "api-key-gate-status" : "";
+      }
+      const res = await fetch("/api/secrets/deepseek", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ api_key: key }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.detail || "Save failed");
+      applySecretsStatus(data);
+      if (statusEl) {
+        if (data.warning) {
+          statusEl.textContent = "Saved — " + data.warning;
+          if (statusEl.id === "apiKeyGateStatus") statusEl.className = "api-key-gate-status warn";
+        } else {
+          statusEl.textContent = "Saved. You’re ready to chat.";
+          if (statusEl.id === "apiKeyGateStatus") statusEl.className = "api-key-gate-status ok";
+        }
+      }
+      return data;
+    }
+
+    function guardDeepseekOrExplain() {
+      if (deepseekConfigured) return true;
+      setApiKeyGateVisible(true);
+      const st = document.getElementById("apiKeyGateStatus");
+      if (st) {
+        st.textContent = "Add your DeepSeek API key to use Chat and Practice tips.";
+        st.className = "api-key-gate-status warn";
+      }
+      return false;
+    }
+
+    document.getElementById("apiKeyGateSave").addEventListener("click", () => {
+      const input = document.getElementById("apiKeyGateInput");
+      const status = document.getElementById("apiKeyGateStatus");
+      saveDeepseekKey(input && input.value, status)
+        .then(() => {
+          if (input) input.value = "";
+          // Gate was covering Place me; offer soft placement once key is saved.
+          if (!placementCompleted) {
+            maybeOfferPlacement(
+              { placement_completed: false },
+              { forceOpen: true, profileId: activeProfileId }
+            );
+          }
+        })
+        .catch((err) => {
+          if (status) {
+            status.textContent = String(err.message || err);
+            status.className = "api-key-gate-status err";
+          }
+        });
+    });
+    document.getElementById("apiKeyGateInput").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") document.getElementById("apiKeyGateSave").click();
+    });
+    document.getElementById("deepseekKeySave").addEventListener("click", () => {
+      const input = document.getElementById("deepseekKeyInput");
+      const status = document.getElementById("deepseekKeyStatus");
+      saveDeepseekKey(input && input.value, status)
+        .then(() => {
+          if (input) input.value = "";
+        })
+        .catch((err) => {
+          if (status) status.textContent = String(err.message || err);
+        });
+    });
+
+    refreshSecretsStatus().catch((err) => {
+      const st = document.getElementById("apiKeyGateStatus");
+      setApiKeyGateVisible(true);
+      if (st) {
+        st.textContent = String(err.message || err);
+        st.className = "api-key-gate-status err";
+      }
+    });
+
     registerPttSession();
     refreshPttHookStatus();
     setInterval(() => {

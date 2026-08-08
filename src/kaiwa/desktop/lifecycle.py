@@ -1,17 +1,20 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import Any
 
 from kaiwa.desktop.services import (
     ServiceRegistry,
     kaiwa_already_running,
     read_preferred_tts_engine,
+    run_bootstrap,
     start_kaiwa,
     start_tts_engine,
     stop_all,
 )
 
 StatusFn = Callable[[str], None]
+ProgressFn = Callable[[dict[str, Any]], None]
 
 
 class Lifecycle:
@@ -23,7 +26,12 @@ class Lifecycle:
         """True when the Kaiwa API responds."""
         return kaiwa_already_running()
 
-    def start_session(self, *, on_status: StatusFn | None = None) -> None:
+    def start_session(
+        self,
+        *,
+        on_status: StatusFn | None = None,
+        on_progress: ProgressFn | None = None,
+    ) -> None:
         if self.running:
             if self.session_healthy():
                 return
@@ -36,8 +44,26 @@ class Lifecycle:
                 except Exception:
                     pass
 
-        engine = read_preferred_tts_engine()
+        def progress(row: dict[str, Any]) -> None:
+            if on_progress:
+                try:
+                    on_progress(row)
+                except Exception:
+                    pass
+            label = str(row.get("label") or "").strip()
+            pct = row.get("pct")
+            if label and pct is not None:
+                try:
+                    status(f"{label} ({int(pct)}%)")
+                except (TypeError, ValueError):
+                    status(label)
+            elif label:
+                status(label)
+
         try:
+            status("Preparing models…")
+            run_bootstrap(on_progress=progress)
+            engine = read_preferred_tts_engine()
             status(f"Starting TTS ({engine})…")
             start_tts_engine(engine, self.registry)
             status("Starting Kaiwa…")

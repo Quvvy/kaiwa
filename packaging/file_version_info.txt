@@ -4,8 +4,8 @@
 
 VSVersionInfo(
   ffi=FixedFileInfo(
-    filevers=(0, 9, 0, 0),
-    prodvers=(0, 9, 0, 0),
+    filevers=(1, 0, 0, 0),
+    prodvers=(1, 0, 0, 0),
     mask=0x3F,
     flags=0x0,
     OS=0x40004,
@@ -21,12 +21,12 @@ VSVersionInfo(
           [
             StringStruct("CompanyName", "Kaiwa"),
             StringStruct("FileDescription", "Kaiwa"),
-            StringStruct("FileVersion", "0.9.0"),
+            StringStruct("FileVersion", "1.0.0"),
             StringStruct("InternalName", "Kaiwa"),
             StringStruct("LegalCopyright", "Copyright (c) 2026 Kaiwa contributors"),
             StringStruct("OriginalFilename", "Kaiwa.exe"),
             StringStruct("ProductName", "Kaiwa"),
-            StringStruct("ProductVersion", "0.9.0"),
+            StringStruct("ProductVersion", "1.0.0"),
           ],
         )
       ]

@@ -5,8 +5,6 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
-from kaiwa.config import ROOT
-
 CorrectionStyle = Literal["gentle", "critique"]
 LanguagePolicy = Literal["immerse", "adaptive"]
 SpeechRegister = Literal["formal", "casual"]
@@ -14,9 +12,6 @@ GoalLevel = Literal["pre_n5", "n5", "n4"]
 ModelRouting = Literal["flash_only", "auto"]
 TtsEngine = Literal["aivisspeech", "voicevox"]
 UiTheme = Literal["night", "slate", "graphite", "day", "cloud", "frost"]
-
-PREFS_PATH = ROOT / "data" / "user_prefs.json"  # legacy flat path (migration only)
-EXAMPLE_PREFS_PATH = ROOT / "data" / "user_prefs.example.json"
 
 VALID_CORRECTION = {"gentle", "critique"}
 VALID_LANGUAGE_POLICY = {"immerse", "adaptive"}

@@ -3,7 +3,18 @@
 Personal Japanese AI conversation partner — turn-based chat, Practice, and a self-assessment placement check.
 
 **Repo:** [github.com/Quvvy/kaiwa](https://github.com/Quvvy/kaiwa) (`E:\cursor\kaiwa`)  
-**Wiki:** tagged `kaiwa` in `C:\Users\elifs\Projects\llm-wiki`
+**Wiki:** tagged `kaiwa` in `C:\Users\elifs\Projects\llm-wiki`  
+**Version:** **1.0.0**
+
+## For friends (Windows)
+
+1. Download **`KaiwaSetup-1.0.0.exe`** from the [latest GitHub Release](https://github.com/Quvvy/kaiwa/releases/latest).
+2. Run the installer → open **Kaiwa** from the Start Menu.
+3. First launch may download a speech model (~1.5 GB) and voice engine (~200 MB) into `%LocalAppData%\Kaiwa\` (progress on the splash; relaunch resumes).
+4. When asked, paste a [DeepSeek](https://platform.deepseek.com/) API key (saved under AppData, not in the install folder).
+5. Optional soft **Place me** quiz; then talk in Chat. **NVIDIA GPU recommended** for faster speech recognition; CPU works.
+
+Uninstall via Windows Apps keeps your key and models in `%LocalAppData%\Kaiwa\`.
 
 ## Stack
 
@@ -15,7 +26,7 @@ Quiz:     Self-assessment placement (stage / listening / speaking / pace) → pr
 
 | Layer | Choice |
 |-------|--------|
-| STT | Local `faster-whisper` `large-v3-turbo` on RTX 3090 |
+| STT | Local `faster-whisper` `large-v3-turbo` (CUDA when available, else CPU) |
 | LLM | `deepseek-v4-flash` (thinking disabled by default) |
 | TTS | **AivisSpeech** default (`:10101`); **VOICEVOX** fallback (`:50021`) |
 | Practice score | Kana-normalized similarity (not pitch accent) |
@@ -24,18 +35,19 @@ Quiz:     Self-assessment placement (stage / listening / speaking / pace) → pr
 | Long-term memory | Comfort prefs, topics, vocab, grammar (auto-updating) |
 | App | FastAPI + Chat / Practice / Place me / Settings tabs at `/` |
 
-## Setup
+## Setup (developers / owners)
 
-1. Copy `.env.example` → `.env` and set `DEEPSEEK_API_KEY`.
-2. Create venv and install:
+1. **API key:** On first launch Kaiwa asks for a DeepSeek API key (AppData `secrets.json`). Optional for owners: copy `.env.example` → `.env` and set `DEEPSEEK_API_KEY` (migrates once into AppData). Process env overrides.
+2. **User data:** Profiles, prefs, memory, and session logs live under `%LocalAppData%\Kaiwa\`. Optional `KAIWA_DATA_DIR`. First launch also bootstraps Whisper + AivisSpeech into that folder.
+3. Create venv and install:
 
 ```powershell
 cd E:\cursor\kaiwa
 python -m venv .venv
-.\.venv\Scripts\pip install -e .
+.\.venv\Scripts\pip install -e ".[desktop,cuda]"
 ```
 
-3. Install/start TTS (pick one; AivisSpeech is the default in Settings):
+4. Install/start TTS (pick one; AivisSpeech is the default in Settings):
 
 ```powershell
 # AivisSpeech Engine (already under tools/aivisspeech if installed via agent)
@@ -59,7 +71,7 @@ Extra AivisSpeech voices (from AivisHub):
 .\.venv\Scripts\python.exe scripts\install_aivis_voices.py
 ```
 
-4. Smoke tests (optional):
+5. Smoke tests (optional):
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\smoke_llm.py
@@ -70,28 +82,27 @@ Extra AivisSpeech voices (from AivisHub):
 .\.venv\Scripts\python.exe scripts\eval_turn_latency.py
 ```
 
-5. Run the app:
-
-**Desktop app (recommended on Windows):**
+6. Build desktop / installer:
 
 ```powershell
-.\.venv\Scripts\pip install -e ".[desktop]"
+.\.venv\Scripts\pip install -e ".[desktop,desktop-build,cuda]"
 .\scripts\build_desktop.ps1
-# then launch:
+# Installer (needs Inno Setup 6 — winget install JRSoftware.InnoSetup):
+.\scripts\build_installer.ps1
+# or portable without Setup:
 .\dist\Kaiwa\Kaiwa.exe
 ```
 
-- Builds a real **`Kaiwa.exe`** (windowed shell) so the taskbar shows Kaiwa, not Python.
-- Whisper / FastAPI still run from `.venv` (see `dist\Kaiwa\Kaiwa.runtime.json`).
-- Launch opens a splash, starts TTS + Kaiwa, then shows the UI.
+- Builds a portable folder: thin **`Kaiwa.exe`** + private `runtime\` (CPU Python + deps) + `static\`.
+- `build_installer.ps1` wraps that folder into `dist\KaiwaSetup-1.0.0.exe` (Start Menu + uninstall).
+- Relative `Kaiwa.runtime.json` points at `runtime\Scripts\python.exe`. Shell sets `KAIWA_ROOT` for the API child.
+- Dev shell-only rebuild (points at clone `.venv`): `.\scripts\build_desktop.ps1 -DevVenv`
 - **Close the window** — stops Kaiwa + the TTS engine *we* started and exits (no tray).
-- Unpin any old **Python 3.13** taskbar pin; pin `dist\Kaiwa\Kaiwa.exe` instead.
-- Rebuild after desktop/icon changes: `.\scripts\build_desktop.ps1`
 
 **Dev desktop (unfrozen, still shows as Python on the taskbar):**
 
 ```powershell
-.\.venv\Scripts\pip install -e ".[desktop]"
+.\.venv\Scripts\pip install -e ".[desktop,cuda]"
 .\.venv\Scripts\kaiwa-desktop
 # or: .\.venv\Scripts\python.exe -m kaiwa.desktop
 ```
@@ -126,9 +137,9 @@ Kaiwa is **MIT** — see [LICENSE](LICENSE). Third-party speech engines, models,
 
 ## Notes
 
-- Never commit `.env`.
-- Whisper models download to the Hugging Face cache on first run.
-- On Windows, `nvidia-cublas-cu12` / `nvidia-cudnn-cu12` are installed so CUDA Whisper works without a full CUDA Toolkit.
+- Never commit `.env` or AppData `secrets.json` / profile data.
+- Whisper weights download on first launch into `%LocalAppData%\Kaiwa\models\whisper\` (splash progress).
+- **NVIDIA GPU recommended** for faster speech recognition. Kaiwa defaults to `WHISPER_DEVICE=auto` (CUDA when a GPU and `.[cuda]` wheels are available, otherwise CPU). Owners: `pip install -e ".[desktop,cuda]"`. The portable friend runtime is **CPU-only** unless CUDA wheels are added.
 - Practice scores measure **what the app heard**, not native pitch accent.
 - Phase 3 stays **turn-based** (no OpenAI Realtime); pitch-accent grading remains deferred.
-- **Version:** `0.9.0` (pre-release). **Phase 4–5** done. **Phase 6 (in progress):** consumer prep → Windows GitHub **1.0.0** (slice 6.1 legal/version hygiene done). **Phase 7:** global push-to-talk shipped — see [docs/ROADMAP.md](docs/ROADMAP.md).
+- **Version:** `1.0.0`. **Phase 4–5** done. **Phase 6:** 6.1–6.8 done (Windows GitHub **1.0.0**); next **6.9** update checker (optional). **Phase 7:** global push-to-talk shipped — see [docs/ROADMAP.md](docs/ROADMAP.md).

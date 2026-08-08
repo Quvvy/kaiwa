@@ -5,11 +5,13 @@ import os
 import socket
 import subprocess
 import sys
+import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 import httpx
 
@@ -38,6 +40,14 @@ def _exe_dir() -> Path:
     return Path(__file__).resolve().parent
 
 
+def _resolve_path(path_str: str) -> Path:
+    """Absolute path as-is; relative paths are relative to the exe/shell dir."""
+    p = Path(path_str)
+    if p.is_absolute():
+        return p.resolve()
+    return (_exe_dir() / p).resolve()
+
+
 @lru_cache(maxsize=1)
 def load_runtime_config() -> dict[str, str]:
     """Sidecar next to Kaiwa.exe (written by scripts/build_desktop.ps1)."""
@@ -55,64 +65,87 @@ def load_runtime_config() -> dict[str, str]:
 
 
 @lru_cache(maxsize=1)
-def resolve_repo_root() -> Path:
+def resolve_app_root() -> Path:
+    """Install / repo root containing static/ (and optional tools/)."""
     cfg = load_runtime_config()
-    if cfg.get("repo_root"):
-        root = Path(cfg["repo_root"])
+    for key in ("app_root", "repo_root"):
+        raw = cfg.get(key)
+        if not raw:
+            continue
+        root = _resolve_path(raw)
         if root.is_dir():
-            return root.resolve()
-    env = os.environ.get("KAIWA_ROOT", "").strip()
+            return root
+
+    env = (os.environ.get("KAIWA_ROOT") or "").strip()
     if env:
         root = Path(env)
         if root.is_dir():
             return root.resolve()
+
+    exe = _exe_dir()
+    if (exe / "static").is_dir():
+        return exe
+
     # Source layout: src/kaiwa/desktop/services.py → repo root
     if not _is_frozen():
         return Path(__file__).resolve().parents[3]
+
     raise FileNotFoundError(
-        "Kaiwa repo root unknown. Rebuild with scripts/build_desktop.ps1 "
-        "or set KAIWA_ROOT / Kaiwa.runtime.json."
+        "Kaiwa app root unknown. Rebuild with scripts/build_desktop.ps1 "
+        "or set KAIWA_ROOT / Kaiwa.runtime.json (app_root)."
     )
+
+
+def resolve_repo_root() -> Path:
+    """Alias for resolve_app_root (legacy name used by desktop bootstrap)."""
+    return resolve_app_root()
 
 
 @lru_cache(maxsize=1)
 def resolve_api_python() -> Path:
-    """Python that can run `python -m kaiwa.app` (venv), never the frozen exe."""
-    env = os.environ.get("KAIWA_PYTHON", "").strip()
+    """Python that can run `python -m kaiwa.app` — never the frozen shell exe."""
+    env = (os.environ.get("KAIWA_PYTHON") or "").strip()
     if env:
         p = Path(env)
         if p.is_file():
             return p.resolve()
+
     cfg = load_runtime_config()
     if cfg.get("python"):
-        p = Path(cfg["python"])
+        p = _resolve_path(cfg["python"])
         if p.is_file():
-            return p.resolve()
+            return p
+
+    bundled = _exe_dir() / "runtime" / "Scripts" / "python.exe"
+    if bundled.is_file():
+        return bundled.resolve()
+
     try:
-        root = resolve_repo_root()
+        root = resolve_app_root()
         venv_py = root / ".venv" / "Scripts" / "python.exe"
         if venv_py.is_file():
             return venv_py.resolve()
     except FileNotFoundError:
         pass
+
     if not _is_frozen():
         return Path(sys.executable).resolve()
+
     raise FileNotFoundError(
-        "No API Python found. Set KAIWA_PYTHON to your .venv\\Scripts\\python.exe "
-        "or rebuild so Kaiwa.runtime.json points at the venv."
+        "No API Python found. Rebuild with scripts/build_desktop.ps1 "
+        "(bundles runtime\\) or set KAIWA_PYTHON."
     )
 
 
 def _root() -> Path:
     try:
-        return resolve_repo_root()
+        return resolve_app_root()
     except FileNotFoundError:
         if not _is_frozen():
             return Path(__file__).resolve().parents[3]
-        # Last resort: walk up from the exe looking for tools/ or .venv/
         cur = _exe_dir()
         for _ in range(6):
-            if (cur / "tools").is_dir() or (cur / ".venv").is_dir():
+            if (cur / "static").is_dir() or (cur / "tools").is_dir() or (cur / ".venv").is_dir():
                 return cur
             if cur.parent == cur:
                 break
@@ -160,8 +193,11 @@ def http_ok(url: str, timeout: float = 2.0) -> bool:
 
 
 def _aivis_candidates() -> list[Path]:
+    from kaiwa.bootstrap import aivis_run_candidates_under_install
+
     root = _root()
     return [
+        *aivis_run_candidates_under_install(),
         root / "tools/aivisspeech/engine/Windows-x64/run.exe",
         Path.home() / "AppData/Local/Programs/AivisSpeech/AivisSpeech-Engine/run.exe",
         Path.home() / "AppData/Local/Programs/AivisSpeech/engine/run.exe",
@@ -218,8 +254,10 @@ def start_tts_engine(engine: AivisOrVoicevox, registry: ServiceRegistry) -> None
 
     exe = find_engine(engine)
     if exe is None:
+        label = "AivisSpeech" if engine == "aivisspeech" else "VOICEVOX"
         raise FileNotFoundError(
-            f"{engine} engine not found on disk. Install it, then relaunch Kaiwa."
+            f"{label} TTS engine not found on disk. Relaunch Kaiwa so first-run "
+            "setup can install it, or install the engine yourself."
         )
 
     proc = subprocess.Popen(
@@ -238,8 +276,15 @@ def start_tts_engine(engine: AivisOrVoicevox, registry: ServiceRegistry) -> None
         if http_ok(url):
             return
         if proc.poll() is not None:
-            raise RuntimeError(f"{engine} exited early (code {proc.returncode})")
-    raise TimeoutError(f"Timed out waiting for {engine} on port {port}")
+            label = "AivisSpeech" if engine == "aivisspeech" else "VOICEVOX"
+            raise RuntimeError(
+                f"{label} TTS exited early (code {proc.returncode}). "
+                "Close and relaunch Kaiwa."
+            )
+    label = "AivisSpeech" if engine == "aivisspeech" else "VOICEVOX"
+    raise TimeoutError(
+        f"Timed out waiting for {label} TTS on port {port}. Close and relaunch Kaiwa."
+    )
 
 
 def start_kaiwa(registry: ServiceRegistry) -> None:
@@ -250,10 +295,13 @@ def start_kaiwa(registry: ServiceRegistry) -> None:
         return
 
     python = resolve_api_python()
-    root = resolve_repo_root()
+    root = resolve_app_root()
+    child_env = os.environ.copy()
+    child_env["KAIWA_ROOT"] = str(root)
     proc = subprocess.Popen(
         [str(python), "-m", "kaiwa.app"],
         cwd=str(root),
+        env=child_env,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
         creationflags=_creationflags(),
@@ -267,7 +315,10 @@ def start_kaiwa(registry: ServiceRegistry) -> None:
         if http_ok(url):
             return
         if proc.poll() is not None:
-            raise RuntimeError(f"Kaiwa exited early (code {proc.returncode})")
+            raise RuntimeError(
+                f"Kaiwa exited early (code {proc.returncode}). "
+                "Close other copies of Kaiwa, then relaunch."
+            )
     raise TimeoutError("Timed out waiting for Kaiwa on port 8787")
 
 
@@ -303,3 +354,66 @@ def stop_managed(mp: ManagedProcess) -> None:
 def stop_all(registry: ServiceRegistry) -> None:
     stop_managed(registry.kaiwa)
     stop_managed(registry.tts)
+
+
+def run_bootstrap(
+    *,
+    on_progress: Callable[[dict[str, Any]], None] | None = None,
+    skip_aivis: bool = False,
+) -> None:
+    """Run `python -m kaiwa.bootstrap ensure` via API Python; stream JSON progress."""
+    python = resolve_api_python()
+    root = resolve_app_root()
+    cmd = [str(python), "-m", "kaiwa.bootstrap", "ensure"]
+    if skip_aivis:
+        cmd.append("--skip-aivis")
+    child_env = os.environ.copy()
+    child_env["KAIWA_ROOT"] = str(root)
+    child_env["PYTHONUTF8"] = "1"
+    child_env["PYTHONIOENCODING"] = "utf-8"
+
+    proc = subprocess.Popen(
+        cmd,
+        cwd=str(root),
+        env=child_env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        creationflags=_creationflags(),
+    )
+    assert proc.stdout is not None
+    err_chunks: list[str] = []
+
+    def _drain_stderr() -> None:
+        if proc.stderr is None:
+            return
+        for line in proc.stderr:
+            err_chunks.append(line)
+
+    err_thread = threading.Thread(target=_drain_stderr, name="kaiwa-boot-err", daemon=True)
+    err_thread.start()
+
+    for raw in proc.stdout:
+        line = raw.strip()
+        if not line:
+            continue
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(row, dict):
+            continue
+        if on_progress:
+            try:
+                on_progress(row)
+            except Exception:
+                pass
+
+    code = proc.wait()
+    err_thread.join(timeout=2.0)
+    if code != 0:
+        detail = "".join(err_chunks).strip() or f"bootstrap exited with code {code}"
+        # Prefix so friendly_boot_message can classify; full detail stays in the log.
+        raise RuntimeError(f"bootstrap failed: {detail}")

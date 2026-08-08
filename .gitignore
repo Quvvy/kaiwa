@@ -33,7 +33,7 @@ tools/aivisspeech/
 whisper-cache/
 huggingface/
 
-# Audio / session dumps
+# Audio / session dumps (legacy repo paths; runtime uses %LocalAppData%\Kaiwa)
 recordings/
 sessions/
 data/user_prefs.json
@@ -42,6 +42,7 @@ data/learner_profile.json
 data/learner_memory.json
 data/profiles.json
 data/profiles/
+data/Kaiwa.desktop.log
 *.wav
 *.mp3
 *.ogg

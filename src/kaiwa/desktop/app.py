@@ -8,18 +8,18 @@ from pathlib import Path
 from kaiwa.desktop.icons import set_windows_app_id, window_icon_path
 from kaiwa.desktop.lifecycle import Lifecycle
 from kaiwa.desktop.ptt import PttController
-from kaiwa.desktop.window import KAIWA_URL, error_html, splash_html
+from kaiwa.desktop.window import KAIWA_URL, error_html, friendly_boot_message, splash_html
 
 
 def _bootstrap_frozen_paths() -> None:
-    """Point kaiwa.config.ROOT at the real repo when running as Kaiwa.exe."""
+    """Point kaiwa.config.ROOT at the install/app root when running as Kaiwa.exe."""
     if not getattr(sys, "frozen", False):
         return
     try:
-        from kaiwa.desktop.services import resolve_repo_root
+        from kaiwa.desktop.services import resolve_app_root
         import kaiwa.config as cfg
 
-        cfg.ROOT = resolve_repo_root()
+        cfg.ROOT = resolve_app_root()
     except Exception:
         pass
 
@@ -28,9 +28,9 @@ def _log_path() -> Path:
     if getattr(sys, "frozen", False):
         return Path(sys.executable).resolve().parent / "Kaiwa.desktop.log"
     try:
-        from kaiwa.desktop.services import resolve_repo_root
+        from kaiwa.secrets_store import user_data_dir
 
-        return resolve_repo_root() / "data" / "Kaiwa.desktop.log"
+        return user_data_dir() / "Kaiwa.desktop.log"
     except Exception:
         return Path.cwd() / "Kaiwa.desktop.log"
 
@@ -83,9 +83,9 @@ def main() -> None:
         except Exception as exc:
             _log(f"stop_session error: {exc}")
 
-    def set_status(msg: str) -> None:
+    def set_status(msg: str, pct: int | None = None) -> None:
         """Update splash text without evaluate_js (avoids Edge thread deadlocks)."""
-        _log(f"status: {msg}")
+        _log(f"status: {msg}" + (f" ({pct}%)" if pct is not None else ""))
         win = window_holder.get("win")
         if win is None or closed["done"]:
             return
@@ -95,19 +95,31 @@ def main() -> None:
                 if closed["done"]:
                     return
                 try:
-                    win.load_html(splash_html(msg))
+                    win.load_html(splash_html(msg, pct=pct))
                 except Exception as exc:
                     _log(f"load_html status failed: {exc}")
 
         threading.Thread(target=_apply, name="kaiwa-status", daemon=True).start()
 
+    def on_boot_progress(row: dict) -> None:
+        label = str(row.get("label") or "").strip() or "Preparing…"
+        pct_raw = row.get("pct")
+        pct: int | None
+        try:
+            pct = int(pct_raw) if pct_raw is not None else None
+        except (TypeError, ValueError):
+            pct = None
+        set_status(label, pct)
+
     def show_error(exc: BaseException) -> None:
-        _log(f"error: {exc}")
+        friendly = friendly_boot_message(exc)
+        _log(f"error: {exc!r}")
+        _log(f"error (friendly): {friendly}")
         win = window_holder.get("win")
         if win is None:
             return
         try:
-            win.load_html(error_html(str(exc)))
+            win.load_html(error_html(friendly))
         except Exception as e2:
             _log(f"load_html error page failed: {e2}")
 
@@ -128,7 +140,7 @@ def main() -> None:
                     _log(f"ptt start error: {exc}")
                 return
 
-            lifecycle.start_session(on_status=set_status)
+            lifecycle.start_session(on_status=set_status, on_progress=on_boot_progress)
             _log("start_session ok → load UI")
             set_status("Opening window…")
             time.sleep(0.2)

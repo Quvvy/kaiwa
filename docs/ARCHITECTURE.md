@@ -44,8 +44,9 @@ Fixed questions → user self-ratings → speaking_level / comprehension_level /
 | Tutor prefs | Active profile’s `user_prefs.json` — correction, language, register, naturalness, goals, routing, personality, voice, max sentences |
 | Learner profile | Active profile’s `learner_profile.json` — live speaking/comprehension estimates |
 | Long-term memory | Active profile’s `learner_memory.json` — comfort, topics, vocab, grammar, soft `recycle_items` |
-| User profiles | `data/profiles.json` registry + `data/profiles/<id>/` (prefs, learner profile, memory, custom personalities). Chat `sessions/*.jsonl` stay global. |
-| Sessions | `sessions/<id>.jsonl` with `mode: chat` or `mode: practice` |
+| User profiles | `%LocalAppData%\Kaiwa\profiles.json` + `profiles/<id>/` (prefs, learner profile, memory, custom personalities, PTT sounds). Optional `KAIWA_DATA_DIR` override. |
+| Sessions | `%LocalAppData%\Kaiwa\sessions/<id>.jsonl` with `mode: chat` or `mode: practice` (global, not per profile) |
+| Secrets | `%LocalAppData%\Kaiwa\secrets.json` (DeepSeek key; Phase 6.2) |
 
 ### Phase 2 tutor prefs
 
@@ -84,7 +85,7 @@ Also: `GET /api/prefs`, `PUT /api/prefs`.
 
 ### User profiles (named learner state)
 
-A **profile** is one learner’s Kaiwa state (not an account): prefs, learner profile, memory, and custom personalities. Registry: `data/profiles.json`; files under `data/profiles/<id>/`. Flat `data/*.json` migrate once into `profiles/default/`. Sessions stay global; switching clears browser chat session id.
+A **profile** is one learner’s Kaiwa state (not an account): prefs, learner profile, memory, and custom personalities. Registry: `%LocalAppData%\Kaiwa\profiles.json`; files under `profiles/<id>/`. On first launch with empty AppData, Kaiwa **copies** legacy repo `data/` (+ `sessions/`) once if present; otherwise creates a fresh `default` profile. Flat legacy `*.json` at the user-data root still fold into `profiles/default/`. Sessions stay global under AppData `sessions/`; switching clears browser chat session id.
 
 API:
 
@@ -165,6 +166,19 @@ At ~10–20 min AI speech/day, OpenAI/Google neural is usually single-digit mont
 - Keep replies short (1–3 sentences) for TTS
 - Gentle corrections; optional short English notes when asked
 - Prefer spoken natural Japanese over lecture dumps
+
+## Packaging (Windows desktop)
+
+Two processes:
+
+1. **Thin shell** — PyInstaller `Kaiwa.exe` (webview + PTT hook); ~tens of MB.
+2. **Private runtime** — `dist/Kaiwa/runtime\` (CPython venv with FastAPI / faster-whisper **CPU** deps) + sibling `static/`. Relative `Kaiwa.runtime.json` (`app_root`, `python`). Shell sets `KAIWA_ROOT` when spawning `python -m kaiwa.app`.
+
+**First-run bootstrap** (before TTS/API): shell runs `python -m kaiwa.bootstrap ensure` via the runtime interpreter. Downloads Whisper weights to `%LocalAppData%\Kaiwa\models\whisper\` and installs AivisSpeech Engine under `tts\aivisspeech\` if not already found (Program Files / tools / AppData). Splash shows progress; downloads resume after interrupt. STT then loads with `local_files_only` when the AppData model is present.
+
+User data stays under `%LocalAppData%\Kaiwa\`. **Hardware:** `WHISPER_DEVICE=auto` prefers CUDA when a GPU and nvidia wheels are present, else CPU (`int8`). Owners: `pip install -e ".[cuda]"`. Friend portable runtime is CPU unless CUDA wheels are added. Dev-only: `build_desktop.ps1 -DevVenv` points the shell at the clone `.venv`.
+
+**Installer:** `scripts/build_installer.ps1` (Inno Setup 6) packs `dist/Kaiwa/` into `dist/KaiwaSetup-1.0.0.exe` — Program Files install, Start Menu shortcut, Add/Remove Programs uninstall. Uninstall does **not** delete AppData. Friend path is the Setup.exe from the GitHub Release (portable folder remains a build intermediate).
 
 ## Out of scope (v0)
 

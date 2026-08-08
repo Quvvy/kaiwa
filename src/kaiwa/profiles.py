@@ -9,11 +9,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from kaiwa import secrets_store
 from kaiwa.config import ROOT
-
-DATA_DIR = ROOT / "data"
-REGISTRY_PATH = DATA_DIR / "profiles.json"
-PROFILES_DIR = DATA_DIR / "profiles"
 
 PREFS_FILE = "user_prefs.json"
 PROFILE_FILE = "learner_profile.json"
@@ -26,6 +23,18 @@ BUNDLE_VERSION = 1
 _FLAT_FILES = (PREFS_FILE, PROFILE_FILE, MEMORY_FILE, PERSONALITIES_FILE)
 _SLUG_RE = re.compile(r"[^a-z0-9_]+")
 _migrated = False
+
+
+def data_dir() -> Path:
+    return secrets_store.user_data_dir()
+
+
+def registry_path() -> Path:
+    return secrets_store.registry_path()
+
+
+def profiles_dir() -> Path:
+    return secrets_store.profiles_dir()
 
 
 @dataclass
@@ -96,11 +105,60 @@ def _write_fresh_profile_files(profile_dir: Path) -> None:
     _write_json(profile_dir / PERSONALITIES_FILE, {"presets": []})
 
 
+def _repo_has_user_data(src_data: Path) -> bool:
+    if (src_data / "profiles.json").is_file():
+        return True
+    src_profiles = src_data / "profiles"
+    if src_profiles.is_dir() and any(src_profiles.iterdir()):
+        return True
+    return any((src_data / name).is_file() for name in _FLAT_FILES)
+
+
+def _maybe_copy_from_repo() -> None:
+    """One-time: if user data has no registry, copy from repo data/ (+ sessions)."""
+    dest_reg = registry_path()
+    if dest_reg.is_file():
+        return
+
+    src_data = ROOT / "data"
+    if not _repo_has_user_data(src_data):
+        return
+
+    dest_root = data_dir()
+    dest_root.mkdir(parents=True, exist_ok=True)
+
+    src_reg = src_data / "profiles.json"
+    if src_reg.is_file():
+        shutil.copy2(src_reg, dest_reg)
+
+    src_profiles = src_data / "profiles"
+    dest_profiles = profiles_dir()
+    if src_profiles.is_dir() and not dest_profiles.exists():
+        shutil.copytree(src_profiles, dest_profiles)
+
+    for name in _FLAT_FILES:
+        src = src_data / name
+        dest = dest_root / name
+        if src.is_file() and not dest.is_file():
+            shutil.copy2(src, dest)
+
+    src_sess = ROOT / "sessions"
+    dest_sess = secrets_store.sessions_dir()
+    if src_sess.is_dir():
+        jsonls = list(src_sess.glob("*.jsonl"))
+        if jsonls:
+            dest_sess.mkdir(parents=True, exist_ok=True)
+            if not any(dest_sess.glob("*.jsonl")):
+                for f in jsonls:
+                    shutil.copy2(f, dest_sess / f.name)
+
+
 def _load_registry_raw() -> ProfileRegistry:
-    if not REGISTRY_PATH.exists():
+    path = registry_path()
+    if not path.exists():
         return ProfileRegistry(active="default", profiles=[])
     try:
-        raw = _read_json(REGISTRY_PATH)
+        raw = _read_json(path)
     except (OSError, json.JSONDecodeError, ValueError, TypeError):
         return ProfileRegistry(active="default", profiles=[])
     if not isinstance(raw, dict):
@@ -125,8 +183,8 @@ def _load_registry_raw() -> ProfileRegistry:
 
 
 def _save_registry(reg: ProfileRegistry) -> ProfileRegistry:
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    _write_json(REGISTRY_PATH, reg.to_dict())
+    data_dir().mkdir(parents=True, exist_ok=True)
+    _write_json(registry_path(), reg.to_dict())
     return reg
 
 
@@ -139,15 +197,19 @@ def _touch_meta(reg: ProfileRegistry, profile_id: str) -> None:
 
 
 def ensure_migrated() -> None:
-    """Move flat data/*.json into profiles/default if needed; ensure registry exists."""
+    """Copy repo data once if needed; flatten legacy files; ensure registry exists."""
     global _migrated
     if _migrated:
         return
     _migrated = True
 
-    PROFILES_DIR.mkdir(parents=True, exist_ok=True)
-    default_dir = PROFILES_DIR / "default"
-    flat_existing = [DATA_DIR / name for name in _FLAT_FILES if (DATA_DIR / name).exists()]
+    _maybe_copy_from_repo()
+
+    root = data_dir()
+    pdir = profiles_dir()
+    pdir.mkdir(parents=True, exist_ok=True)
+    default_dir = pdir / "default"
+    flat_existing = [root / name for name in _FLAT_FILES if (root / name).exists()]
 
     if not default_dir.exists():
         default_dir.mkdir(parents=True, exist_ok=True)
@@ -156,7 +218,6 @@ def ensure_migrated() -> None:
                 dest = default_dir / src.name
                 if not dest.exists():
                     shutil.move(str(src), str(dest))
-        # Fill any missing files with defaults
         if not (default_dir / PREFS_FILE).exists():
             _write_json(default_dir / PREFS_FILE, _default_prefs_dict())
         if not (default_dir / PROFILE_FILE).exists():
@@ -166,7 +227,6 @@ def ensure_migrated() -> None:
         if not (default_dir / PERSONALITIES_FILE).exists():
             _write_json(default_dir / PERSONALITIES_FILE, {"presets": []})
     else:
-        # Ensure all four files exist in default
         if not (default_dir / PREFS_FILE).exists():
             _write_json(default_dir / PREFS_FILE, _default_prefs_dict())
         if not (default_dir / PROFILE_FILE).exists():
@@ -186,8 +246,7 @@ def ensure_migrated() -> None:
         )
     if not any(p.id == reg.active for p in reg.profiles):
         reg.active = reg.profiles[0].id if reg.profiles else "default"
-    # Discover orphan profile dirs
-    for child in PROFILES_DIR.iterdir():
+    for child in pdir.iterdir():
         if not child.is_dir():
             continue
         if child.name not in {p.id for p in reg.profiles}:
@@ -211,7 +270,7 @@ def active_profile_id() -> str:
 def active_profile_dir() -> Path:
     ensure_migrated()
     pid = active_profile_id()
-    path = PROFILES_DIR / pid
+    path = profiles_dir() / pid
     path.mkdir(parents=True, exist_ok=True)
     return path
 
@@ -234,7 +293,7 @@ def personalities_path() -> Path:
 
 def profile_dir(profile_id: str) -> Path:
     ensure_migrated()
-    return PROFILES_DIR / profile_id
+    return profiles_dir() / profile_id
 
 
 def get_meta(profile_id: str) -> ProfileMeta | None:
@@ -267,7 +326,8 @@ def create_profile(label: str, *, activate: bool = False) -> ProfileMeta:
     profile_id = base
     n = 2
     used = {p.id for p in reg.profiles}
-    while profile_id in used or (PROFILES_DIR / profile_id).exists():
+    pdir = profiles_dir()
+    while profile_id in used or (pdir / profile_id).exists():
         profile_id = f"{base}_{n}"
         n += 1
         if n > 1000:
@@ -276,7 +336,7 @@ def create_profile(label: str, *, activate: bool = False) -> ProfileMeta:
 
     now = _now_iso()
     meta = ProfileMeta(id=profile_id, label=label, created_at=now, updated_at=now)
-    _write_fresh_profile_files(PROFILES_DIR / profile_id)
+    _write_fresh_profile_files(pdir / profile_id)
     reg.profiles.append(meta)
     if activate:
         reg.active = profile_id
@@ -290,7 +350,7 @@ def switch_profile(profile_id: str) -> ProfileMeta:
     meta = next((p for p in reg.profiles if p.id == profile_id), None)
     if meta is None:
         raise KeyError(f"profile not found: {profile_id}")
-    if not (PROFILES_DIR / profile_id).is_dir():
+    if not (profiles_dir() / profile_id).is_dir():
         raise KeyError(f"profile directory missing: {profile_id}")
     reg.active = profile_id
     _touch_meta(reg, profile_id)
@@ -311,7 +371,7 @@ def delete_profile(profile_id: str) -> str:
     if reg.active == profile_id:
         reg.active = reg.profiles[0].id
 
-    target = PROFILES_DIR / profile_id
+    target = profiles_dir() / profile_id
     if target.exists():
         shutil.rmtree(target)
     _save_registry(reg)
@@ -324,14 +384,14 @@ def reset_profile(profile_id: str) -> ProfileMeta:
     meta = next((p for p in reg.profiles if p.id == profile_id), None)
     if meta is None:
         raise KeyError(f"profile not found: {profile_id}")
-    _write_fresh_profile_files(PROFILES_DIR / profile_id)
+    _write_fresh_profile_files(profiles_dir() / profile_id)
     _touch_meta(reg, profile_id)
     _save_registry(reg)
     return meta
 
 
 def _load_bundle_file(profile_id: str, filename: str) -> dict[str, Any]:
-    path = PROFILES_DIR / profile_id / filename
+    path = profiles_dir() / profile_id / filename
     if not path.exists():
         if filename == PREFS_FILE:
             return _default_prefs_dict()
@@ -417,7 +477,6 @@ def import_bundle(bundle: dict[str, Any], *, label: str | None = None) -> Profil
     if not isinstance(presets_in, list):
         presets_in = []
 
-    # Validate personalities into a temp write via list_user_presets pattern
     valid_presets: list[dict[str, Any]] = []
     for item in presets_in:
         if not isinstance(item, dict):
@@ -443,12 +502,11 @@ def import_bundle(bundle: dict[str, Any], *, label: str | None = None) -> Profil
 
     bundle_label = (label or str(bundle.get("label") or "Imported")).strip() or "Imported"
     meta = create_profile(bundle_label, activate=False)
-    dest = PROFILES_DIR / meta.id
+    dest = profiles_dir() / meta.id
     save_prefs(prefs, dest / PREFS_FILE)
     save_profile(learner, dest / PROFILE_FILE)
     save_memory(memory, dest / MEMORY_FILE)
     _save_raw(valid_presets, dest / PERSONALITIES_FILE)
-    # touch registry updated_at
     reg = _load_registry_raw()
     _touch_meta(reg, meta.id)
     _save_registry(reg)

@@ -1,18 +1,31 @@
 from __future__ import annotations
 
+import logging
 import os
 import sys
 import tempfile
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import soundfile as sf
 from faster_whisper import WhisperModel
 
+from kaiwa.bootstrap import DEFAULT_WHISPER_MODEL, whisper_model_dir, whisper_ready
 from kaiwa.config import Settings
 
+_log = logging.getLogger("kaiwa.stt")
+
 _model: WhisperModel | None = None
-_model_key: tuple[str, str, str] | None = None
+_model_key: tuple[str, str, str, str] | None = None
+_runtime_info: dict[str, Any] = {
+    "requested": "auto",
+    "active_device": "",
+    "active_compute": "",
+    "reason": "not_loaded",
+    "local_model": False,
+    "cuda_available": False,
+}
 
 
 def _ensure_nvidia_dll_path() -> None:
@@ -39,26 +52,186 @@ def _ensure_nvidia_dll_path() -> None:
 _ensure_nvidia_dll_path()
 
 
+def _nvidia_libs_present() -> bool:
+    for entry in sys.path:
+        root = Path(entry) / "nvidia"
+        if root.is_dir() and any(root.rglob("bin")):
+            return True
+    return False
+
+
+def probe_cuda() -> dict[str, Any]:
+    """Return whether CUDA Whisper is usable on this machine/runtime."""
+    _ensure_nvidia_dll_path()
+    try:
+        import ctranslate2
+    except ImportError:
+        return {
+            "available": False,
+            "reason": "no_ctranslate2",
+            "device_count": 0,
+        }
+
+    try:
+        count = int(ctranslate2.get_cuda_device_count())
+    except Exception as exc:
+        return {
+            "available": False,
+            "reason": f"cuda_probe_failed:{exc.__class__.__name__}",
+            "device_count": 0,
+        }
+
+    if count <= 0:
+        return {
+            "available": False,
+            "reason": "no_gpu",
+            "device_count": 0,
+        }
+
+    # Friend portable runtime may lack nvidia-* wheels even with a GPU present.
+    if sys.platform == "win32" and not _nvidia_libs_present():
+        return {
+            "available": False,
+            "reason": "no_cuda_libs",
+            "device_count": count,
+        }
+
+    gpu_name = ""
+    try:
+        # Optional; not all CT2 builds expose this.
+        get_name = getattr(ctranslate2, "get_cuda_device_name", None)
+        if callable(get_name):
+            gpu_name = str(get_name(0) or "")
+    except Exception:
+        gpu_name = ""
+
+    out: dict[str, Any] = {
+        "available": True,
+        "reason": "cuda_ok",
+        "device_count": count,
+    }
+    if gpu_name:
+        out["gpu_name"] = gpu_name
+    return out
+
+
+def resolve_whisper_device(settings: Settings) -> tuple[str, str, str]:
+    """Return (device, compute_type, reason)."""
+    requested = (settings.whisper_device or "auto").strip().lower() or "auto"
+    env_compute = (settings.whisper_compute_type or "").strip().lower()
+
+    if requested == "cpu":
+        compute = (
+            env_compute
+            if env_compute and env_compute not in {"float16", "float32"}
+            else "int8"
+        )
+        return "cpu", compute, "forced_cpu"
+
+    probe = probe_cuda()
+    want_cuda = requested in {"cuda", "auto"}
+    if want_cuda and probe.get("available"):
+        compute = env_compute or "float16"
+        if compute == "int8" and requested == "auto":
+            compute = "float16"
+        return "cuda", compute, str(probe.get("reason") or "cuda_ok")
+
+    reason = "forced_cpu"
+    if requested == "cuda":
+        reason = str(probe.get("reason") or "cuda_unavailable")
+    elif requested == "auto":
+        reason = str(probe.get("reason") or "cpu_fallback")
+    else:
+        reason = f"unknown_device:{requested}"
+
+    compute = "int8"
+    if env_compute and env_compute not in {"float16", "float32"}:
+        compute = env_compute
+    return "cpu", compute, reason
+
+
+def get_stt_runtime_info() -> dict[str, Any]:
+    """Snapshot of last resolved / loaded Whisper path (for /api/health)."""
+    info = dict(_runtime_info)
+    probe = probe_cuda()
+    info["cuda_available"] = bool(probe.get("available"))
+    info["cuda_reason"] = str(probe.get("reason") or "")
+    if probe.get("gpu_name"):
+        info["gpu_name"] = probe["gpu_name"]
+    info["cuda_device_count"] = int(probe.get("device_count") or 0)
+    return info
+
+
+def _model_path_and_flags(settings: Settings) -> tuple[str, bool]:
+    """Prefer AppData bootstrap cache; fall back to hub id if not bootstrapped."""
+    model_id = (settings.whisper_model or DEFAULT_WHISPER_MODEL).strip() or DEFAULT_WHISPER_MODEL
+    if whisper_ready(model_id):
+        return str(whisper_model_dir(model_id)), True
+    as_path = Path(model_id)
+    if as_path.is_dir() and (as_path / "model.bin").is_file():
+        return str(as_path), True
+    return model_id, False
+
+
 def get_model(settings: Settings) -> WhisperModel:
-    global _model, _model_key
-    key = (settings.whisper_model, settings.whisper_device, settings.whisper_compute_type)
+    global _model, _model_key, _runtime_info
+    model_ref, local_only = _model_path_and_flags(settings)
+    device, compute_type, reason = resolve_whisper_device(settings)
+    key = (
+        model_ref,
+        device,
+        compute_type,
+        "local" if local_only else "hub",
+    )
     if _model is None or _model_key != key:
-        device = settings.whisper_device
-        compute_type = settings.whisper_compute_type
+        download_root = (
+            None if local_only else str(whisper_model_dir(settings.whisper_model))
+        )
+        active_device = device
+        active_compute = compute_type
+        active_reason = reason
         try:
             _model = WhisperModel(
-                settings.whisper_model,
+                model_ref,
                 device=device,
                 compute_type=compute_type,
+                download_root=download_root,
+                local_files_only=local_only,
             )
-        except Exception:
-            # Fall back to CPU if CUDA stack is unavailable.
-            _model = WhisperModel(
-                settings.whisper_model,
-                device="cpu",
-                compute_type="int8",
-            )
+        except Exception as exc:
+            if device != "cpu":
+                _log.warning(
+                    "CUDA Whisper load failed (%s); falling back to CPU",
+                    exc.__class__.__name__,
+                )
+                _model = WhisperModel(
+                    model_ref,
+                    device="cpu",
+                    compute_type="int8",
+                    download_root=download_root,
+                    local_files_only=local_only,
+                )
+                active_device = "cpu"
+                active_compute = "int8"
+                active_reason = f"cuda_load_failed:{exc.__class__.__name__}"
+            else:
+                raise
         _model_key = key
+        _runtime_info = {
+            "requested": (settings.whisper_device or "auto").strip().lower() or "auto",
+            "active_device": active_device,
+            "active_compute": active_compute,
+            "reason": active_reason,
+            "local_model": local_only,
+            "cuda_available": bool(probe_cuda().get("available")),
+        }
+        _log.info(
+            "Whisper ready device=%s compute=%s reason=%s local=%s",
+            active_device,
+            active_compute,
+            active_reason,
+            local_only,
+        )
     return _model
 
 

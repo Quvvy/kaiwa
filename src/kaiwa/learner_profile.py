@@ -7,11 +7,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
 
-from kaiwa.config import ROOT, Settings
+from kaiwa.config import Settings
 from kaiwa.prefs import UserPrefs
-
-PROFILE_PATH = ROOT / "data" / "learner_profile.json"
-EXAMPLE_PROFILE_PATH = ROOT / "data" / "learner_profile.example.json"
 
 LearnerLevel = Literal["pre_n5", "n5", "n4"]
 LEVEL_ORDER = ("pre_n5", "n5", "n4")

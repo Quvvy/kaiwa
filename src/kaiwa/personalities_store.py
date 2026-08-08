@@ -6,9 +6,6 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-from kaiwa.config import ROOT
-
-USER_PERSONALITIES_PATH = ROOT / "data" / "user_personalities.json"
 MAX_USER_PRESETS = 20
 _SLUG_RE = re.compile(r"[^a-z0-9_]+")
 
