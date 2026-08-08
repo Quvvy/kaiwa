@@ -85,8 +85,8 @@ def _emit(on_progress: ProgressFn | None, **payload: Any) -> None:
 
 def _load_state() -> dict[str, Any]:
     path = bootstrap_state_path()
-    if not path.is_file():
-        return {}
+    # Do not gate on path.is_file() — frozen Kaiwa.exe has been observed to get
+    # false negatives from exists()/is_file() on AppData while open()/read works.
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
         return data if isinstance(data, dict) else {}
@@ -382,6 +382,7 @@ def _extract_aivis_archive(archive: Path, dest_root: Path) -> Path:
 def ensure_aivis(*, on_progress: ProgressFn | None = None) -> Path | None:
     existing = aivis_appdata_run_exe() or _find_existing_aivis_elsewhere()
     if existing is not None:
+        _save_state({"aivis_ready": True, "aivis_path": str(existing)})
         _emit(
             on_progress,
             step="aivis",
@@ -389,8 +390,8 @@ def ensure_aivis(*, on_progress: ProgressFn | None = None) -> Path | None:
             pct=100,
             done=1,
             total=1,
+            aivis_path=str(existing),
         )
-        _save_state({"aivis_ready": True, "aivis_path": str(existing)})
         return existing
 
     if sys.platform != "win32":
@@ -438,6 +439,7 @@ def ensure_aivis(*, on_progress: ProgressFn | None = None) -> Path | None:
         pct=100,
         done=1,
         total=1,
+        aivis_path=str(run),
     )
     return run
 
@@ -454,7 +456,13 @@ def ensure_all(
     aivis_path: Path | None = None
     if not skip_aivis:
         aivis_path = ensure_aivis(on_progress=on_progress)
-    _emit(on_progress, step="done", label="Ready", pct=100)
+    _emit(
+        on_progress,
+        step="done",
+        label="Ready",
+        pct=100,
+        aivis_path=str(aivis_path) if aivis_path else None,
+    )
     return {
         "ok": True,
         "whisper_dir": str(whisper_path),

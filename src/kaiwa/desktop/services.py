@@ -257,7 +257,12 @@ def read_preferred_tts_engine() -> AivisOrVoicevox:
     return "aivisspeech"
 
 
-def start_tts_engine(engine: AivisOrVoicevox, registry: ServiceRegistry) -> None:
+def start_tts_engine(
+    engine: AivisOrVoicevox,
+    registry: ServiceRegistry,
+    *,
+    exe_path: Path | str | None = None,
+) -> None:
     port = ENGINE_PORTS[engine]
     registry.tts.name = engine
     registry.tts.port = port
@@ -267,7 +272,17 @@ def start_tts_engine(engine: AivisOrVoicevox, registry: ServiceRegistry) -> None
         registry.tts.proc = None
         return
 
-    exe = find_engine(engine)
+    exe: Path | None = None
+    if exe_path is not None:
+        raw = str(exe_path).strip()
+        if raw:
+            # Trust bootstrap subprocess path — do not gate on exists()/is_file()
+            # (frozen Kaiwa.exe has false negatives on AppData).
+            exe = Path(raw)
+
+    if exe is None:
+        exe = find_engine(engine)
+
     if exe is None:
         label = "AivisSpeech" if engine == "aivisspeech" else "VOICEVOX"
         hint = ""
@@ -278,24 +293,31 @@ def start_tts_engine(engine: AivisOrVoicevox, registry: ServiceRegistry) -> None
                 recorded = recorded_aivis_path()
                 cands = [str(p) for p in _aivis_candidates()[:4]]
                 hint = (
-                    f" Recorded aivis_path={recorded!s}; "
-                    f"tried={cands}."
+                    f" Bootstrap did not return aivis_path; "
+                    f"recorded={recorded!s}; tried={cands}."
                 )
             except Exception:
-                hint = ""
+                hint = " Bootstrap did not return aivis_path."
         raise FileNotFoundError(
             f"{label} TTS engine not found on disk. Relaunch Kaiwa so first-run "
             "setup can install it, or install the engine yourself."
             + hint
         )
 
-    proc = subprocess.Popen(
-        [str(exe)],
-        cwd=str(exe.parent),
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        creationflags=_creationflags(),
-    )
+    try:
+        proc = subprocess.Popen(
+            [str(exe)],
+            cwd=str(exe.parent),
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            creationflags=_creationflags(),
+        )
+    except OSError as exc:
+        label = "AivisSpeech" if engine == "aivisspeech" else "VOICEVOX"
+        raise FileNotFoundError(
+            f"{label} TTS could not start at {exe}. {exc}"
+        ) from exc
+
     registry.tts.proc = proc
     registry.tts.started_by_us = True
 
@@ -389,8 +411,12 @@ def run_bootstrap(
     *,
     on_progress: Callable[[dict[str, Any]], None] | None = None,
     skip_aivis: bool = False,
-) -> None:
-    """Run `python -m kaiwa.bootstrap ensure` via API Python; stream JSON progress."""
+) -> Path | None:
+    """Run `python -m kaiwa.bootstrap ensure` via API Python; stream JSON progress.
+
+    Returns the AivisSpeech ``aivis_path`` reported by bootstrap (if any). The frozen
+    shell must use this path for TTS start — do not re-probe AppData with exists().
+    """
     python = resolve_api_python()
     root = resolve_app_root()
     cmd = [str(python), "-m", "kaiwa.bootstrap", "ensure"]
@@ -414,6 +440,7 @@ def run_bootstrap(
     )
     assert proc.stdout is not None
     err_chunks: list[str] = []
+    aivis_path: Path | None = None
 
     def _drain_stderr() -> None:
         if proc.stderr is None:
@@ -434,6 +461,9 @@ def run_bootstrap(
             continue
         if not isinstance(row, dict):
             continue
+        raw_path = str(row.get("aivis_path") or "").strip()
+        if raw_path:
+            aivis_path = Path(raw_path)
         if on_progress:
             try:
                 on_progress(row)
@@ -446,3 +476,4 @@ def run_bootstrap(
         detail = "".join(err_chunks).strip() or f"bootstrap exited with code {code}"
         # Prefix so friendly_boot_message can classify; full detail stays in the log.
         raise RuntimeError(f"bootstrap failed: {detail}")
+    return aivis_path

@@ -34,6 +34,7 @@ and this project aims to follow [Semantic Versioning](https://semver.org/).
 - Friend install path is `KaiwaSetup-1.0.0.exe` from the GitHub Release (Start Menu); portable `dist/Kaiwa/` remains the build input.
 - Frozen desktop log writes to `%LocalAppData%\Kaiwa\Kaiwa.desktop.log` (Program Files next to the exe is not writable).
 - Desktop shell starts AivisSpeech using bootstrap.json `aivis_path` when filesystem probes miss the AppData engine.
+- Bootstrap subprocess returns `aivis_path` over stdout JSON; frozen shell `Popen`s it without AppData `exists()` checks.
 
 ## [0.9.0] — 2026-08-07
 

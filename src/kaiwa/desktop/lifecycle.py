@@ -62,10 +62,14 @@ class Lifecycle:
 
         try:
             status("Preparing models…")
-            run_bootstrap(on_progress=progress)
+            aivis = run_bootstrap(on_progress=progress)
             engine = read_preferred_tts_engine()
             status(f"Starting TTS ({engine})…")
-            start_tts_engine(engine, self.registry)
+            start_tts_engine(
+                engine,
+                self.registry,
+                exe_path=aivis if engine == "aivisspeech" else None,
+            )
             status("Starting Kaiwa…")
             start_kaiwa(self.registry)
         except Exception:
