@@ -41,8 +41,8 @@ Captured from the 2026-08-05 planning conversation (Pingo-like personal Japanese
 ## Practice mode (2026-08-05)
 
 22. MVP+ includes **intelligibility** scoring in a separate Practice tab (target vs Whisper transcript, kana-normalized).
-23. UI must label scores as intelligibility — never “pronunciation accuracy” / pitch accent.
-24. Pitch-accent / dedicated assessment APIs remain deferred.
+23. UI must label the main score as intelligibility — never “pronunciation accuracy” / native pitch accent.
+24. Dictionary pitch-accent / dedicated assessment APIs remain deferred. Model-contour F0 scoring was tried and **removed** (see #78).
 
 ## Phase 2 tutor prefs (2026-08-05)
 
@@ -74,7 +74,7 @@ Captured from the 2026-08-05 planning conversation (Pingo-like personal Japanese
 
 ## Non-goals (for now)
 
-44. No pitch-accent / F0 grading yet (**deferred past Phase 3** — Practice stays intelligibility-only).
+44. ~~Soft model-contour pitch match in Practice…~~ **Superseded by #78** (removed). Dictionary-absolute pitch-accent grading still deferred.
 45. No full Pingo feature parity (memory plans, 200 scenarios, store apps).
 46. No full-local DeepSeek V4-Pro hosting attempt.
 47. No multi-user **accounts** / passwords / cloud sync. Local **named profiles** (prefs + learner state + memory + personalities) are allowed for backup/switch on one machine.
@@ -83,12 +83,12 @@ Captured from the 2026-08-05 planning conversation (Pingo-like personal Japanese
 
 48. TTS upgrade: `tts_engine` pref — **aivisspeech** (default) or **voicevox**; same VOICEVOX-compatible HTTP client; no silent cross-engine failover.
 49. Realtime evaluation: `/api/turn` logs `timing` (stt/llm/tts/total ms); `scripts/eval_turn_latency.py` summarizes. **Stay turn-based** — OpenAI Realtime cost/complexity not justified while practice latency is acceptable.
-50. Pitch-accent assessment explicitly deferred past Phase 3.
+50. Dictionary-absolute pitch-accent assessment deferred; Practice grades intelligibility only (no model-contour score).
 
 ## Post–Phase 3 direction (2026-08-06)
 
 51. Phase 4 focuses on **daily-use polish** (first-run, startup helper, TTS error clarity) and **conversation comfort** (soft phrase reuse, clearer corrections later) — not new product platforms.
-52. Pitch accent and realtime speech remain deferred; revisit only if daily friction demands them.
+52. Absolute pitch accent and realtime speech remain deferred; Practice stays intelligibility + shadowing unless daily friction demands more.
 
 ## User profiles (2026-08-06)
 
@@ -106,10 +106,10 @@ Captured from the 2026-08-05 planning conversation (Pingo-like personal Japanese
 
 59. No hard sentence quota in the tutor prompt. Length guidance is soft and turn-aware (1–2 short spoken sentences by default; up to ~2–3 when the user said more; shorter when struggling/help). `max_sentences` remains in prefs JSON for compatibility but is unused in the prompt.
 
-## Desktop tray (2026-08-06)
+## Desktop tray (2026-08-06) — superseded
 
-60. Windows system-tray launcher (`python -m kaiwa.desktop` / `kaiwa-desktop`): idle tray uses no Whisper/TTS/server. Open starts prefs TTS engine + Kaiwa in a WebView window; closing the window stops processes we started and returns to tray; Quit exits.
-61. If TTS was already running before Open, Close does not kill it (`started_by_us` tracking).
+60. ~~Windows system-tray launcher…~~ **Superseded by #77** (windowed app; no idle tray).
+61. If TTS was already running before we started it, Close does not kill it (`started_by_us` tracking). Still true for the windowed shell.
 
 ## Chat text fallback (2026-08-06)
 
@@ -122,6 +122,55 @@ Captured from the 2026-08-05 planning conversation (Pingo-like personal Japanese
 65. Until Place me finishes, the tutor prompt treats level as **unknown** (do not trust default `pre_n5`). After finish, trust placement strongly and protect levels for ~15 chat turns.
 66. Missing `placement_completed` on load → grandfather **true** (existing profiles). Create / reset write **false**.
 67. Place me free text: topics **Other…** (short typed tag) + optional final “Anything else?” note → `placement` / `notes` only (never level enums).
+
+## TTS alerts + gentle Try saying (2026-08-06)
+
+68. Soft dismissible `#engineAlert` for TTS/engine failures (chat soft-fail still returns text). Synthesis errors always include `engine_hint`.
+69. Optional tutor line `TRY: <phrase>` is stripped before TTS/history; returned as `better_phrase` and shown as muted “Try saying…” under the Kaiwa bubble (no quiz score).
+
+## Chat UI redesign (2026-08-07)
+
+70. Chat uses a dark **night studio** shell (charcoal + warm lamp + teal accent) by default: full-height transcript, quiet underline tabs, grounded hold-to-talk composer. Colors live in CSS variables / `data-theme`.
+
+## Settings rail + remaining tabs (2026-08-07)
+
+71. Settings uses a **section rail** (left list on desktop; horizontal chips when narrow): Profiles, Themes, Conversation, Voice, Level, Learner, Memory, Presets — one group visible at a time. **No settings removed**; save flows stay domain-specific (prefs sticky Save on Themes/Conversation/Voice/Level; Learner and Memory keep their own save/reset). Practice and Place me reuse the same night-studio surfaces/composer tokens as Chat.
+
+## Brand icons (2026-08-07)
+
+72. Custom 会 mark assets live under `static/icons/` (web) and `kaiwa/desktop/assets/` (desktop window). **Taskbar / window `.ico`:** from `kaiwa-full-icon.png`. **In-app header / favicon:** `kaiwa-text-only.png`. Pass `.ico` to `webview.start(icon=…)`. Do **not** force WinForms/`WM_SETICON` on `shown` (that hung the webview).
+
+## Thin Kaiwa.exe (2026-08-07)
+
+73. Ship a **thin frozen desktop shell** (`dist/Kaiwa/Kaiwa.exe` via PyInstaller onedir + `scripts/build_desktop.ps1`): webview window only (no system tray), with FileDescription/ProductName **Kaiwa** and embedded icon so the taskbar is Kaiwa—not `python.exe`. Whisper/FastAPI stay in `.venv`; `Kaiwa.runtime.json` (or `KAIWA_PYTHON` / `KAIWA_ROOT`) tells the shell which python/repo to spawn. Full freeze of CUDA/Whisper is out of scope. Unfrozen `kaiwa-desktop` remains for dev.
+
+## Practice pitch vs model (2026-08-07) — superseded
+
+74. ~~Soft pitch vs model score…~~ **Superseded by #78** (removed as demotivating / not a fair grade).
+
+## Help language (2026-08-07)
+
+75. Pref `help_language` (`en` | `ja`, default **en**) is exposed in Settings → Conversation. It controls **LLM help text** language (Practice tips; Adaptive chat still uses it for brief English notes). Independent of Immersion/Adaptive: Immersion keeps chat JP-only; Practice tips still follow `help_language`. UI chrome stays English (no full i18n).
+
+## Tray Open feedback (2026-08-07) — superseded
+
+76. ~~Tray Open progress toasts / stuck `running` recovery…~~ **Superseded by #77** (splash window replaces tray notifies).
+
+## Windowed desktop app (2026-08-07)
+
+77. Desktop is an **Anki-style window app** (`kaiwa-desktop` / `Kaiwa.exe`): launch opens a splash webview that shows TTS/API progress (or an in-window error), then loads `http://127.0.0.1:8787`. Closing the window stops processes we started and **exits** (no idle tray). If the API is already healthy, skip spawn and load the UI. No pystray.
+
+## Practice intelligibility only (2026-08-07)
+
+78. Practice grades **intelligibility only** (play model → hold to repeat → what Whisper heard). Model-contour F0/DTW pitch % removed — it punished natural variation and felt unfair. No paid pronunciation APIs; dictionary pitch stays deferred. Shadowing is the practice loop; chat remains primary.
+
+## Theme switcher (2026-08-07)
+
+79. Pref `ui_theme` with six built-ins — **Dark:** `night` (default), `slate`, `graphite`; **Light:** `day`, `cloud`, `frost`. Settings → **Themes** section (own rail item) shows Light/Dark groups with 4-color swatch cards. Click previews; sticky Save persists on the profile. Custom color editors and OS auto light/dark stay deferred. (`PrefsUpdate` must include `ui_theme` or saves silently fall back to night.)
+
+## Phase 5 tutor learning layers (2026-08-07)
+
+80. Tutor quality next: three layers under casual chat — **(1) conversation** (natural JP, keep personality), **(2) micro-correction** (only useful/recurring errors; reuse `TRY:`), **(3) adaptive difficulty** (don’t outrun demonstrated comprehension). Prefer **JP-first** meaning help when the learner signals unknown vocab; Adaptive may add a short EN gloss only if still stuck. Topic stickiness (1–2 follow-ups) before jumping. Design input: `docs/TUTOR_EXCHANGE_CRITIQUE.md` → roadmap Phase 5.1–5.4. Do **not** textbook-ify Kaiwa’s casual voice.
 
 ## Related wiki
 

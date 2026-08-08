@@ -9,7 +9,7 @@ Personal Japanese AI conversation partner — turn-based chat, Practice, and a s
 
 ```
 Chat:     Mic → faster-whisper (ja, CUDA) → DeepSeek V4 Flash → AivisSpeech (or VOICEVOX)
-Practice: Target → TTS preview; Mic → Whisper → intelligibility score → tip
+Practice: Target → TTS preview → Mic → Whisper → intelligibility score → tip
 Quiz:     Self-assessment placement (stage / listening / speaking / pace) → profile + goal
 ```
 
@@ -72,18 +72,29 @@ Extra AivisSpeech voices (from AivisHub):
 
 5. Run the app:
 
-**Desktop (system tray, recommended on Windows):**
+**Desktop app (recommended on Windows):**
+
+```powershell
+.\.venv\Scripts\pip install -e ".[desktop]"
+.\scripts\build_desktop.ps1
+# then launch:
+.\dist\Kaiwa\Kaiwa.exe
+```
+
+- Builds a real **`Kaiwa.exe`** (windowed shell) so the taskbar shows Kaiwa, not Python.
+- Whisper / FastAPI still run from `.venv` (see `dist\Kaiwa\Kaiwa.runtime.json`).
+- Launch opens a splash, starts TTS + Kaiwa, then shows the UI.
+- **Close the window** — stops Kaiwa + the TTS engine *we* started and exits (no tray).
+- Unpin any old **Python 3.13** taskbar pin; pin `dist\Kaiwa\Kaiwa.exe` instead.
+- Rebuild after desktop/icon changes: `.\scripts\build_desktop.ps1`
+
+**Dev desktop (unfrozen, still shows as Python on the taskbar):**
 
 ```powershell
 .\.venv\Scripts\pip install -e ".[desktop]"
 .\.venv\Scripts\kaiwa-desktop
 # or: .\.venv\Scripts\python.exe -m kaiwa.desktop
 ```
-
-- Tray icon only while idle (no Whisper / TTS / server).
-- **Open Kaiwa** — starts the TTS engine from your Settings prefs (AivisSpeech or VOICEVOX), starts Kaiwa, opens a desktop window.
-- **Close the window** — returns to tray and stops Kaiwa + the TTS engine *we* started.
-- **Quit** (tray menu) — exits completely.
 
 **Or run the server alone:**
 
@@ -96,7 +107,7 @@ Open **http://127.0.0.1:8787**
 - **Chat** — hold to talk, free conversation; type a short line if Whisper misses you; **Replay** re-plays Kaiwa’s last line (status shows turn timing)
 - **Practice** — optional warm-up: last reply / from our chats / say again; play model, hold to repeat (not a quiz)
 - **Place me** — per-profile soft first-run (auto-open when new/reset; Skip anytime); expanded English self-ratings that shape how Kaiwa talks
-- **Settings** — profiles (switch/backup), goals, corrections, language help, register, naturalness, personalities, TTS engine/voice, Flash/Pro routing, live learner profile, long-term memory
+- **Settings** — profiles (switch/backup), Themes (Dark/Light presets), goals, corrections, language help, register, naturalness, personalities, TTS engine/voice, Flash/Pro routing, live learner profile, long-term memory
 
 Default port is **8787** (8765 often used by Anki on this machine).
 
@@ -114,4 +125,4 @@ Default port is **8787** (8765 often used by Anki on this machine).
 - On Windows, `nvidia-cublas-cu12` / `nvidia-cudnn-cu12` are installed so CUDA Whisper works without a full CUDA Toolkit.
 - Practice scores measure **what the app heard**, not native pitch accent.
 - Phase 3 stays **turn-based** (no OpenAI Realtime); pitch-accent grading remains deferred.
-- **Next (Phase 4):** first-run onboarding, clearer TTS errors, gentler correction surfacing — see [docs/ROADMAP.md](docs/ROADMAP.md). Tray desktop launcher + profiles + soft phrase reuse are already in.
+- **Phase 4:** Core polish items done (including theme switcher). **Phase 5** (next): tutor learning quality — see [docs/ROADMAP.md](docs/ROADMAP.md).

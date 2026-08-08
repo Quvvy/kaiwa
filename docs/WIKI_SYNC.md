@@ -21,6 +21,7 @@ Follow the vault `AGENTS.md` for ingest conventions. Tag with `kaiwa`.
 | `docs/DECISIONS.md` | `raw/kaiwa/DECISIONS.md` |
 | `docs/ROADMAP.md` | `raw/kaiwa/ROADMAP.md` |
 | `docs/WIKI_SYNC.md` | `raw/kaiwa/WIKI_SYNC.md` |
+| `docs/TUTOR_EXCHANGE_CRITIQUE.md` | `raw/kaiwa/tutor-exchange-critique-2026-08-07.md` |
 
 ## Related wiki pages
 
