@@ -1,146 +1,565 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html lang="ja" data-theme="night">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Kaiwa</title>
+  <link rel="icon" href="/static/icons/kaiwa.ico" sizes="any" />
+  <link rel="icon" type="image/png" href="/static/icons/kaiwa-text-only.png" />
+  <link rel="apple-touch-icon" href="/static/icons/kaiwa-text-only.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=IBM+Plex+Sans+JP:wght@400;500;600&display=swap" rel="stylesheet" />
   <style>
-    :root {
-      --bg: #1a1f24;
-      --panel: #242b33;
-      --ink: #e8eef4;
-      --muted: #9aa8b5;
-      --accent: #3d8bfd;
-      --accent-hot: #e35d6a;
-      --ok: #3ecf8e;
-      --warn: #e6b84d;
-      --bad: #e35d6a;
-      --line: #33404d;
+    /* Theme tokens — swap via [data-theme] */
+    :root,
+    [data-theme="night"] {
+      --bg: #12141a;
+      --surface: #1a1d25;
+      --surface-raised: #232831;
+      --panel: var(--surface-raised);
+      --ink: #efeae2;
+      --text: var(--ink);
+      --muted: #9b958c;
+      --accent: #3d9b8f;
+      --accent-soft: color-mix(in srgb, var(--accent) 22%, transparent);
+      --accent-hot: #d4786a;
+      --ok: #6bbf8a;
+      --warn: #d4a85a;
+      --bad: #d4786a;
+      --line: #2e3440;
+      --you-bg: #2a2623;
+      --bot-bg: #1e232c;
+      --lamp: #2a241c;
+      --radius: 12px;
+      --radius-sm: 8px;
+      --font-ui: "DM Sans", "IBM Plex Sans JP", "Hiragino Sans", sans-serif;
+      --font-body: "IBM Plex Sans JP", "Hiragino Sans", "Noto Sans JP", sans-serif;
+      --shadow-soft: 0 1px 0 color-mix(in srgb, white 4%, transparent);
     }
+
+    [data-theme="slate"] {
+      --bg: #0f1419;
+      --surface: #171d25;
+      --surface-raised: #1f2833;
+      --panel: var(--surface-raised);
+      --ink: #e6edf5;
+      --text: var(--ink);
+      --muted: #8b98a8;
+      --accent: #3a9ea8;
+      --accent-soft: color-mix(in srgb, var(--accent) 22%, transparent);
+      --accent-hot: #d4786a;
+      --ok: #6bbf8a;
+      --warn: #d4a85a;
+      --bad: #d4786a;
+      --line: #2a3542;
+      --you-bg: #1a2a2c;
+      --bot-bg: #1a222c;
+      --lamp: #1c242e;
+      --radius: 12px;
+      --radius-sm: 8px;
+      --font-ui: "DM Sans", "IBM Plex Sans JP", "Hiragino Sans", sans-serif;
+      --font-body: "IBM Plex Sans JP", "Hiragino Sans", "Noto Sans JP", sans-serif;
+      --shadow-soft: 0 1px 0 color-mix(in srgb, white 4%, transparent);
+    }
+
+    [data-theme="graphite"] {
+      --bg: #0a0a0b;
+      --surface: #141416;
+      --surface-raised: #1c1c1f;
+      --panel: var(--surface-raised);
+      --ink: #ececec;
+      --text: var(--ink);
+      --muted: #8f8f96;
+      --accent: #4a9b90;
+      --accent-soft: color-mix(in srgb, var(--accent) 20%, transparent);
+      --accent-hot: #d4786a;
+      --ok: #6bbf8a;
+      --warn: #d4a85a;
+      --bad: #d4786a;
+      --line: #2a2a2e;
+      --you-bg: #1a1f1e;
+      --bot-bg: #18181b;
+      --lamp: #161618;
+      --radius: 12px;
+      --radius-sm: 8px;
+      --font-ui: "DM Sans", "IBM Plex Sans JP", "Hiragino Sans", sans-serif;
+      --font-body: "IBM Plex Sans JP", "Hiragino Sans", "Noto Sans JP", sans-serif;
+      --shadow-soft: 0 1px 0 color-mix(in srgb, white 3%, transparent);
+    }
+
+    [data-theme="day"] {
+      --bg: #eef1f4;
+      --surface: #f7f8fa;
+      --surface-raised: #ffffff;
+      --panel: var(--surface-raised);
+      --ink: #1c2430;
+      --text: var(--ink);
+      --muted: #5c6675;
+      --accent: #2f8a7f;
+      --accent-soft: color-mix(in srgb, var(--accent) 16%, transparent);
+      --accent-hot: #c45f52;
+      --ok: #2f9a5f;
+      --warn: #b8862e;
+      --bad: #c45f52;
+      --line: #d5dce6;
+      --you-bg: #e8f3f1;
+      --bot-bg: #ffffff;
+      --lamp: #f0ebe3;
+      --radius: 12px;
+      --radius-sm: 8px;
+      --font-ui: "DM Sans", "IBM Plex Sans JP", "Hiragino Sans", sans-serif;
+      --font-body: "IBM Plex Sans JP", "Hiragino Sans", "Noto Sans JP", sans-serif;
+      --shadow-soft: 0 1px 2px color-mix(in srgb, #1c2430 8%, transparent);
+    }
+
+    [data-theme="cloud"] {
+      --bg: #e8eaee;
+      --surface: #f2f3f6;
+      --surface-raised: #ffffff;
+      --panel: var(--surface-raised);
+      --ink: #1a1f28;
+      --text: var(--ink);
+      --muted: #606874;
+      --accent: #2d7f8a;
+      --accent-soft: color-mix(in srgb, var(--accent) 14%, transparent);
+      --accent-hot: #c45f52;
+      --ok: #2f9a5f;
+      --warn: #b8862e;
+      --bad: #c45f52;
+      --line: #c9cdd5;
+      --you-bg: #e4eef0;
+      --bot-bg: #ffffff;
+      --lamp: #eceef2;
+      --radius: 12px;
+      --radius-sm: 8px;
+      --font-ui: "DM Sans", "IBM Plex Sans JP", "Hiragino Sans", sans-serif;
+      --font-body: "IBM Plex Sans JP", "Hiragino Sans", "Noto Sans JP", sans-serif;
+      --shadow-soft: 0 1px 2px color-mix(in srgb, #1a1f28 7%, transparent);
+    }
+
+    [data-theme="frost"] {
+      --bg: #e6eef4;
+      --surface: #f3f7fa;
+      --surface-raised: #ffffff;
+      --panel: var(--surface-raised);
+      --ink: #15202b;
+      --text: var(--ink);
+      --muted: #5a6b7a;
+      --accent: #2b8b7e;
+      --accent-soft: color-mix(in srgb, var(--accent) 14%, transparent);
+      --accent-hot: #c45f52;
+      --ok: #2f9a5f;
+      --warn: #b8862e;
+      --bad: #c45f52;
+      --line: #c8d5e0;
+      --you-bg: #e3f0ed;
+      --bot-bg: #ffffff;
+      --lamp: #eaf1f6;
+      --radius: 12px;
+      --radius-sm: 8px;
+      --font-ui: "DM Sans", "IBM Plex Sans JP", "Hiragino Sans", sans-serif;
+      --font-body: "IBM Plex Sans JP", "Hiragino Sans", "Noto Sans JP", sans-serif;
+      --shadow-soft: 0 1px 2px color-mix(in srgb, #15202b 7%, transparent);
+    }
+
+    .theme-group {
+      margin-bottom: 1.25rem;
+    }
+
+    .theme-group-title {
+      margin: 0 0 0.55rem;
+      font-family: var(--font-ui);
+      font-size: 0.78rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .theme-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+      gap: 0.65rem;
+    }
+
+    .theme-card {
+      display: flex;
+      flex-direction: column;
+      gap: 0.45rem;
+      align-items: stretch;
+      padding: 0.65rem 0.7rem;
+      margin: 0;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-sm);
+      background: var(--surface);
+      color: var(--ink);
+      cursor: pointer;
+      text-align: left;
+      font-family: var(--font-ui);
+      font-size: 0.88rem;
+      font-weight: 500;
+      box-shadow: none;
+    }
+
+    .theme-card:hover {
+      border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+    }
+
+    .theme-card.on {
+      border-color: var(--accent);
+      background: var(--accent-soft);
+      box-shadow: 0 0 0 1px var(--accent);
+    }
+
+    .theme-swatches {
+      display: flex;
+      gap: 0.28rem;
+    }
+
+    .theme-swatch {
+      width: 1.15rem;
+      height: 1.15rem;
+      border-radius: 4px;
+      border: 1px solid color-mix(in srgb, var(--ink) 18%, transparent);
+      flex-shrink: 0;
+    }
+
+    .theme-card-label {
+      line-height: 1.2;
+    }
+
     * { box-sizing: border-box; }
+
+    html, body {
+      height: 100%;
+    }
+
     body {
       margin: 0;
-      min-height: 100vh;
-      font-family: "Segoe UI", "Hiragino Sans", "Noto Sans JP", sans-serif;
-      background:
-        radial-gradient(1200px 600px at 10% -10%, #2a3a4a 0%, transparent 55%),
-        radial-gradient(900px 500px at 100% 0%, #3a2a28 0%, transparent 50%),
-        var(--bg);
+      min-height: 100%;
+      font-family: var(--font-body);
+      background: var(--bg);
       color: var(--ink);
+      -webkit-font-smoothing: antialiased;
     }
-    main {
-      max-width: 720px;
+
+    .app {
+      max-width: 760px;
       margin: 0 auto;
-      padding: 2rem 1.25rem 3rem;
-    }
-    h1 {
-      font-weight: 650;
-      letter-spacing: 0.04em;
-      margin: 0 0 0.35rem;
-    }
-    .sub { color: var(--muted); margin-bottom: 1rem; }
-    .tabs {
-      display: flex;
-      gap: 0.5rem;
-      margin-bottom: 1rem;
-      flex-wrap: wrap;
-    }
-    .tab {
-      background: transparent;
-      border: 1px solid var(--line);
-      color: var(--muted);
-      padding: 0.55rem 1rem;
-      border-radius: 999px;
-      font-size: 0.95rem;
-    }
-    .tab.active {
-      background: var(--accent);
-      border-color: var(--accent);
-      color: white;
-    }
-    .panel {
-      background: color-mix(in srgb, var(--panel) 92%, black);
-      border: 1px solid var(--line);
-      border-radius: 16px;
-      padding: 1.25rem;
-      margin-bottom: 1rem;
-    }
-    .mode { display: none; }
-    .mode.active { display: block; }
-    #log {
-      min-height: 280px;
-      max-height: 50vh;
-      overflow: auto;
+      min-height: 100%;
+      height: 100%;
+      padding: 1rem 1.15rem 1.15rem;
       display: flex;
       flex-direction: column;
       gap: 0.75rem;
     }
-    .bubble {
-      padding: 0.75rem 0.9rem;
-      border-radius: 12px;
-      line-height: 1.55;
-      white-space: pre-wrap;
-    }
-    .you { align-self: flex-end; background: #2d3d52; max-width: 85%; }
-    .bot { align-self: flex-start; background: #2a333c; max-width: 85%; }
-    .meta { font-size: 0.75rem; color: var(--muted); margin-bottom: 0.25rem; }
-    .controls {
+
+    /* —— Header —— */
+    .app-header {
       display: flex;
-      gap: 0.75rem;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 1rem;
+      flex-wrap: wrap;
+      flex-shrink: 0;
+      padding: 0.15rem 0.1rem 0.35rem;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .brand {
+      margin: 0;
+      font-family: var(--font-ui);
+      font-weight: 600;
+      font-size: 1.55rem;
+      letter-spacing: 0.06em;
+      line-height: 1.1;
+    }
+
+    .brand-mark {
+      display: inline-block;
+      height: 1.2em;
+      width: auto;
+      vertical-align: -0.18em;
+      margin-right: 0.28em;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 0.15rem;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .tab {
+      background: transparent;
+      border: 0;
+      border-bottom: 2px solid transparent;
+      border-radius: 0;
+      color: var(--muted);
+      padding: 0.45rem 0.7rem;
+      font-family: var(--font-ui);
+      font-size: 0.88rem;
+      font-weight: 500;
+      letter-spacing: 0.02em;
+    }
+
+    .tab:hover {
+      color: var(--ink);
+    }
+
+    .tab.active {
+      background: transparent;
+      color: var(--ink);
+      border-bottom-color: var(--accent);
+    }
+
+    /* —— Shared surfaces —— */
+    .panel {
+      background: var(--surface-raised);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 1.15rem 1.2rem;
+      margin-bottom: 0.85rem;
+      box-shadow: var(--shadow-soft);
+    }
+
+    .mode {
+      display: none;
+      flex: 1;
+      min-height: 0;
+      overflow: auto;
+    }
+
+    .mode.active {
+      display: block;
+    }
+
+    /* Chat fills the viewport */
+    #modeChat.mode.active {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      gap: 0.65rem;
+    }
+
+    .chat-stage {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    #log {
+      flex: 1;
+      min-height: 0;
+      overflow: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 0.85rem;
+      padding: 1.15rem 1.1rem 1.25rem;
+      scroll-behavior: smooth;
+    }
+
+    #log:empty::after {
+      content: "Hold to talk — or type below if Whisper misses you.";
+      margin: auto;
+      max-width: 16rem;
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.92rem;
+      line-height: 1.5;
+      opacity: 0.85;
+    }
+
+    .bubble {
+      padding: 0.7rem 0.95rem;
+      border-radius: var(--radius-sm);
+      line-height: 1.65;
+      white-space: pre-wrap;
+      max-width: min(92%, 34rem);
+      font-size: 1.02rem;
+      animation: turn-in 0.28s ease-out;
+    }
+
+    @keyframes turn-in {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: none; }
+    }
+
+    .you {
+      align-self: flex-end;
+      background: var(--you-bg);
+      border: 1px solid color-mix(in srgb, var(--lamp) 40%, var(--line));
+    }
+
+    .bot {
+      align-self: flex-start;
+      background: var(--bot-bg);
+      border: 1px solid var(--line);
+    }
+
+    .meta {
+      font-family: var(--font-ui);
+      font-size: 0.7rem;
+      font-weight: 500;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 0.3rem;
+      opacity: 0.9;
+    }
+
+    .composer {
+      flex-shrink: 0;
+      background: var(--surface-raised);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 0.85rem 1rem 0.95rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.65rem;
+    }
+
+    .composer-status {
+      font-family: var(--font-ui);
+      font-size: 0.8rem;
+      color: var(--muted);
+      min-height: 1.2em;
+    }
+
+    .composer-actions {
+      display: flex;
+      gap: 0.65rem;
       align-items: center;
       flex-wrap: wrap;
     }
+
+    .controls {
+      display: flex;
+      gap: 0.65rem;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
     button {
       border: 0;
-      border-radius: 999px;
-      padding: 0.85rem 1.4rem;
-      font-size: 1rem;
+      border-radius: var(--radius-sm);
+      padding: 0.7rem 1.2rem;
+      font-family: var(--font-ui);
+      font-size: 0.95rem;
       font-weight: 600;
       cursor: pointer;
-      color: white;
+      color: var(--ink);
       background: var(--accent);
+      transition: background 0.15s ease, transform 0.12s ease, box-shadow 0.15s ease;
     }
-    button.secondary { background: #3a4654; }
-    button:disabled { opacity: 0.5; cursor: not-allowed; }
-    button.recording { background: var(--accent-hot); }
-    #status, #practiceStatus, #settingsStatus { color: var(--muted); font-size: 0.9rem; }
+
+    button:hover:not(:disabled) {
+      filter: brightness(1.06);
+    }
+
+    button:active:not(:disabled) {
+      transform: translateY(1px);
+    }
+
+    button.secondary {
+      background: color-mix(in srgb, var(--surface) 70%, var(--line));
+      color: var(--ink);
+      border: 1px solid var(--line);
+    }
+
+    button:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+      filter: none;
+    }
+
+    #talk {
+      min-width: 9.5rem;
+      padding: 0.85rem 1.5rem;
+      font-size: 1rem;
+      background: var(--accent);
+      box-shadow: 0 0 0 0 var(--accent-soft);
+    }
+
+    #talk.recording {
+      background: var(--accent-hot);
+      animation: listen-pulse 1.6s ease-in-out infinite;
+    }
+
+    @keyframes listen-pulse {
+      0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent-hot) 35%, transparent); }
+      50% { box-shadow: 0 0 0 10px transparent; }
+    }
+
+    button.recording {
+      background: var(--accent-hot);
+    }
+
+    #status, #practiceStatus, #settingsStatus, #profilesStatus, #voiceStatus,
+    #profileStatus, #memoryStatus, #presetEditorStatus, #quizStatus {
+      color: var(--muted);
+      font-size: 0.88rem;
+      font-family: var(--font-ui);
+    }
+
     .chat-text-row {
       display: flex;
       gap: 0.5rem;
       align-items: center;
-      margin-top: 0.65rem;
       width: 100%;
     }
+
     .chat-text-row input {
       flex: 1;
       min-width: 0;
-      background: #1a222c;
-      border: 1px solid #3a4654;
-      border-radius: 999px;
-      color: var(--text);
-      padding: 0.55rem 1rem;
-      font-size: 0.95rem;
-    }
-    .chat-text-row input::placeholder { color: var(--muted); }
-    .chat-text-row button {
-      padding: 0.55rem 1.1rem;
+      background: var(--bg);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-sm);
+      color: var(--ink);
+      padding: 0.55rem 0.85rem;
+      font-family: var(--font-body);
       font-size: 0.9rem;
     }
+
+    .chat-text-row input::placeholder {
+      color: color-mix(in srgb, var(--muted) 85%, transparent);
+    }
+
+    .chat-text-row input:focus {
+      outline: none;
+      border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+    }
+
+    .chat-text-row button {
+      padding: 0.5rem 0.95rem;
+      font-size: 0.85rem;
+      font-weight: 500;
+    }
+
     .target {
       font-size: 1.35rem;
-      line-height: 1.6;
+      line-height: 1.65;
       margin: 0.5rem 0 1rem;
     }
+
     .disclaimer {
       font-size: 0.8rem;
       color: var(--muted);
       margin-top: 0.75rem;
+      line-height: 1.45;
     }
+
     .score-wrap { margin-top: 0.75rem; }
     .score-bar {
-      height: 10px;
+      height: 8px;
       border-radius: 999px;
-      background: #1b2229;
+      background: var(--bg);
       overflow: hidden;
       margin: 0.4rem 0 0.5rem;
     }
@@ -148,67 +567,472 @@
     .score-fill.clear { background: var(--ok); }
     .score-fill.close { background: var(--warn); }
     .score-fill.unclear { background: var(--bad); }
-    .heard, .tip { margin-top: 0.6rem; line-height: 1.5; }
+    .heard, .tip { margin-top: 0.6rem; line-height: 1.55; }
+
     .field { margin-bottom: 1.1rem; }
     .field label {
       display: block;
-      font-size: 0.85rem;
+      font-family: var(--font-ui);
+      font-size: 0.82rem;
       color: var(--muted);
       margin-bottom: 0.45rem;
     }
+
     .seg {
       display: inline-flex;
       border: 1px solid var(--line);
-      border-radius: 999px;
+      border-radius: var(--radius-sm);
       overflow: hidden;
     }
     .seg button {
       border-radius: 0;
       background: transparent;
       color: var(--muted);
-      padding: 0.65rem 1.1rem;
-      font-size: 0.95rem;
+      padding: 0.6rem 1rem;
+      font-size: 0.9rem;
+      border: 0;
     }
     .seg button.on {
-      background: var(--accent);
-      color: white;
+      background: var(--accent-soft);
+      color: var(--ink);
     }
+
     select, textarea, input[type="number"] {
       width: 100%;
-      background: #1b2229;
+      background: var(--bg);
       color: var(--ink);
       border: 1px solid var(--line);
-      border-radius: 10px;
+      border-radius: var(--radius-sm);
       padding: 0.7rem 0.8rem;
       font: inherit;
       color-scheme: dark;
     }
-    select option, select optgroup {
-      background: #1b2229;
-      color: #e8eef4;
+
+    .field input[type="text"] {
+      width: 100%;
+      background: var(--bg);
+      color: var(--ink);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-sm);
+      padding: 0.7rem 0.8rem;
+      font: inherit;
+      color-scheme: dark;
     }
+
+    select option, select optgroup {
+      background: var(--surface-raised);
+      color: var(--ink);
+    }
+
     textarea { min-height: 110px; resize: vertical; }
     .preset-desc { font-size: 0.85rem; color: var(--muted); margin-top: 0.4rem; }
+
+    .engine-alert {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.75rem;
+      flex-shrink: 0;
+      margin: 0;
+      padding: 0.7rem 0.95rem;
+      border-radius: var(--radius-sm);
+      background: color-mix(in srgb, var(--warn) 12%, var(--surface-raised));
+      border: 1px solid color-mix(in srgb, var(--warn) 35%, var(--line));
+      color: var(--ink);
+      font-size: 0.88rem;
+      line-height: 1.45;
+      animation: alert-in 0.22s ease-out;
+    }
+
+    @keyframes alert-in {
+      from { opacity: 0; transform: translateY(-4px); }
+      to { opacity: 1; transform: none; }
+    }
+
+    .engine-alert[hidden] { display: none; }
+    .engine-alert .engine-alert-body { flex: 1; min-width: 0; }
+    .engine-alert button {
+      padding: 0.3rem 0.7rem;
+      font-size: 0.78rem;
+      font-weight: 500;
+      flex-shrink: 0;
+    }
+
+    .try-saying {
+      margin-top: 0.5rem;
+      padding-top: 0.45rem;
+      border-top: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
+      font-size: 0.84rem;
+      color: var(--muted);
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.45rem;
+    }
+
+    .try-saying .phrase {
+      color: var(--ink);
+      font-weight: 500;
+    }
+
+    .try-saying button {
+      padding: 0.22rem 0.65rem;
+      font-size: 0.72rem;
+      font-weight: 500;
+    }
+
+    /* —— Practice / Place me / Settings —— */
+    #modePractice.mode.active,
+    #modeQuiz.mode.active,
+    #modeSettings.mode.active {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      gap: 0.65rem;
+    }
+
+    .practice-stage,
+    .quiz-stage {
+      flex: 1;
+      min-height: 0;
+      overflow: auto;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 1.15rem 1.15rem 1.25rem;
+    }
+
+    .practice-stage .target {
+      margin: 0.35rem 0 0.85rem;
+      font-size: 1.4rem;
+      line-height: 1.65;
+    }
+
+    .practice-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.45rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .practice-actions button {
+      padding: 0.45rem 0.85rem;
+      font-size: 0.82rem;
+      font-weight: 500;
+    }
+
+    .practice-result {
+      margin-top: 1rem;
+      padding-top: 0.9rem;
+      border-top: 1px solid var(--line);
+    }
+
+    .quiz-stage .panel,
+    .quiz-stage > div {
+      background: transparent;
+      border: 0;
+      box-shadow: none;
+      padding: 0;
+      margin: 0 0 1rem;
+    }
+
+    .quiz-choices {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 0.45rem;
+      margin: 0.75rem 0;
+    }
+
+    .quiz-choices button {
+      text-align: left;
+      font-weight: 500;
+      padding: 0.75rem 1rem;
+    }
+
+    .quiz-soft-banner {
+      color: var(--accent);
+      margin: 0.5rem 0 0.75rem;
+    }
+
+    .quiz-stage .section-title {
+      margin: 0.25rem 0 0.5rem;
+      font-family: var(--font-ui);
+      font-size: 1.15rem;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+
+    .settings-layout {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      gap: 0.65rem;
+      overflow: hidden;
+    }
+
+    .settings-sidebar {
+      flex: 0 0 10.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.45rem;
+      min-height: 0;
+    }
+
+    .settings-search-wrap {
+      flex-shrink: 0;
+    }
+
+    .settings-search {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 0.5rem 0.65rem;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-sm);
+      background: var(--surface);
+      color: var(--ink);
+      font-family: var(--font-ui);
+      font-size: 0.82rem;
+    }
+
+    .settings-search:focus {
+      outline: none;
+      border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+      box-shadow: 0 0 0 2px var(--accent-soft);
+    }
+
+    .settings-search-meta {
+      margin: 0.25rem 0 0;
+      font-size: 0.72rem;
+      color: var(--muted);
+      min-height: 1em;
+    }
+
+    .settings-rail {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 0.15rem;
+      padding: 0.45rem;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      overflow: auto;
+    }
+
+    .settings-rail button {
+      background: transparent;
+      border: 0;
+      border-radius: var(--radius-sm);
+      color: var(--muted);
+      text-align: left;
+      padding: 0.55rem 0.65rem;
+      font-size: 0.84rem;
+      font-weight: 500;
+      box-shadow: none;
+    }
+
+    .settings-rail button:hover {
+      color: var(--ink);
+      background: color-mix(in srgb, var(--surface-raised) 80%, transparent);
+      filter: none;
+    }
+
+    .settings-rail button.active {
+      color: var(--ink);
+      background: var(--accent-soft);
+    }
+
+    .settings-pane {
+      flex: 1;
+      min-width: 0;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    .settings-pane-scroll {
+      flex: 1;
+      min-height: 0;
+      overflow: auto;
+      padding: 1.1rem 1.15rem 1rem;
+    }
+
+    .settings-section[hidden] {
+      display: none !important;
+    }
+
+    .settings-section > .section-title {
+      margin: 0 0 0.35rem;
+      font-family: var(--font-ui);
+      font-size: 1.05rem;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+
+    .settings-section-subhead {
+      margin: 1.15rem 0 0.35rem;
+      font-family: var(--font-ui);
+      font-size: 0.92rem;
+      font-weight: 600;
+      color: var(--muted);
+      letter-spacing: 0.02em;
+    }
+
+    .settings-field-hit {
+      border-radius: var(--radius-sm);
+      box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 55%, var(--line));
+      background: color-mix(in srgb, var(--accent-soft) 55%, transparent);
+      padding: 0.35rem 0.45rem;
+      margin-left: -0.45rem;
+      margin-right: -0.45rem;
+    }
+
+    .settings-searchable[hidden] {
+      display: none !important;
+    }
+
+    /* Theme-aware range slider */
+    .kaiwa-range {
+      -webkit-appearance: none;
+      appearance: none;
+      width: min(16rem, 100%);
+      height: 1.5rem;
+      background: transparent;
+      --range-pct: 12%;
+      cursor: pointer;
+    }
+
+    .kaiwa-range:focus {
+      outline: none;
+    }
+
+    .kaiwa-range:focus-visible::-webkit-slider-thumb {
+      box-shadow: 0 0 0 3px var(--accent-soft);
+    }
+
+    .kaiwa-range:focus-visible::-moz-range-thumb {
+      box-shadow: 0 0 0 3px var(--accent-soft);
+    }
+
+    .kaiwa-range::-webkit-slider-runnable-track {
+      height: 0.45rem;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: linear-gradient(
+        to right,
+        var(--accent) 0%,
+        var(--accent) var(--range-pct),
+        var(--surface-raised) var(--range-pct),
+        var(--surface-raised) 100%
+      );
+    }
+
+    .kaiwa-range::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 1rem;
+      height: 1rem;
+      margin-top: calc((0.45rem - 1rem) / 2 - 1px);
+      border-radius: 50%;
+      border: 2px solid var(--surface);
+      background: var(--accent);
+      box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 40%, var(--line));
+    }
+
+    .kaiwa-range::-moz-range-track {
+      height: 0.45rem;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: var(--surface-raised);
+    }
+
+    .kaiwa-range::-moz-range-progress {
+      height: 0.45rem;
+      border-radius: 999px;
+      background: var(--accent);
+    }
+
+    .kaiwa-range::-moz-range-thumb {
+      width: 1rem;
+      height: 1rem;
+      border-radius: 50%;
+      border: 2px solid var(--surface);
+      background: var(--accent);
+      box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 40%, var(--line));
+    }
+
+    .settings-save-bar {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+      padding: 0.7rem 1.15rem;
+      border-top: 1px solid var(--line);
+      background: var(--surface-raised);
+    }
+
+    .settings-save-bar[hidden] {
+      display: none !important;
+    }
+
+    @media (max-width: 560px) {
+      .app { padding: 0.75rem; }
+      .brand { font-size: 1.35rem; }
+      .bubble { max-width: 95%; font-size: 0.98rem; }
+      #talk { flex: 1; min-width: 0; }
+
+      .settings-layout {
+        flex-direction: column;
+      }
+
+      .settings-rail {
+        flex: 0 0 auto;
+        flex-direction: row;
+        overflow-x: auto;
+        overflow-y: hidden;
+        gap: 0.25rem;
+        padding: 0.35rem;
+      }
+
+      .settings-rail button {
+        flex: 0 0 auto;
+        white-space: nowrap;
+      }
+    }
   </style>
 </head>
 <body>
-  <main>
-    <h1>Kaiwa</h1>
-    <p class="sub">Japanese conversation + repeat practice</p>
+  <div class="app">
+    <header class="app-header">
+      <h1 class="brand"><img class="brand-mark" src="/static/icons/kaiwa-text-only.png" width="48" height="48" alt="" />Kaiwa</h1>
+      <nav class="tabs" role="tablist" aria-label="Modes">
+        <button class="tab active" type="button" data-mode="chat">Chat</button>
+        <button class="tab" type="button" data-mode="practice">Practice</button>
+        <button class="tab" type="button" data-mode="quiz">Place me</button>
+        <button class="tab" type="button" data-mode="settings">Settings</button>
+      </nav>
+    </header>
 
-    <div class="tabs" role="tablist">
-      <button class="tab active" type="button" data-mode="chat">Chat</button>
-      <button class="tab" type="button" data-mode="practice">Practice</button>
-      <button class="tab" type="button" data-mode="quiz">Place me</button>
-      <button class="tab" type="button" data-mode="settings">Settings</button>
+    <div id="engineAlert" class="engine-alert" hidden role="status">
+      <div class="engine-alert-body" id="engineAlertText"></div>
+      <button type="button" id="engineAlertDismiss" class="secondary">Dismiss</button>
     </div>
 
     <section class="mode active" id="modeChat">
-      <div class="panel" id="log" aria-live="polite"></div>
-      <div class="panel controls">
-        <button id="talk" type="button">Hold to talk</button>
-        <button id="replayLast" class="secondary" type="button" disabled>Replay</button>
-        <span id="status">Ready</span>
+      <div class="chat-stage">
+        <div id="log" aria-live="polite"></div>
+      </div>
+      <div class="composer">
+        <div class="composer-status" id="status">Ready</div>
+        <div class="composer-actions">
+          <button id="talk" type="button">Hold to talk</button>
+          <button id="replayLast" class="secondary" type="button" disabled>Replay</button>
+        </div>
         <div class="chat-text-row">
           <input id="chatText" type="text" maxlength="500" placeholder="Type if Whisper missed you…" autocomplete="off" />
           <button id="chatTextSend" class="secondary" type="button">Send</button>
@@ -217,11 +1041,11 @@
     </section>
 
     <section class="mode" id="modePractice">
-      <div class="panel">
-        <div class="meta">Say it again (optional warm-up)</div>
+      <div class="practice-stage">
+        <div class="meta">Say it again</div>
         <p class="target" id="targetText">…</p>
         <p class="preset-desc" id="targetNote" hidden></p>
-        <div class="controls">
+        <div class="practice-actions">
           <button id="playModel" class="secondary" type="button">Play model</button>
           <button id="nextPhrase" class="secondary" type="button">Light phrase</button>
           <button id="practiceLast" class="secondary" type="button">Last reply</button>
@@ -229,278 +1053,389 @@
           <button id="practiceRecycle" class="secondary" type="button">Say again</button>
         </div>
         <p class="disclaimer">
-          Optional — chat is the main thing. This is just a low-stakes “say that line again.”
-          Score only means what the app heard vs the target (not a grade).
+          Optional warm-up — chat is the main thing. Play the model, then hold to repeat.
+          The score is intelligibility (what the app heard vs the target), not native accent.
         </p>
-      </div>
-      <div class="panel controls">
-        <button id="practiceTalk" type="button">Hold to repeat</button>
-        <span id="practiceStatus">Ready</span>
-      </div>
-      <div class="panel" id="practiceResult" hidden>
-        <div class="meta">What the app heard</div>
-        <div class="score-wrap">
-          <strong id="scoreLabel">—</strong>
-          <div class="score-bar"><div class="score-fill" id="scoreFill"></div></div>
+        <div class="practice-result" id="practiceResult" hidden>
+          <div class="meta">Intelligibility · what the app heard</div>
+          <div class="score-wrap">
+            <strong id="scoreLabel">—</strong>
+            <div class="score-bar"><div class="score-fill" id="scoreFill"></div></div>
+          </div>
+          <div class="heard"><span class="meta">Heard</span><div id="heardText"></div></div>
+          <div class="tip"><span class="meta">Tip</span><div id="tipText"></div></div>
         </div>
-        <div class="heard"><span class="meta">Heard</span><div id="heardText"></div></div>
-        <div class="tip"><span class="meta">Tip</span><div id="tipText"></div></div>
+      </div>
+      <div class="composer">
+        <div class="composer-status" id="practiceStatus">Ready</div>
+        <div class="composer-actions">
+          <button id="practiceTalk" type="button">Hold to repeat</button>
+        </div>
       </div>
     </section>
 
     <section class="mode" id="modeQuiz">
-      <div class="panel" id="quizIntro">
-        <div class="meta">Where you’re at</div>
-        <p class="disclaimer" id="quizIntroCopy">
-          Tell Kaiwa where you’re at — no test, just a few self-ratings.
-          This sets how hard chat aims (you can change it anytime in Settings).
-        </p>
-        <p class="disclaimer" id="quizSoftBanner" hidden style="color:var(--accent)">
-          Quick setup for this profile — Skip anytime. Chat still works; Kaiwa won’t assume your level until you finish.
-        </p>
-        <div class="controls">
-          <button id="quizStart" type="button">Start</button>
-          <button id="quizSkip" class="secondary" type="button">Skip for now</button>
-          <span id="quizStatus">Ready when you are</span>
+      <div class="quiz-stage">
+        <div id="quizIntro">
+          <div class="meta">Where you’re at</div>
+          <p class="section-title">Place me</p>
+          <p class="disclaimer" id="quizIntroCopy">
+            Tell Kaiwa where you’re at — no test, just a few self-ratings.
+            This sets how hard chat aims (you can change it anytime in Settings).
+          </p>
+          <p class="disclaimer quiz-soft-banner" id="quizSoftBanner" hidden>
+            Quick setup for this profile — Skip anytime. Chat still works; Kaiwa won’t assume your level until you finish.
+          </p>
+          <div class="controls" style="margin-top:1rem">
+            <button id="quizStart" type="button">Start</button>
+            <button id="quizSkip" class="secondary" type="button">Skip for now</button>
+            <span id="quizStatus">Ready when you are</span>
+          </div>
         </div>
-      </div>
-      <div class="panel" id="quizActive" hidden>
-        <div class="meta" id="quizProgress">Question 1 of 9</div>
-        <p class="target" id="quizPrompt" style="margin:0.5rem 0 0.85rem">—</p>
-        <div id="quizChoices" class="controls" style="flex-direction:column;align-items:stretch"></div>
-        <div id="quizExtra" class="field" hidden style="margin-top:0.75rem">
-          <input id="quizOtherInput" type="text" maxlength="120" placeholder="Your topic…" autocomplete="off" />
-          <textarea id="quizNoteInput" maxlength="300" rows="3" placeholder="Optional — anything helpful for Kaiwa…" hidden></textarea>
+        <div id="quizActive" hidden>
+          <div class="meta" id="quizProgress">Question 1 of 9</div>
+          <p class="target" id="quizPrompt" style="margin:0.5rem 0 0.85rem">—</p>
+          <div id="quizChoices" class="quiz-choices"></div>
+          <div id="quizExtra" class="field" hidden style="margin-top:0.75rem">
+            <input id="quizOtherInput" type="text" maxlength="120" placeholder="Your topic…" autocomplete="off" />
+            <textarea id="quizNoteInput" maxlength="300" rows="3" placeholder="Optional — anything helpful for Kaiwa…" hidden></textarea>
+          </div>
+          <p class="preset-desc" id="quizFeedback"></p>
+          <div class="controls">
+            <button id="quizNext" type="button" hidden>Continue</button>
+            <button id="quizSkipActive" class="secondary" type="button">Skip for now</button>
+          </div>
         </div>
-        <p class="preset-desc" id="quizFeedback"></p>
-        <div class="controls">
-          <button id="quizNext" type="button" hidden>Continue</button>
-          <button id="quizSkipActive" class="secondary" type="button">Skip for now</button>
-        </div>
-      </div>
-      <div class="panel" id="quizResults" hidden>
-        <div class="meta">Here’s what Kaiwa will use</div>
-        <p class="target" id="quizScoreLabel">—</p>
-        <p class="disclaimer" id="quizResultNote"></p>
-        <div class="controls">
-          <button id="quizRetake" type="button">Try again</button>
-          <button id="quizDoneChat" class="secondary" type="button">Go to Chat</button>
+        <div id="quizResults" hidden>
+          <div class="meta">Here’s what Kaiwa will use</div>
+          <p class="target" id="quizScoreLabel">—</p>
+          <p class="disclaimer" id="quizResultNote"></p>
+          <div class="controls" style="margin-top:1rem">
+            <button id="quizRetake" type="button">Try again</button>
+            <button id="quizDoneChat" class="secondary" type="button">Go to Chat</button>
+          </div>
         </div>
       </div>
     </section>
 
     <section class="mode" id="modeSettings">
-      <div class="panel">
-        <div class="meta">Profiles</div>
-        <p class="disclaimer">
-          Each profile stores your settings, learner level, memory, and custom personalities.
-          Chat logs stay shared. Switching clears the current chat session.
-        </p>
-        <div class="field">
-          <label for="profileSelect">Active profile</label>
-          <select id="profileSelect"></select>
-          <p class="preset-desc" id="profileActiveBadge"></p>
-        </div>
-        <div class="controls">
-          <button id="switchProfileBtn" class="secondary" type="button">Switch</button>
-          <button id="newProfileBtn" type="button">New</button>
-          <button id="resetUserProfileBtn" class="secondary" type="button">Reset</button>
-          <button id="deleteProfileBtn" class="secondary" type="button">Delete</button>
-        </div>
-        <div class="controls" style="margin-top:0.6rem">
-          <button id="exportProfileBtn" class="secondary" type="button">Export</button>
-          <button id="importProfileBtn" class="secondary" type="button">Import</button>
-          <input id="importProfileFile" type="file" accept="application/json,.json" hidden />
-          <span id="profilesStatus"></span>
-        </div>
-      </div>
-      <div class="panel">
-        <div class="field">
-          <label>Correction style</label>
-          <div class="seg" id="correctionSeg">
-            <button type="button" data-style="gentle" class="on">Gentle</button>
-            <button type="button" data-style="critique">Critique</button>
+      <div class="settings-layout">
+        <div class="settings-sidebar">
+          <div class="settings-search-wrap">
+            <input
+              id="settingsSearch"
+              class="settings-search"
+              type="search"
+              placeholder="Search settings…"
+              autocomplete="off"
+              spellcheck="false"
+            />
+            <p class="settings-search-meta" id="settingsSearchMeta" aria-live="polite"></p>
           </div>
-          <p class="disclaimer" id="correctionHelp">Soft rephrases while keeping the conversation going.</p>
+          <nav class="settings-rail" aria-label="Settings sections">
+            <button type="button" class="active" data-settings-section="profiles">Profiles</button>
+            <button type="button" data-settings-section="appearance">Appearance</button>
+            <button type="button" data-settings-section="tutor">Tutor</button>
+            <button type="button" data-settings-section="learning">Learning</button>
+            <button type="button" data-settings-section="memory">Memory</button>
+            <button type="button" data-settings-section="speech">Speech</button>
+          </nav>
         </div>
-        <div class="field">
-          <label>Language help</label>
-          <div class="seg" id="languageSeg">
-            <button type="button" data-policy="adaptive" class="on">Adaptive</button>
-            <button type="button" data-policy="immerse">Immersion</button>
+        <div class="settings-pane">
+          <div class="settings-pane-scroll">
+            <div class="settings-section" data-settings-section="profiles">
+              <h2 class="section-title">Profiles</h2>
+              <p class="disclaimer settings-searchable" data-settings-search="profile profiles switch export import backup account">
+                Each profile stores your settings, learner level, memory, and custom personalities.
+                Chat logs stay shared. Switching clears the current chat session.
+              </p>
+              <div class="field settings-searchable" data-settings-search="active profile select switch name">
+                <label for="profileSelect">Active profile</label>
+                <select id="profileSelect"></select>
+                <p class="preset-desc" id="profileActiveBadge"></p>
+              </div>
+              <div class="controls settings-searchable" data-settings-search="switch new reset delete profile">
+                <button id="switchProfileBtn" class="secondary" type="button">Switch</button>
+                <button id="newProfileBtn" type="button">New</button>
+                <button id="resetUserProfileBtn" class="secondary" type="button">Reset</button>
+                <button id="deleteProfileBtn" class="secondary" type="button">Delete</button>
+              </div>
+              <div class="controls settings-searchable" data-settings-search="export import backup json file" style="margin-top:0.6rem">
+                <button id="exportProfileBtn" class="secondary" type="button">Export</button>
+                <button id="importProfileBtn" class="secondary" type="button">Import</button>
+                <input id="importProfileFile" type="file" accept="application/json,.json" hidden />
+                <span id="profilesStatus"></span>
+              </div>
+            </div>
+
+            <div class="settings-section" data-settings-section="appearance" hidden>
+              <h2 class="section-title">Appearance</h2>
+              <p class="disclaimer settings-searchable" data-settings-search="theme themes appearance look dark light night day slate graphite cloud frost color" id="themeHelp">
+                Pick a look for Chat, Practice, Place me, and Settings. Save to keep it on this profile.
+              </p>
+              <div class="settings-searchable" data-settings-search="theme themes appearance look dark light night day slate graphite cloud frost color picker" id="themePickerWrap">
+                <div id="themePicker"></div>
+              </div>
+            </div>
+
+            <div class="settings-section" data-settings-section="tutor" hidden>
+              <h2 class="section-title">Tutor</h2>
+              <p class="disclaimer settings-searchable" data-settings-search="tutor conversation how kaiwa talks teaching style">
+                How Kaiwa teaches and sounds in chat — corrections, immersion, personality.
+              </p>
+              <div class="field settings-searchable" data-settings-search="correction style gentle critique fix rephrase">
+                <label>Correction style</label>
+                <div class="seg" id="correctionSeg">
+                  <button type="button" data-style="gentle" class="on">Gentle</button>
+                  <button type="button" data-style="critique">Critique</button>
+                </div>
+                <p class="disclaimer" id="correctionHelp">Soft rephrases while keeping the conversation going.</p>
+              </div>
+              <div class="field settings-searchable" data-settings-search="language help adaptive immersion immerse japanese english">
+                <label>Language help</label>
+                <div class="seg" id="languageSeg">
+                  <button type="button" data-policy="adaptive" class="on">Adaptive</button>
+                  <button type="button" data-policy="immerse">Immersion</button>
+                </div>
+                <p class="disclaimer" id="languageHelp">Japanese by default; brief English corrections only when you're clearly struggling.</p>
+              </div>
+              <div class="field settings-searchable" data-settings-search="help language english japanese practice tips gloss">
+                <label>Help language</label>
+                <div class="seg" id="helpLangSeg">
+                  <button type="button" data-help="en" class="on">English</button>
+                  <button type="button" data-help="ja">Japanese</button>
+                </div>
+                <p class="disclaimer" id="helpLangHelp">Language for Practice tips (and Adaptive English help notes). Chat immersion still speaks Japanese.</p>
+              </div>
+              <div class="field settings-searchable" data-settings-search="speech register casual formal polite tameguchi">
+                <label>Speech register</label>
+                <div class="seg" id="registerSeg">
+                  <button type="button" data-register="casual" class="on">Casual</button>
+                  <button type="button" data-register="formal">Formal</button>
+                </div>
+                <p class="disclaimer" id="registerHelp">Friend-level ため口. Personality vibe still applies on top.</p>
+              </div>
+              <div class="field settings-searchable" data-settings-search="naturalness tips textbook stiff natural phrasing">
+                <label>Naturalness tips</label>
+                <div class="seg" id="naturalnessSeg">
+                  <button type="button" data-natural="on" class="on">On</button>
+                  <button type="button" data-natural="off">Off</button>
+                </div>
+                <p class="disclaimer" id="naturalnessHelp">Flags textbook-stiff lines (e.g. 「僕は元気ですよ」→「元気だよ」) even when grammar is fine.</p>
+              </div>
+              <div class="field settings-searchable" data-settings-search="model routing auto flash pro deepseek llm">
+                <label>Model routing</label>
+                <div class="seg" id="routingSeg">
+                  <button type="button" data-routing="auto" class="on">Auto</button>
+                  <button type="button" data-routing="flash_only">Flash only</button>
+                </div>
+                <p class="disclaimer" id="routingHelp">Auto uses Pro for hard correction moments; otherwise Flash.</p>
+              </div>
+              <div class="field settings-searchable" data-settings-search="personality persona preset character vibe tutor buddy">
+                <label for="personalitySelect">Personality</label>
+                <select id="personalitySelect"></select>
+                <p class="preset-desc" id="personalityDesc"></p>
+                <div class="controls" id="userPresetActions" hidden style="margin-top:0.6rem">
+                  <button id="editUserPreset" class="secondary" type="button">Edit preset</button>
+                  <button id="deleteUserPreset" class="secondary" type="button">Delete preset</button>
+                </div>
+              </div>
+              <div class="field settings-searchable" data-settings-search="extra notes custom personality instructions call me">
+                <label for="personalityCustom">Extra notes (optional, any preset)</label>
+                <textarea id="personalityCustom" placeholder="e.g. Call me Alex. Prefer travel topics."></textarea>
+              </div>
+
+              <h3 class="settings-section-subhead settings-searchable" data-settings-search="preset presets create custom personality editor">Custom presets</h3>
+              <p class="disclaimer settings-searchable" data-settings-search="preset presets create named personality reuse">
+                Create a named personality you can reuse later.
+              </p>
+              <div class="field settings-searchable" data-settings-search="preset label name title">
+                <label for="newPresetLabel">Label</label>
+                <input id="newPresetLabel" type="text" maxlength="60" placeholder="e.g. Travel buddy" />
+              </div>
+              <div class="field settings-searchable" data-settings-search="preset description short ui">
+                <label for="newPresetDesc">Description</label>
+                <input id="newPresetDesc" type="text" maxlength="200" placeholder="Short UI description" />
+              </div>
+              <div class="field settings-searchable" data-settings-search="preset prompt instructions blurb personality japanese">
+                <label for="newPresetBlurb">Prompt instructions</label>
+                <textarea id="newPresetBlurb" placeholder="性格: … how Kaiwa should talk (Japanese ok)"></textarea>
+              </div>
+              <div class="controls settings-searchable" data-settings-search="save preset edit cancel">
+                <button id="saveUserPreset" type="button">Save as preset</button>
+                <button id="cancelEditPreset" class="secondary" type="button" hidden>Cancel edit</button>
+                <span id="presetEditorStatus"></span>
+              </div>
+            </div>
+
+            <div class="settings-section" data-settings-section="learning" hidden>
+              <h2 class="section-title">Learning</h2>
+              <p class="disclaimer settings-searchable" data-settings-search="learning level goal learner jlpt pace difficulty">
+                Goal ceiling and live estimates of how hard chat should feel.
+              </p>
+              <div class="field settings-searchable" data-settings-search="goal level pre-n5 n5 n4 jlpt target ceiling pace">
+                <label>Goal level</label>
+                <div class="seg" id="goalSeg">
+                  <button type="button" data-goal="pre_n5" class="on">Pre-N5</button>
+                  <button type="button" data-goal="n5">N5</button>
+                  <button type="button" data-goal="n4">N4</button>
+                </div>
+                <p class="disclaimer" id="goalHelp">Target ceiling for pacing. Kaiwa still adapts to your live profile.</p>
+              </div>
+              <div class="field settings-searchable" data-settings-search="topic preferences interests interests anime travel">
+                <label for="topicPrefs">Topic preferences</label>
+                <input id="topicPrefs" type="text" maxlength="200" placeholder="e.g. anime, travel, daily life" />
+                <p class="disclaimer">Comma-separated, up to 8 topics.</p>
+              </div>
+
+              <h3 class="settings-section-subhead settings-searchable" data-settings-search="learner profile estimate speaking comprehension">Live learner profile</h3>
+              <p class="disclaimer settings-searchable" data-settings-search="learner profile estimate auto update practice">
+                Updates from chat struggle signals, practice scores, and occasional Flash assessments.
+              </p>
+              <p class="preset-desc settings-searchable" data-settings-search="learner profile summary" id="profileSummary">Loading…</p>
+              <div class="field settings-searchable" data-settings-search="speaking estimate level pre-n5 n5 n4">
+                <label>Speaking estimate</label>
+                <div class="seg" id="profileSpeakingSeg">
+                  <button type="button" data-level="pre_n5" class="on">Pre-N5</button>
+                  <button type="button" data-level="n5">N5</button>
+                  <button type="button" data-level="n4">N4</button>
+                </div>
+              </div>
+              <div class="field settings-searchable" data-settings-search="comprehension estimate listening reading level">
+                <label>Comprehension estimate</label>
+                <div class="seg" id="profileCompSeg">
+                  <button type="button" data-level="pre_n5" class="on">Pre-N5</button>
+                  <button type="button" data-level="n5">N5</button>
+                  <button type="button" data-level="n4">N4</button>
+                </div>
+              </div>
+              <div class="field settings-searchable" data-settings-search="profile notes level notes">
+                <label for="profileNotes">Notes</label>
+                <textarea id="profileNotes" placeholder="Auto-filled notes about your level"></textarea>
+              </div>
+              <div class="field settings-searchable" data-settings-search="profile topics tags detected">
+                <label for="profileTags">Profile topics</label>
+                <input id="profileTags" type="text" maxlength="200" placeholder="Detected / edited tags" />
+              </div>
+              <div class="controls settings-searchable" data-settings-search="save reset profile overrides learner">
+                <button id="saveProfile" class="secondary" type="button">Save profile overrides</button>
+                <button id="resetProfile" class="secondary" type="button">Reset profile</button>
+                <span id="profileStatus"></span>
+              </div>
+            </div>
+
+            <div class="settings-section" data-settings-section="memory" hidden>
+              <h2 class="section-title">Memory</h2>
+              <p class="disclaimer settings-searchable" data-settings-search="memory remember name vibe comfort vocab grammar">
+                Kaiwa remembers how you like to chat, topics, vocab, and recurring grammar — updated occasionally after chat turns.
+              </p>
+              <p class="preset-desc settings-searchable" data-settings-search="memory summary" id="memorySummary">Loading…</p>
+              <div class="field settings-searchable" data-settings-search="preferred name call me nickname">
+                <label for="memoryName">Preferred name</label>
+                <input id="memoryName" type="text" maxlength="40" placeholder="What Kaiwa should call you" />
+              </div>
+              <div class="field settings-searchable" data-settings-search="vibe comfort notes tone teasing short replies">
+                <label for="memoryVibe">Vibe / comfort notes</label>
+                <textarea id="memoryVibe" placeholder="e.g. Likes light teasing; keep replies short"></textarea>
+              </div>
+              <div class="field settings-searchable" data-settings-search="do prefer likes should">
+                <label for="memoryDo">Do (comma-separated)</label>
+                <input id="memoryDo" type="text" maxlength="300" placeholder="Keep replies short, anime icebreakers" />
+              </div>
+              <div class="field settings-searchable" data-settings-search="don't dont avoid quiz">
+                <label for="memoryDont">Don't (comma-separated)</label>
+                <input id="memoryDont" type="text" maxlength="300" placeholder="Don't quiz mid-chat" />
+              </div>
+              <div class="field settings-searchable" data-settings-search="remembered topics memory topics">
+                <label for="memoryTopics">Remembered topics</label>
+                <input id="memoryTopics" type="text" maxlength="200" placeholder="anime, daily life" />
+              </div>
+              <div class="field settings-searchable" data-settings-search="vocab vocabulary words top">
+                <label>Top vocab</label>
+                <p class="preset-desc" id="memoryVocabList">—</p>
+              </div>
+              <div class="field settings-searchable" data-settings-search="grammar notes patterns">
+                <label>Grammar notes</label>
+                <p class="preset-desc" id="memoryGrammarList">—</p>
+              </div>
+              <div class="controls settings-searchable" data-settings-search="save reset memory">
+                <button id="saveMemory" class="secondary" type="button">Save memory</button>
+                <button id="resetMemory" class="secondary" type="button">Reset memory</button>
+                <span id="memoryStatus"></span>
+              </div>
+            </div>
+
+            <div class="settings-section" data-settings-section="speech" hidden>
+              <h2 class="section-title">Speech</h2>
+              <p class="disclaimer settings-searchable" data-settings-search="speech voice tts microphone push to talk">
+                TTS voice and Windows desktop push-to-talk.
+              </p>
+              <div class="field settings-searchable" data-settings-search="tts engine aivisspeech voicevox speech synthesis">
+                <label>TTS engine</label>
+                <div class="seg" id="ttsEngineSeg">
+                  <button type="button" data-engine="aivisspeech" class="on">AivisSpeech</button>
+                  <button type="button" data-engine="voicevox">VOICEVOX</button>
+                </div>
+                <p class="disclaimer" id="ttsEngineHelp">AivisSpeech is the default (port 10101). VOICEVOX stays available as fallback (port 50021).</p>
+              </div>
+              <div class="field settings-searchable" data-settings-search="voice speaker preview listen tts">
+                <label for="voiceSelect">Voice</label>
+                <select id="voiceSelect"></select>
+                <p class="disclaimer" id="voiceHelp">Requires the selected TTS engine running. Preview uses the selected voice.</p>
+                <div class="controls" style="margin-top:0.6rem">
+                  <button id="previewVoice" class="secondary" type="button">Preview voice</button>
+                  <span id="voiceStatus"></span>
+                </div>
+              </div>
+              <div class="field settings-searchable" data-settings-search="push to talk ptt global mic microphone hold key mouse f24 bind blip volume desktop hook">
+                <label>Global push-to-talk (Windows desktop)</label>
+                <div class="seg" id="pttEnabledSeg">
+                  <button type="button" data-ptt="off" class="on">Off</button>
+                  <button type="button" data-ptt="on">On</button>
+                </div>
+                <p class="disclaimer">Hold (don’t just click) a key or mouse button from any app while the <strong>Kaiwa desktop app</strong> is running. Window can stay in the background. Some games may block global hooks.</p>
+                <p class="disclaimer" id="pttHookStatus">Desktop hook: checking…</p>
+                <div class="controls" style="margin-top:0.6rem; gap:0.5rem; flex-wrap:wrap; align-items:center;">
+                  <button id="pttBindBtn" class="secondary" type="button">Press to bind…</button>
+                  <span id="pttBindLabel" class="disclaimer" style="margin:0;">(not set)</span>
+                </div>
+                <div class="seg" id="pttPlaySeg" style="margin-top:0.75rem">
+                  <button type="button" data-ptt-play="on" class="on">Play reply</button>
+                  <button type="button" data-ptt-play="off">Silent</button>
+                </div>
+                <p class="disclaimer" id="pttPlayHelp">When On, Kaiwa speaks the reply over your default speakers (even while another app is focused).</p>
+                <div class="seg" id="pttBlipsSeg" style="margin-top:0.75rem">
+                  <button type="button" data-ptt-blips="on" class="on">Blips on</button>
+                  <button type="button" data-ptt-blips="off">Blips off</button>
+                </div>
+                <label for="pttBlipVolume" class="disclaimer" style="display:block;margin-top:0.6rem;">Blip volume <span id="pttBlipVolumePct">60%</span></label>
+                <input id="pttBlipVolume" class="kaiwa-range" type="range" min="0" max="500" value="60" step="5" />
+                <p class="disclaimer" id="pttBlipHelp">Short in/out cues when you press and release the PTT key (desktop app only). Up to 500% if you need them louder.</p>
+                <div class="controls" style="margin-top:0.75rem; gap:0.5rem; flex-wrap:wrap; align-items:center;">
+                  <span class="disclaimer" style="margin:0; min-width:5rem;">Blip in</span>
+                  <span id="pttBlipInLabel" class="disclaimer" style="margin:0;">Default</span>
+                  <button id="pttBlipInChange" class="secondary" type="button">Change…</button>
+                  <button id="pttBlipInReset" class="secondary" type="button">Reset</button>
+                  <input id="pttBlipInFile" type="file" accept=".ogg,.wav,.mp3,audio/ogg,audio/wav,audio/mpeg,audio/*" hidden />
+                </div>
+                <div class="controls" style="margin-top:0.4rem; gap:0.5rem; flex-wrap:wrap; align-items:center;">
+                  <span class="disclaimer" style="margin:0; min-width:5rem;">Blip out</span>
+                  <span id="pttBlipOutLabel" class="disclaimer" style="margin:0;">Default</span>
+                  <button id="pttBlipOutChange" class="secondary" type="button">Change…</button>
+                  <button id="pttBlipOutReset" class="secondary" type="button">Reset</button>
+                  <input id="pttBlipOutFile" type="file" accept=".ogg,.wav,.mp3,audio/ogg,audio/wav,audio/mpeg,audio/*" hidden />
+                </div>
+              </div>
+            </div>
           </div>
-          <p class="disclaimer" id="languageHelp">Japanese by default; brief English corrections only when you're clearly struggling.</p>
-        </div>
-        <div class="field">
-          <label>Speech register</label>
-          <div class="seg" id="registerSeg">
-            <button type="button" data-register="casual" class="on">Casual</button>
-            <button type="button" data-register="formal">Formal</button>
+          <div class="settings-save-bar" id="settingsPrefsSaveBar" hidden>
+            <button id="savePrefs" type="button">Save settings</button>
+            <span id="settingsStatus"></span>
           </div>
-          <p class="disclaimer" id="registerHelp">Friend-level ため口. Personality vibe still applies on top.</p>
-        </div>
-        <div class="field">
-          <label>Naturalness tips</label>
-          <div class="seg" id="naturalnessSeg">
-            <button type="button" data-natural="on" class="on">On</button>
-            <button type="button" data-natural="off">Off</button>
-          </div>
-          <p class="disclaimer" id="naturalnessHelp">Flags textbook-stiff lines (e.g. 「僕は元気ですよ」→「元気だよ」) even when grammar is fine.</p>
-        </div>
-        <div class="field">
-          <label>Goal level</label>
-          <div class="seg" id="goalSeg">
-            <button type="button" data-goal="pre_n5" class="on">Pre-N5</button>
-            <button type="button" data-goal="n5">N5</button>
-            <button type="button" data-goal="n4">N4</button>
-          </div>
-          <p class="disclaimer" id="goalHelp">Target ceiling for pacing. Kaiwa still adapts to your live profile.</p>
-        </div>
-        <div class="field">
-          <label for="topicPrefs">Topic preferences</label>
-          <input id="topicPrefs" type="text" maxlength="200" placeholder="e.g. anime, travel, daily life" />
-          <p class="disclaimer">Comma-separated, up to 8 topics.</p>
-        </div>
-        <div class="field">
-          <label>Model routing</label>
-          <div class="seg" id="routingSeg">
-            <button type="button" data-routing="auto" class="on">Auto</button>
-            <button type="button" data-routing="flash_only">Flash only</button>
-          </div>
-          <p class="disclaimer" id="routingHelp">Auto uses Pro for hard correction moments; otherwise Flash.</p>
-        </div>
-        <div class="field">
-          <label for="personalitySelect">Personality</label>
-          <select id="personalitySelect"></select>
-          <p class="preset-desc" id="personalityDesc"></p>
-          <div class="controls" id="userPresetActions" hidden style="margin-top:0.6rem">
-            <button id="editUserPreset" class="secondary" type="button">Edit preset</button>
-            <button id="deleteUserPreset" class="secondary" type="button">Delete preset</button>
-          </div>
-        </div>
-        <div class="field">
-          <label for="personalityCustom">Extra notes (optional, any preset)</label>
-          <textarea id="personalityCustom" placeholder="e.g. Call me Alex. Prefer travel topics."></textarea>
-        </div>
-        <div class="field">
-          <label>TTS engine</label>
-          <div class="seg" id="ttsEngineSeg">
-            <button type="button" data-engine="aivisspeech" class="on">AivisSpeech</button>
-            <button type="button" data-engine="voicevox">VOICEVOX</button>
-          </div>
-          <p class="disclaimer" id="ttsEngineHelp">AivisSpeech is the default (port 10101). VOICEVOX stays available as fallback (port 50021).</p>
-        </div>
-        <div class="field">
-          <label for="voiceSelect">Voice</label>
-          <select id="voiceSelect"></select>
-          <p class="disclaimer" id="voiceHelp">Requires the selected TTS engine running. Preview uses the selected voice.</p>
-          <div class="controls" style="margin-top:0.6rem">
-            <button id="previewVoice" class="secondary" type="button">Preview voice</button>
-            <span id="voiceStatus"></span>
-          </div>
-        </div>
-        <div class="controls">
-          <button id="savePrefs" type="button">Save settings</button>
-          <span id="settingsStatus"></span>
-        </div>
-      </div>
-      <div class="panel">
-        <div class="meta">Learner profile</div>
-        <p class="disclaimer">Updates from chat struggle signals, practice scores, and occasional Flash assessments.</p>
-        <p class="preset-desc" id="profileSummary">Loading…</p>
-        <div class="field">
-          <label>Speaking estimate</label>
-          <div class="seg" id="profileSpeakingSeg">
-            <button type="button" data-level="pre_n5" class="on">Pre-N5</button>
-            <button type="button" data-level="n5">N5</button>
-            <button type="button" data-level="n4">N4</button>
-          </div>
-        </div>
-        <div class="field">
-          <label>Comprehension estimate</label>
-          <div class="seg" id="profileCompSeg">
-            <button type="button" data-level="pre_n5" class="on">Pre-N5</button>
-            <button type="button" data-level="n5">N5</button>
-            <button type="button" data-level="n4">N4</button>
-          </div>
-        </div>
-        <div class="field">
-          <label for="profileNotes">Notes</label>
-          <textarea id="profileNotes" placeholder="Auto-filled notes about your level"></textarea>
-        </div>
-        <div class="field">
-          <label for="profileTags">Profile topics</label>
-          <input id="profileTags" type="text" maxlength="200" placeholder="Detected / edited tags" />
-        </div>
-        <div class="controls">
-          <button id="saveProfile" class="secondary" type="button">Save profile overrides</button>
-          <button id="resetProfile" class="secondary" type="button">Reset profile</button>
-          <span id="profileStatus"></span>
-        </div>
-      </div>
-      <div class="panel">
-        <div class="meta">Long-term memory</div>
-        <p class="disclaimer">
-          Kaiwa remembers how you like to chat, topics, vocab, and recurring grammar — updated occasionally after chat turns.
-        </p>
-        <p class="preset-desc" id="memorySummary">Loading…</p>
-        <div class="field">
-          <label for="memoryName">Preferred name</label>
-          <input id="memoryName" type="text" maxlength="40" placeholder="What Kaiwa should call you" />
-        </div>
-        <div class="field">
-          <label for="memoryVibe">Vibe / comfort notes</label>
-          <textarea id="memoryVibe" placeholder="e.g. Likes light teasing; keep replies short"></textarea>
-        </div>
-        <div class="field">
-          <label for="memoryDo">Do (comma-separated)</label>
-          <input id="memoryDo" type="text" maxlength="300" placeholder="Keep replies short, anime icebreakers" />
-        </div>
-        <div class="field">
-          <label for="memoryDont">Don't (comma-separated)</label>
-          <input id="memoryDont" type="text" maxlength="300" placeholder="Don't quiz mid-chat" />
-        </div>
-        <div class="field">
-          <label for="memoryTopics">Remembered topics</label>
-          <input id="memoryTopics" type="text" maxlength="200" placeholder="anime, daily life" />
-        </div>
-        <div class="field">
-          <label>Top vocab</label>
-          <p class="preset-desc" id="memoryVocabList">—</p>
-        </div>
-        <div class="field">
-          <label>Grammar notes</label>
-          <p class="preset-desc" id="memoryGrammarList">—</p>
-        </div>
-        <div class="controls">
-          <button id="saveMemory" class="secondary" type="button">Save memory</button>
-          <button id="resetMemory" class="secondary" type="button">Reset memory</button>
-          <span id="memoryStatus"></span>
-        </div>
-      </div>
-      <div class="panel">
-        <div class="meta">Your presets</div>
-        <p class="disclaimer">Create a named personality you can reuse later.</p>
-        <div class="field">
-          <label for="newPresetLabel">Label</label>
-          <input id="newPresetLabel" type="text" maxlength="60" placeholder="e.g. Travel buddy" />
-        </div>
-        <div class="field">
-          <label for="newPresetDesc">Description</label>
-          <input id="newPresetDesc" type="text" maxlength="200" placeholder="Short UI description" />
-        </div>
-        <div class="field">
-          <label for="newPresetBlurb">Prompt instructions</label>
-          <textarea id="newPresetBlurb" placeholder="性格: … how Kaiwa should talk (Japanese ok)"></textarea>
-        </div>
-        <div class="controls">
-          <button id="saveUserPreset" type="button">Save as preset</button>
-          <button id="cancelEditPreset" class="secondary" type="button" hidden>Cancel edit</button>
-          <span id="presetEditorStatus"></span>
         </div>
       </div>
     </section>
-  </main>
+  </div>
 
   <script>
     const talkBtn = document.getElementById("talk");
@@ -530,6 +1465,8 @@
     const voiceStatusEl = document.getElementById("voiceStatus");
     const correctionHelp = document.getElementById("correctionHelp");
     const languageHelp = document.getElementById("languageHelp");
+    const helpLangHelp = document.getElementById("helpLangHelp");
+    const themeHelp = document.getElementById("themeHelp");
     const registerHelp = document.getElementById("registerHelp");
     const naturalnessHelp = document.getElementById("naturalnessHelp");
     const userPresetActions = document.getElementById("userPresetActions");
@@ -557,11 +1494,20 @@
     let activeStatusEl = statusEl;
     let correctionStyle = "gentle";
     let languagePolicy = "adaptive";
+    let helpLanguage = "en";
+    let uiTheme = "night";
     let speechRegister = "casual";
     let naturalnessTips = true;
     let goalLevel = "pre_n5";
     let modelRouting = "auto";
     let ttsEngine = "aivisspeech";
+    let pttEnabled = false;
+    let pttBinding = "";
+    let pttPlayReply = true;
+    let pttBlipsEnabled = true;
+    let pttBlipVolume = 0.6;
+    let pttBindListening = false;
+    let pttEventAfter = 0;
     let profileSpeaking = "pre_n5";
     let profileComprehension = "pre_n5";
     let personalities = [];
@@ -570,6 +1516,69 @@
     function setStatus(text) {
       activeStatusEl.textContent = text;
     }
+
+    function formatDetail(detail) {
+      if (detail == null || detail === "") return "";
+      if (typeof detail === "string") return detail;
+      if (Array.isArray(detail)) {
+        return detail
+          .map((item) => {
+            if (typeof item === "string") return item;
+            if (item && typeof item === "object") {
+              if (item.msg) return String(item.msg);
+              try {
+                return JSON.stringify(item);
+              } catch (_) {
+                return String(item);
+              }
+            }
+            return String(item);
+          })
+          .filter(Boolean)
+          .join("; ");
+      }
+      if (typeof detail === "object") {
+        if (detail.msg) return String(detail.msg);
+        try {
+          return JSON.stringify(detail);
+        } catch (_) {
+          return String(detail);
+        }
+      }
+      return String(detail);
+    }
+
+    function errorMessage(data, fallback) {
+      const detail = formatDetail(data && data.detail);
+      return detail || fallback || "Request failed";
+    }
+
+    function looksLikeEngineError(msg) {
+      const s = String(msg || "").toLowerCase();
+      return (
+        s.includes("aivisspeech") ||
+        s.includes("voicevox") ||
+        s.includes("tts") ||
+        s.includes("unreachable") ||
+        s.includes("synthesis") ||
+        s.includes("audio_query") ||
+        s.includes("/speakers")
+      );
+    }
+
+    function showEngineAlert(message) {
+      const text = String(message || "").trim();
+      if (!text) return;
+      document.getElementById("engineAlertText").textContent = text;
+      document.getElementById("engineAlert").hidden = false;
+    }
+
+    function clearEngineAlert() {
+      document.getElementById("engineAlert").hidden = true;
+      document.getElementById("engineAlertText").textContent = "";
+    }
+
+    document.getElementById("engineAlertDismiss").addEventListener("click", clearEngineAlert);
 
     function setMode(next) {
       mode = next;
@@ -599,7 +1608,135 @@
       tab.addEventListener("click", () => setMode(tab.dataset.mode));
     });
 
-    function addBubble(who, text) {
+    const PREFS_SAVE_SECTIONS = new Set(["appearance", "tutor", "speech", "learning"]);
+    const SETTINGS_SECTIONS = new Set([
+      "profiles",
+      "appearance",
+      "tutor",
+      "learning",
+      "memory",
+      "speech",
+    ]);
+    const SETTINGS_SECTION_MIGRATE = {
+      themes: "appearance",
+      conversation: "tutor",
+      presets: "tutor",
+      voice: "speech",
+      level: "learning",
+      learner: "learning",
+    };
+
+    let settingsSearchActive = false;
+    let settingsLastSection = "profiles";
+
+    function migrateSettingsSectionId(id) {
+      const raw = id || "profiles";
+      const mapped = SETTINGS_SECTION_MIGRATE[raw] || raw;
+      return SETTINGS_SECTIONS.has(mapped) ? mapped : "profiles";
+    }
+
+    function clearSettingsSearchHits() {
+      document.querySelectorAll(".settings-searchable").forEach((el) => {
+        el.hidden = false;
+        el.classList.remove("settings-field-hit");
+      });
+      document.querySelectorAll(".settings-section").forEach((sec) => {
+        sec.classList.remove("settings-section-empty");
+      });
+      const meta = document.getElementById("settingsSearchMeta");
+      if (meta) meta.textContent = "";
+    }
+
+    function applySettingsSearch(rawQuery) {
+      const q = String(rawQuery || "").trim().toLowerCase();
+      const meta = document.getElementById("settingsSearchMeta");
+      if (!q) {
+        settingsSearchActive = false;
+        clearSettingsSearchHits();
+        setSettingsSection(settingsLastSection, { fromSearch: true });
+        return;
+      }
+      settingsSearchActive = true;
+      document.querySelectorAll(".settings-rail [data-settings-section]").forEach((btn) => {
+        btn.classList.remove("active");
+      });
+      let hits = 0;
+      document.querySelectorAll(".settings-section").forEach((sec) => {
+        sec.hidden = false;
+        let sectionHits = 0;
+        sec.querySelectorAll(".settings-searchable").forEach((el) => {
+          const hay = String(el.dataset.settingsSearch || "").toLowerCase();
+          const parts = q.split(/\s+/).filter(Boolean);
+          const match = parts.length > 0 && parts.every((part) => hay.includes(part));
+          el.hidden = !match;
+          el.classList.toggle("settings-field-hit", match);
+          if (match) {
+            hits += 1;
+            sectionHits += 1;
+          }
+        });
+        sec.hidden = sectionHits === 0;
+      });
+      if (meta) {
+        meta.textContent = hits ? hits + " match" + (hits === 1 ? "" : "es") : "No matches";
+      }
+      const saveBar = document.getElementById("settingsPrefsSaveBar");
+      if (saveBar) saveBar.hidden = false;
+    }
+
+    function setSettingsSection(id, opts) {
+      const fromSearch = opts && opts.fromSearch;
+      if (settingsSearchActive && !fromSearch) {
+        const searchEl = document.getElementById("settingsSearch");
+        if (searchEl) searchEl.value = "";
+        settingsSearchActive = false;
+        clearSettingsSearchHits();
+      }
+      const sectionId = migrateSettingsSectionId(id);
+      settingsLastSection = sectionId;
+      document.querySelectorAll(".settings-rail [data-settings-section]").forEach((btn) => {
+        btn.classList.toggle("active", btn.dataset.settingsSection === sectionId);
+      });
+      document.querySelectorAll(".settings-section").forEach((sec) => {
+        sec.hidden = sec.dataset.settingsSection !== sectionId;
+      });
+      const saveBar = document.getElementById("settingsPrefsSaveBar");
+      if (saveBar) saveBar.hidden = !PREFS_SAVE_SECTIONS.has(sectionId);
+      try {
+        sessionStorage.setItem("kaiwa_settings_section", sectionId);
+      } catch (_) {}
+    }
+
+    document.querySelectorAll(".settings-rail [data-settings-section]").forEach((btn) => {
+      btn.addEventListener("click", () => setSettingsSection(btn.dataset.settingsSection));
+    });
+
+    (function initSettingsSearch() {
+      const searchEl = document.getElementById("settingsSearch");
+      if (!searchEl) return;
+      let timer = null;
+      searchEl.addEventListener("input", () => {
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(() => applySettingsSearch(searchEl.value), 100);
+      });
+      searchEl.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") {
+          searchEl.value = "";
+          applySettingsSearch("");
+          searchEl.blur();
+        }
+      });
+    })();
+
+    (function initSettingsSection() {
+      let saved = "profiles";
+      try {
+        saved = sessionStorage.getItem("kaiwa_settings_section") || "profiles";
+      } catch (_) {}
+      setSettingsSection(migrateSettingsSectionId(saved));
+    })();
+
+    function addBubble(who, text, opts) {
       const wrap = document.createElement("div");
       wrap.className = "bubble " + (who === "you" ? "you" : "bot");
       const meta = document.createElement("div");
@@ -609,6 +1746,30 @@
       body.textContent = text;
       wrap.appendChild(meta);
       wrap.appendChild(body);
+      if (who === "bot" && opts && opts.betterPhrase) {
+        const tryRow = document.createElement("div");
+        tryRow.className = "try-saying";
+        const label = document.createElement("span");
+        label.textContent = "Try saying: ";
+        const phrase = document.createElement("span");
+        phrase.className = "phrase";
+        phrase.textContent = opts.betterPhrase;
+        const useBtn = document.createElement("button");
+        useBtn.type = "button";
+        useBtn.className = "secondary";
+        useBtn.textContent = "Practice this";
+        useBtn.addEventListener("click", () => {
+          localStorage.setItem("kaiwa_last_reply", opts.betterPhrase);
+          setMode("practice");
+          loadLastReply().catch((err) => {
+            practiceStatusEl.textContent = String(err.message || err);
+          });
+        });
+        tryRow.appendChild(label);
+        tryRow.appendChild(phrase);
+        tryRow.appendChild(useBtn);
+        wrap.appendChild(tryRow);
+      }
       logEl.appendChild(wrap);
       logEl.scrollTop = logEl.scrollHeight;
     }
@@ -667,13 +1828,16 @@
           body: JSON.stringify({ text }),
         });
         const data = await res.json();
-        if (!res.ok) throw new Error(data.detail || "Could not replay");
+        if (!res.ok) throw new Error(errorMessage(data, "Could not replay"));
         if (!data.audio_base64) throw new Error("No audio returned");
         cacheLastAudio(data.audio_base64);
         playWavBase64(data.audio_base64);
+        clearEngineAlert();
         setStatus("Ready");
       } catch (err) {
-        setStatus(String(err.message || err));
+        const msg = String(err.message || err);
+        setStatus(msg);
+        if (looksLikeEngineError(msg)) showEngineAlert(msg);
       } finally {
         updateReplayButton();
       }
@@ -819,6 +1983,116 @@
         : "Japanese by default; brief English corrections only when you're clearly struggling.";
     }
 
+    const THEMES = [
+      {
+        id: "night",
+        label: "Night",
+        group: "dark",
+        swatches: ["#12141a", "#232831", "#3d9b8f", "#efeae2"],
+      },
+      {
+        id: "slate",
+        label: "Slate",
+        group: "dark",
+        swatches: ["#0f1419", "#1f2833", "#3a9ea8", "#e6edf5"],
+      },
+      {
+        id: "graphite",
+        label: "Graphite",
+        group: "dark",
+        swatches: ["#0a0a0b", "#1c1c1f", "#4a9b90", "#ececec"],
+      },
+      {
+        id: "day",
+        label: "Day",
+        group: "light",
+        swatches: ["#eef1f4", "#ffffff", "#2f8a7f", "#1c2430"],
+      },
+      {
+        id: "cloud",
+        label: "Cloud",
+        group: "light",
+        swatches: ["#e8eaee", "#ffffff", "#2d7f8a", "#1a1f28"],
+      },
+      {
+        id: "frost",
+        label: "Frost",
+        group: "light",
+        swatches: ["#e6eef4", "#ffffff", "#2b8b7e", "#15202b"],
+      },
+    ];
+    const THEME_IDS = new Set(THEMES.map((t) => t.id));
+
+    function applyTheme(theme) {
+      const t = THEME_IDS.has(theme) ? theme : "night";
+      document.documentElement.setAttribute("data-theme", t);
+    }
+
+    function renderThemePicker() {
+      const host = document.getElementById("themePicker");
+      if (!host || host.dataset.ready === "1") return;
+      host.innerHTML = "";
+      [
+        { key: "dark", title: "Dark" },
+        { key: "light", title: "Light" },
+      ].forEach((group) => {
+        const wrap = document.createElement("div");
+        wrap.className = "theme-group";
+        const title = document.createElement("h3");
+        title.className = "theme-group-title";
+        title.textContent = group.title;
+        const grid = document.createElement("div");
+        grid.className = "theme-grid";
+        THEMES.filter((t) => t.group === group.key).forEach((theme) => {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "theme-card";
+          btn.dataset.themeChoice = theme.id;
+          const swatches = document.createElement("div");
+          swatches.className = "theme-swatches";
+          theme.swatches.forEach((color) => {
+            const sw = document.createElement("span");
+            sw.className = "theme-swatch";
+            sw.style.background = color;
+            swatches.appendChild(sw);
+          });
+          const label = document.createElement("span");
+          label.className = "theme-card-label";
+          label.textContent = theme.label;
+          btn.appendChild(swatches);
+          btn.appendChild(label);
+          btn.addEventListener("click", () => setThemeUI(theme.id));
+          grid.appendChild(btn);
+        });
+        wrap.appendChild(title);
+        wrap.appendChild(grid);
+        host.appendChild(wrap);
+      });
+      host.dataset.ready = "1";
+    }
+
+    function setThemeUI(theme) {
+      uiTheme = THEME_IDS.has(theme) ? theme : "night";
+      document.querySelectorAll("#themePicker .theme-card").forEach((b) => {
+        b.classList.toggle("on", b.dataset.themeChoice === uiTheme);
+      });
+      const meta = THEMES.find((t) => t.id === uiTheme);
+      themeHelp.textContent = meta
+        ? `${meta.label} (${meta.group}). Save to keep it on this profile.`
+        : "Pick a look, then Save to keep it on this profile.";
+      applyTheme(uiTheme);
+    }
+
+    function setHelpLanguageUI(lang) {
+      helpLanguage = lang === "ja" ? "ja" : "en";
+      document.querySelectorAll("#helpLangSeg button").forEach((b) => {
+        b.classList.toggle("on", b.dataset.help === helpLanguage);
+      });
+      helpLangHelp.textContent = helpLanguage === "ja"
+        ? "Practice tips in easy Japanese. Chat immersion still speaks Japanese either way."
+        : "Language for Practice tips (and Adaptive English help notes). Chat immersion still speaks Japanese.";
+    }
+
     function setRegisterUI(register) {
       speechRegister = register === "formal" ? "formal" : "casual";
       document.querySelectorAll("#registerSeg button").forEach((b) => {
@@ -842,6 +2116,9 @@
 
     document.querySelectorAll("#languageSeg button").forEach((btn) => {
       btn.addEventListener("click", () => setLanguageUI(btn.dataset.policy));
+    });
+    document.querySelectorAll("#helpLangSeg button").forEach((btn) => {
+      btn.addEventListener("click", () => setHelpLanguageUI(btn.dataset.help));
     });
     document.querySelectorAll("#registerSeg button").forEach((btn) => {
       btn.addEventListener("click", () => setRegisterUI(btn.dataset.register));
@@ -1045,13 +2322,23 @@
 
     function applyPrefsToForm(prefs) {
       if (!prefs) return;
+      renderThemePicker();
       setCorrectionUI(prefs.correction_style || "gentle");
       setLanguageUI(prefs.language_policy || "adaptive");
+      setHelpLanguageUI(prefs.help_language || "en");
+      setThemeUI(prefs.ui_theme || "night");
       setRegisterUI(prefs.speech_register || "casual");
       setNaturalnessUI(prefs.naturalness_tips !== false);
       setGoalUI(prefs.goal_level || "pre_n5");
       setRoutingUI(prefs.model_routing || "auto");
       setTtsEngineUI(prefs.tts_engine || "aivisspeech");
+      setPttEnabledUI(prefs.ptt_enabled === true);
+      setPttBindingUI(prefs.ptt_binding || "");
+      setPttPlayUI(prefs.ptt_play_reply !== false);
+      setPttBlipsUI(prefs.ptt_blips_enabled !== false);
+      setPttBlipVolumeUI(
+        prefs.ptt_blip_volume != null ? Number(prefs.ptt_blip_volume) : 0.6
+      );
       topicPrefsInput.value = (prefs.topic_preferences || []).join(", ");
       personalityCustom.value = prefs.personality_custom || "";
       if (prefs.voicevox_speaker_id != null && voiceSelect.options.length) {
@@ -1088,16 +2375,19 @@
       try {
         const res = await fetch("/api/voices");
         const data = await res.json();
-        if (!res.ok) throw new Error(data.detail || "Failed to load voices");
+        if (!res.ok) throw new Error(errorMessage(data, "Failed to load voices"));
         if (data.engine) setTtsEngineUI(data.engine);
         fillVoiceSelect(
           data.voices || [],
           selectedId != null ? selectedId : data.selected_id,
           data.engine_label
         );
+        clearEngineAlert();
       } catch (err) {
         fillVoiceSelect([], selectedId != null ? selectedId : null);
-        voiceStatusEl.textContent = String(err.message || err);
+        const msg = String(err.message || err);
+        voiceStatusEl.textContent = msg;
+        if (looksLikeEngineError(msg)) showEngineAlert(msg);
       }
     }
 
@@ -1113,10 +2403,15 @@
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || "Preview failed");
+      if (!res.ok) {
+        const msg = errorMessage(data, "Preview failed");
+        if (looksLikeEngineError(msg)) showEngineAlert(msg);
+        throw new Error(msg);
+      }
       if (!data.audio_base64) throw new Error("No audio returned");
       const audio = new Audio("data:" + (data.audio_mime || "audio/wav") + ";base64," + data.audio_base64);
       await audio.play();
+      clearEngineAlert();
       voiceStatusEl.textContent = "Preview ok";
     }
 
@@ -1524,12 +2819,18 @@
         language_policy: languagePolicy,
         speech_register: speechRegister,
         naturalness_tips: naturalnessTips,
-        help_language: "en",
+        help_language: helpLanguage,
+        ui_theme: uiTheme,
         tts_engine: ttsEngine,
         voicevox_speaker_id: Number(voiceSelect.value || (ttsEngine === "voicevox" ? 3 : 888753760)),
         goal_level: goalLevel,
         topic_preferences: topics,
         model_routing: modelRouting,
+        ptt_enabled: pttEnabled,
+        ptt_binding: pttBinding,
+        ptt_play_reply: pttPlayReply,
+        ptt_blips_enabled: pttBlipsEnabled,
+        ptt_blip_volume: pttBlipVolume,
       };
       const res = await fetch("/api/prefs", {
         method: "PUT",
@@ -1610,21 +2911,381 @@
     });
     updateReplayButton();
 
+    function formatPttBinding(binding) {
+      const b = canonicalizePttBinding(binding);
+      if (!b) return "(not set)";
+      if (b.startsWith("key:")) return b.slice(4).toUpperCase();
+      if (b.startsWith("mouse:")) return "Mouse " + b.slice(6);
+      return b;
+    }
+
+    function canonicalizePttBinding(raw) {
+      let s = String(raw || "").trim().toLowerCase();
+      if (!s) return "";
+      if (s.startsWith("mouse:")) return s;
+      let name = s.startsWith("key:") ? s.slice(4) : s;
+      const angle = name.match(/^<(\d+)>$/);
+      if (angle) {
+        const vk = Number(angle[1]);
+        if (vk >= 0x70 && vk <= 0x87) return "key:f" + (vk - 0x70 + 1);
+        return "key:vk" + vk;
+      }
+      if (name.startsWith("vk") && /^\d+$/.test(name.slice(2))) {
+        const vk = Number(name.slice(2));
+        if (vk >= 0x70 && vk <= 0x87) return "key:f" + (vk - 0x70 + 1);
+        return "key:vk" + vk;
+      }
+      const keyCode = name.match(/^key([a-z0-9])$/);
+      if (keyCode) return "key:" + keyCode[1];
+      const fCode = name.match(/^f(\d{1,2})$/);
+      if (fCode) return "key:f" + Number(fCode[1]);
+      const digit = name.match(/^digit([0-9])$/);
+      if (digit) return "key:" + digit[1];
+      const aliases = {
+        " ": "space", spacebar: "space", escape: "esc", esc: "esc",
+        arrowup: "up", arrowdown: "down", arrowleft: "left", arrowright: "right",
+        return: "enter", enter: "enter",
+      };
+      if (aliases[name]) name = aliases[name];
+      return name ? "key:" + name : "";
+    }
+
+    function setPttEnabledUI(on) {
+      pttEnabled = !!on;
+      document.querySelectorAll("#pttEnabledSeg button").forEach((btn) => {
+        btn.classList.toggle("on", (btn.dataset.ptt === "on") === pttEnabled);
+      });
+      refreshPttHookStatus();
+    }
+
+    function setPttPlayUI(on) {
+      pttPlayReply = !!on;
+      document.querySelectorAll("#pttPlaySeg button").forEach((btn) => {
+        btn.classList.toggle("on", (btn.dataset.pttPlay === "on") === pttPlayReply);
+      });
+    }
+
+    function setPttBlipsUI(on) {
+      pttBlipsEnabled = !!on;
+      document.querySelectorAll("#pttBlipsSeg button").forEach((btn) => {
+        btn.classList.toggle("on", (btn.dataset.pttBlips === "on") === pttBlipsEnabled);
+      });
+    }
+
+    function setPttBlipVolumeUI(vol) {
+      let v = Number(vol);
+      if (!Number.isFinite(v)) v = 0.6;
+      pttBlipVolume = Math.max(0, Math.min(5, v));
+      const pct = Math.round(pttBlipVolume * 100);
+      const el = document.getElementById("pttBlipVolume");
+      if (el) {
+        el.value = String(pct);
+        const min = Number(el.min) || 0;
+        const max = Number(el.max) || 500;
+        const fill = max > min ? ((pct - min) / (max - min)) * 100 : 0;
+        el.style.setProperty("--range-pct", fill + "%");
+      }
+      const pctEl = document.getElementById("pttBlipVolumePct");
+      if (pctEl) pctEl.textContent = pct + "%";
+    }
+
+    function setPttBindingUI(binding) {
+      pttBinding = canonicalizePttBinding(binding);
+      const label = document.getElementById("pttBindLabel");
+      if (label) label.textContent = formatPttBinding(pttBinding);
+    }
+
+    function bindingFromKeyboardEvent(e) {
+      // Prefer e.code (KeyV, F24) so mouse-as-F24 and letters match the desktop hook.
+      const code = String(e.code || "").trim();
+      if (code) {
+        const c = canonicalizePttBinding(code);
+        if (c) return c;
+      }
+      const map = {
+        " ": "space",
+        arrowup: "up",
+        arrowdown: "down",
+        arrowleft: "left",
+        arrowright: "right",
+        escape: "esc",
+      };
+      let name = (e.key || "").toLowerCase();
+      if (map[name]) name = map[name];
+      if (!name) return "";
+      return canonicalizePttBinding("key:" + name);
+    }
+
+    function bindingFromMouseEvent(e) {
+      if (e.button === 1) return "mouse:middle";
+      if (e.button === 2) return "mouse:right";
+      if (e.button === 3) return "mouse:x1";
+      if (e.button === 4) return "mouse:x2";
+      return "";
+    }
+
+    function setPttBlipLabels(data) {
+      const inEl = document.getElementById("pttBlipInLabel");
+      const outEl = document.getElementById("pttBlipOutLabel");
+      if (inEl) {
+        inEl.textContent = data && data.blip_in_custom ? "Custom" : "Default";
+      }
+      if (outEl) {
+        outEl.textContent = data && data.blip_out_custom ? "Custom" : "Default";
+      }
+    }
+
+    async function refreshPttHookStatus() {
+      const el = document.getElementById("pttHookStatus");
+      if (!el) return;
+      try {
+        const res = await fetch("/api/ptt/state");
+        const data = await res.json();
+        if (!res.ok) throw new Error("state failed");
+        setPttBlipLabels(data);
+        if (data.hook_alive) {
+          el.textContent = "Desktop hook: running";
+          el.style.color = "";
+        } else if (pttEnabled) {
+          el.textContent = "Desktop hook: not detected — start Kaiwa from the desktop app (kaiwa-desktop / Kaiwa.exe) for global PTT.";
+          el.style.color = "var(--danger, #e8a0a0)";
+        } else {
+          el.textContent = "Desktop hook: idle (PTT is off)";
+          el.style.color = "";
+        }
+      } catch (_) {
+        el.textContent = "Desktop hook: unknown (is the server up?)";
+      }
+    }
+
+    async function uploadPttBlip(which, file) {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch("/api/ptt/blip/" + which, { method: "POST", body: form });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.detail || "Upload failed");
+      }
+      await refreshPttHookStatus();
+      settingsStatusEl.textContent =
+        which === "in" ? "Blip in updated" : "Blip out updated";
+    }
+
+    async function resetPttBlip(which) {
+      const res = await fetch("/api/ptt/blip/" + which, { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.detail || "Reset failed");
+      }
+      await refreshPttHookStatus();
+      settingsStatusEl.textContent =
+        which === "in" ? "Blip in reset to default" : "Blip out reset to default";
+    }
+
+    async function setPttBindCapture(active) {
+      try {
+        await fetch("/api/ptt/bind_capture", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ active: !!active }),
+        });
+      } catch (_) {}
+    }
+
+    async function startPttBindCapture() {
+      if (pttBindListening) return;
+      pttBindListening = true;
+      const btn = document.getElementById("pttBindBtn");
+      const label = document.getElementById("pttBindLabel");
+      if (btn) btn.textContent = "Listening… hold a key or mouse button";
+      if (label) label.textContent = "Waiting…";
+      await setPttBindCapture(true);
+
+      const finish = async (binding) => {
+        if (!pttBindListening) return;
+        pttBindListening = false;
+        window.removeEventListener("keydown", onKey, true);
+        window.removeEventListener("mousedown", onMouse, true);
+        await setPttBindCapture(false);
+        if (btn) btn.textContent = "Press to bind…";
+        if (binding) {
+          setPttBindingUI(binding);
+          try {
+            await savePrefs();
+          } catch (err) {
+            settingsStatusEl.textContent = String(err.message || err);
+          }
+        } else {
+          setPttBindingUI(pttBinding);
+        }
+      };
+
+      const onKey = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.key === "Escape") {
+          finish("");
+          return;
+        }
+        const b = bindingFromKeyboardEvent(e);
+        if (b) finish(b);
+      };
+      const onMouse = (e) => {
+        const b = bindingFromMouseEvent(e);
+        if (!b) return;
+        e.preventDefault();
+        e.stopPropagation();
+        finish(b);
+      };
+      window.addEventListener("keydown", onKey, true);
+      window.addEventListener("mousedown", onMouse, true);
+    }
+
+    async function registerPttSession() {
+      if (!sessionId) return;
+      try {
+        await fetch("/api/ptt/register", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ session_id: sessionId }),
+        });
+      } catch (_) {}
+    }
+
+    async function pollPttEvents() {
+      try {
+        const res = await fetch("/api/ptt/events?after=" + encodeURIComponent(String(pttEventAfter)));
+        const data = await res.json();
+        if (!res.ok) return;
+        if (typeof data.hook_alive === "boolean") {
+          const el = document.getElementById("pttHookStatus");
+          if (el) {
+            if (data.hook_alive) {
+              el.textContent = "Desktop hook: running";
+              el.style.color = "";
+            } else if (pttEnabled) {
+              el.textContent = "Desktop hook: not detected — start Kaiwa from the desktop app (kaiwa-desktop / Kaiwa.exe) for global PTT.";
+              el.style.color = "var(--danger, #e8a0a0)";
+            }
+          }
+        }
+        const events = data.events || [];
+        for (const ev of events) {
+          pttEventAfter = Math.max(pttEventAfter, Number(ev.id) || 0);
+          if (ev.type === "status") {
+            if (ev.message) setStatus(String(ev.message));
+            continue;
+          }
+          if (ev.session_id && !sessionId) {
+            sessionId = ev.session_id;
+            localStorage.setItem("kaiwa_session_id", sessionId);
+          }
+          addBubble("you", ev.user_text || "");
+          addBubble("bot", ev.reply_text || "", {
+            betterPhrase: ev.better_phrase || null,
+          });
+          if (ev.reply_text) {
+            localStorage.setItem("kaiwa_last_reply", ev.reply_text);
+            updateReplayButton();
+          }
+          setStatus("Ready · push-to-talk");
+        }
+      } catch (_) {}
+    }
+
+    document.querySelectorAll("#pttEnabledSeg button").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        setPttEnabledUI(btn.dataset.ptt === "on");
+        savePrefs().catch((err) => {
+          settingsStatusEl.textContent = String(err.message || err);
+        });
+      });
+    });
+    document.querySelectorAll("#pttPlaySeg button").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        setPttPlayUI(btn.dataset.pttPlay === "on");
+        savePrefs().catch((err) => {
+          settingsStatusEl.textContent = String(err.message || err);
+        });
+      });
+    });
+    document.querySelectorAll("#pttBlipsSeg button").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        setPttBlipsUI(btn.dataset.pttBlips === "on");
+        savePrefs().catch((err) => {
+          settingsStatusEl.textContent = String(err.message || err);
+        });
+      });
+    });
+    (() => {
+      const vol = document.getElementById("pttBlipVolume");
+      if (!vol) return;
+      let saveTimer = null;
+      vol.addEventListener("input", () => {
+        setPttBlipVolumeUI(Number(vol.value) / 100);
+      });
+      vol.addEventListener("change", () => {
+        setPttBlipVolumeUI(Number(vol.value) / 100);
+        if (saveTimer) clearTimeout(saveTimer);
+        saveTimer = setTimeout(() => {
+          savePrefs().catch((err) => {
+            settingsStatusEl.textContent = String(err.message || err);
+          });
+        }, 200);
+      });
+    })();
+    (() => {
+      const wire = (which, changeId, resetId, fileId) => {
+        const changeBtn = document.getElementById(changeId);
+        const resetBtn = document.getElementById(resetId);
+        const fileInput = document.getElementById(fileId);
+        if (!changeBtn || !resetBtn || !fileInput) return;
+        changeBtn.addEventListener("click", () => fileInput.click());
+        fileInput.addEventListener("change", () => {
+          const file = fileInput.files && fileInput.files[0];
+          fileInput.value = "";
+          if (!file) return;
+          uploadPttBlip(which, file).catch((err) => {
+            settingsStatusEl.textContent = String(err.message || err);
+          });
+        });
+        resetBtn.addEventListener("click", () => {
+          resetPttBlip(which).catch((err) => {
+            settingsStatusEl.textContent = String(err.message || err);
+          });
+        });
+      };
+      wire("in", "pttBlipInChange", "pttBlipInReset", "pttBlipInFile");
+      wire("out", "pttBlipOutChange", "pttBlipOutReset", "pttBlipOutFile");
+    })();
+    document.getElementById("pttBindBtn").addEventListener("click", () => {
+      startPttBindCapture().catch((err) => {
+        settingsStatusEl.textContent = String(err.message || err);
+      });
+    });
+
     function applyChatTurnResult(data) {
       sessionId = data.session_id;
       localStorage.setItem("kaiwa_session_id", sessionId);
+      registerPttSession();
       if (data.reply_text) {
         localStorage.setItem("kaiwa_last_reply", data.reply_text);
       }
       addBubble("you", data.transcript);
-      addBubble("bot", data.reply_text);
+      addBubble("bot", data.reply_text, {
+        betterPhrase: data.better_phrase || null,
+      });
       if (data.audio_base64) {
         cacheLastAudio(data.audio_base64);
         playWavBase64(data.audio_base64);
+        clearEngineAlert();
       } else {
         updateReplayButton();
       }
-      let status = data.tts_error ? ("TTS issue: " + data.tts_error) : "Ready";
+      if (data.tts_error) {
+        showEngineAlert(data.tts_error);
+      }
+      let status = data.tts_error ? ("TTS issue — see alert above") : "Ready";
       if (data.timing && data.timing.total_ms != null) {
         status += " · " + data.timing.total_ms + "ms"
           + " (stt " + data.timing.stt_ms
@@ -1656,13 +3317,15 @@
           signal: controller.signal,
         });
         const data = await res.json();
-        if (!res.ok) throw new Error(data.detail || "Request failed");
+        if (!res.ok) throw new Error(errorMessage(data, "Request failed"));
         applyChatTurnResult(data);
       } catch (err) {
         if (err && err.name === "AbortError") {
           setStatus("Timed out — is the server still starting Whisper, or is DeepSeek/TTS down?");
         } else {
-          setStatus(String(err.message || err));
+          const msg = String(err.message || err);
+          setStatus(msg);
+          if (looksLikeEngineError(msg)) showEngineAlert(msg);
         }
       } finally {
         clearTimeout(timeoutId);
@@ -1688,14 +3351,16 @@
           signal: controller.signal,
         });
         const data = await res.json();
-        if (!res.ok) throw new Error(data.detail || "Request failed");
+        if (!res.ok) throw new Error(errorMessage(data, "Request failed"));
         chatTextInput.value = "";
         applyChatTurnResult(data);
       } catch (err) {
         if (err && err.name === "AbortError") {
           setStatus("Timed out — check DeepSeek/TTS");
         } else {
-          setStatus(String(err.message || err));
+          const msg = String(err.message || err);
+          setStatus(msg);
+          if (looksLikeEngineError(msg)) showEngineAlert(msg);
         }
       } finally {
         clearTimeout(timeoutId);
@@ -1792,8 +3457,13 @@
         body: JSON.stringify({ text: currentTarget }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || "TTS failed");
+      if (!res.ok) {
+        const msg = errorMessage(data, "TTS failed");
+        if (looksLikeEngineError(msg)) showEngineAlert(msg);
+        throw new Error(msg);
+      }
       playWavBase64(data.audio_base64);
+      clearEngineAlert();
       practiceStatusEl.textContent = "Ready — hold to repeat";
     }
 
@@ -2019,7 +3689,6 @@
         const btn = document.createElement("button");
         btn.type = "button";
         btn.className = "secondary";
-        btn.style.textAlign = "left";
         btn.textContent = text;
         btn.addEventListener("click", () => {
           if (item.multi) {
@@ -2236,6 +3905,14 @@
     loadPrefsIntoForm().catch((err) => {
       settingsStatusEl.textContent = String(err.message || err);
     });
+    registerPttSession();
+    refreshPttHookStatus();
+    setInterval(() => {
+      pollPttEvents();
+    }, 2000);
+    setInterval(() => {
+      refreshPttHookStatus();
+    }, 4000);
   </script>
 </body>
 </html>

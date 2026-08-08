@@ -13,6 +13,7 @@ SpeechRegister = Literal["formal", "casual"]
 GoalLevel = Literal["pre_n5", "n5", "n4"]
 ModelRouting = Literal["flash_only", "auto"]
 TtsEngine = Literal["aivisspeech", "voicevox"]
+UiTheme = Literal["night", "slate", "graphite", "day", "cloud", "frost"]
 
 PREFS_PATH = ROOT / "data" / "user_prefs.json"  # legacy flat path (migration only)
 EXAMPLE_PREFS_PATH = ROOT / "data" / "user_prefs.example.json"
@@ -23,6 +24,7 @@ VALID_SPEECH_REGISTER = {"formal", "casual"}
 VALID_GOAL_LEVEL = {"pre_n5", "n5", "n4"}
 VALID_MODEL_ROUTING = {"flash_only", "auto"}
 VALID_TTS_ENGINE = {"aivisspeech", "voicevox"}
+VALID_UI_THEME = {"night", "slate", "graphite", "day", "cloud", "frost"}
 MAX_TOPIC_PREFS = 8
 MAX_TOPIC_LEN = 40
 
@@ -42,6 +44,12 @@ class UserPrefs:
     goal_level: GoalLevel = "pre_n5"
     topic_preferences: list[str] = field(default_factory=list)
     model_routing: ModelRouting = "auto"
+    ui_theme: UiTheme = "night"
+    ptt_enabled: bool = False
+    ptt_binding: str = ""
+    ptt_play_reply: bool = True
+    ptt_blips_enabled: bool = True
+    ptt_blip_volume: float = 0.6
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -145,6 +153,29 @@ def validate_prefs_dict(raw: dict[str, Any]) -> UserPrefs:
     if model_routing not in VALID_MODEL_ROUTING:
         raise ValueError("model_routing must be 'flash_only' or 'auto'")
 
+    ui_theme = str(raw.get("ui_theme", "night") or "night").strip().lower()
+    if ui_theme not in VALID_UI_THEME:
+        raise ValueError(
+            "ui_theme must be one of: night, slate, graphite, day, cloud, frost"
+        )
+
+    ptt_enabled = _as_bool(raw.get("ptt_enabled", False), False)
+    from kaiwa.ptt_binding import canonicalize_binding
+
+    ptt_binding = canonicalize_binding(str(raw.get("ptt_binding", "") or ""))
+    if len(ptt_binding) > 64:
+        raise ValueError("ptt_binding is too long")
+    ptt_play_reply = _as_bool(raw.get("ptt_play_reply", True), True)
+    ptt_blips_enabled = _as_bool(raw.get("ptt_blips_enabled", True), True)
+    try:
+        ptt_blip_volume = float(raw.get("ptt_blip_volume", 0.6))
+    except (TypeError, ValueError) as exc:
+        raise ValueError("ptt_blip_volume must be a number") from exc
+    if ptt_blip_volume < 0.0:
+        ptt_blip_volume = 0.0
+    elif ptt_blip_volume > 5.0:
+        ptt_blip_volume = 5.0
+
     return UserPrefs(
         correction_style=style,  # type: ignore[arg-type]
         personality_id=personality_id,
@@ -159,6 +190,12 @@ def validate_prefs_dict(raw: dict[str, Any]) -> UserPrefs:
         goal_level=goal_level,  # type: ignore[arg-type]
         topic_preferences=topic_preferences,
         model_routing=model_routing,  # type: ignore[arg-type]
+        ui_theme=ui_theme,  # type: ignore[arg-type]
+        ptt_enabled=ptt_enabled,
+        ptt_binding=ptt_binding,
+        ptt_play_reply=ptt_play_reply,
+        ptt_blips_enabled=ptt_blips_enabled,
+        ptt_blip_volume=ptt_blip_volume,
     )
 
 

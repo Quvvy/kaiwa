@@ -1,33 +1,19 @@
 from __future__ import annotations
 
+import json
+import os
 import socket
 import subprocess
 import sys
 import time
 from dataclasses import dataclass, field
+from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
 import httpx
 
-ROOT = Path(__file__).resolve().parents[3]  # src/kaiwa/desktop -> repo root
-
 AivisOrVoicevox = Literal["aivisspeech", "voicevox"]
-
-AIVIS_CANDIDATES = [
-    ROOT / "tools/aivisspeech/engine/Windows-x64/run.exe",
-    Path.home() / "AppData/Local/Programs/AivisSpeech/AivisSpeech-Engine/run.exe",
-    Path.home() / "AppData/Local/Programs/AivisSpeech/engine/run.exe",
-    Path.home() / "AppData/Local/AivisSpeech/engine/run.exe",
-    Path("C:/Program Files/AivisSpeech/AivisSpeech-Engine/run.exe"),
-    Path("C:/Program Files/AivisSpeech/engine/run.exe"),
-    Path("C:/AivisSpeech/engine/run.exe"),
-]
-
-VOICEVOX_CANDIDATES = [
-    Path.home()
-    / "AppData/Local/Microsoft/WinGet/Packages/HiroshibaKazuyuki.VOICEVOX_Microsoft.Winget.Source_8wekyb3d8bbwe/VOICEVOX/vv-engine/run.exe",
-]
 
 ENGINE_PORTS: dict[AivisOrVoicevox, int] = {
     "aivisspeech": 10101,
@@ -35,6 +21,103 @@ ENGINE_PORTS: dict[AivisOrVoicevox, int] = {
 }
 
 KAIWA_PORT = 8787
+
+VOICEVOX_CANDIDATES = [
+    Path.home()
+    / "AppData/Local/Microsoft/WinGet/Packages/HiroshibaKazuyuki.VOICEVOX_Microsoft.Winget.Source_8wekyb3d8bbwe/VOICEVOX/vv-engine/run.exe",
+]
+
+
+def _is_frozen() -> bool:
+    return bool(getattr(sys, "frozen", False))
+
+
+def _exe_dir() -> Path:
+    if _is_frozen():
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parent
+
+
+@lru_cache(maxsize=1)
+def load_runtime_config() -> dict[str, str]:
+    """Sidecar next to Kaiwa.exe (written by scripts/build_desktop.ps1)."""
+    path = _exe_dir() / "Kaiwa.runtime.json"
+    if not path.is_file():
+        return {}
+    try:
+        # utf-8-sig: PowerShell Set-Content -Encoding UTF8 often writes a BOM.
+        data = json.loads(path.read_text(encoding="utf-8-sig"))
+        if isinstance(data, dict):
+            return {str(k): str(v) for k, v in data.items() if v}
+    except Exception:
+        pass
+    return {}
+
+
+@lru_cache(maxsize=1)
+def resolve_repo_root() -> Path:
+    cfg = load_runtime_config()
+    if cfg.get("repo_root"):
+        root = Path(cfg["repo_root"])
+        if root.is_dir():
+            return root.resolve()
+    env = os.environ.get("KAIWA_ROOT", "").strip()
+    if env:
+        root = Path(env)
+        if root.is_dir():
+            return root.resolve()
+    # Source layout: src/kaiwa/desktop/services.py → repo root
+    if not _is_frozen():
+        return Path(__file__).resolve().parents[3]
+    raise FileNotFoundError(
+        "Kaiwa repo root unknown. Rebuild with scripts/build_desktop.ps1 "
+        "or set KAIWA_ROOT / Kaiwa.runtime.json."
+    )
+
+
+@lru_cache(maxsize=1)
+def resolve_api_python() -> Path:
+    """Python that can run `python -m kaiwa.app` (venv), never the frozen exe."""
+    env = os.environ.get("KAIWA_PYTHON", "").strip()
+    if env:
+        p = Path(env)
+        if p.is_file():
+            return p.resolve()
+    cfg = load_runtime_config()
+    if cfg.get("python"):
+        p = Path(cfg["python"])
+        if p.is_file():
+            return p.resolve()
+    try:
+        root = resolve_repo_root()
+        venv_py = root / ".venv" / "Scripts" / "python.exe"
+        if venv_py.is_file():
+            return venv_py.resolve()
+    except FileNotFoundError:
+        pass
+    if not _is_frozen():
+        return Path(sys.executable).resolve()
+    raise FileNotFoundError(
+        "No API Python found. Set KAIWA_PYTHON to your .venv\\Scripts\\python.exe "
+        "or rebuild so Kaiwa.runtime.json points at the venv."
+    )
+
+
+def _root() -> Path:
+    try:
+        return resolve_repo_root()
+    except FileNotFoundError:
+        if not _is_frozen():
+            return Path(__file__).resolve().parents[3]
+        # Last resort: walk up from the exe looking for tools/ or .venv/
+        cur = _exe_dir()
+        for _ in range(6):
+            if (cur / "tools").is_dir() or (cur / ".venv").is_dir():
+                return cur
+            if cur.parent == cur:
+                break
+            cur = cur.parent
+        return _exe_dir()
 
 
 @dataclass
@@ -76,8 +159,21 @@ def http_ok(url: str, timeout: float = 2.0) -> bool:
         return False
 
 
+def _aivis_candidates() -> list[Path]:
+    root = _root()
+    return [
+        root / "tools/aivisspeech/engine/Windows-x64/run.exe",
+        Path.home() / "AppData/Local/Programs/AivisSpeech/AivisSpeech-Engine/run.exe",
+        Path.home() / "AppData/Local/Programs/AivisSpeech/engine/run.exe",
+        Path.home() / "AppData/Local/AivisSpeech/engine/run.exe",
+        Path("C:/Program Files/AivisSpeech/AivisSpeech-Engine/run.exe"),
+        Path("C:/Program Files/AivisSpeech/engine/run.exe"),
+        Path("C:/AivisSpeech/engine/run.exe"),
+    ]
+
+
 def find_engine(engine: AivisOrVoicevox) -> Path | None:
-    candidates = AIVIS_CANDIDATES if engine == "aivisspeech" else VOICEVOX_CANDIDATES
+    candidates = _aivis_candidates() if engine == "aivisspeech" else VOICEVOX_CANDIDATES
     for path in candidates:
         if path.exists():
             return path
@@ -123,7 +219,7 @@ def start_tts_engine(engine: AivisOrVoicevox, registry: ServiceRegistry) -> None
     exe = find_engine(engine)
     if exe is None:
         raise FileNotFoundError(
-            f"{engine} engine not found on disk. Install it, then retry Open."
+            f"{engine} engine not found on disk. Install it, then relaunch Kaiwa."
         )
 
     proc = subprocess.Popen(
@@ -153,10 +249,11 @@ def start_kaiwa(registry: ServiceRegistry) -> None:
         registry.kaiwa.proc = None
         return
 
-    python = sys.executable
+    python = resolve_api_python()
+    root = resolve_repo_root()
     proc = subprocess.Popen(
-        [python, "-m", "kaiwa.app"],
-        cwd=str(ROOT),
+        [str(python), "-m", "kaiwa.app"],
+        cwd=str(root),
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
         creationflags=_creationflags(),
@@ -186,7 +283,6 @@ def _terminate_pid(pid: int) -> None:
         )
     else:
         try:
-            import os
             import signal
 
             os.kill(pid, signal.SIGTERM)

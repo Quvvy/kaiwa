@@ -25,6 +25,8 @@ from kaiwa.personalities_store import (
 )
 from kaiwa.practice import next_phrase, score_intelligibility
 from kaiwa.prefs import load_prefs, save_prefs, validate_prefs_dict
+from kaiwa import ptt_events
+from kaiwa import ptt_sounds
 from kaiwa.learner_profile import (
     apply_chat_signals,
     apply_manual_override,
@@ -46,7 +48,7 @@ from kaiwa.learner_memory import (
     save_memory,
 )
 from kaiwa.session_log import append_session_log
-from kaiwa.text_clean import clean_reply_for_speech
+from kaiwa.text_clean import clean_reply_for_speech, split_try_phrase
 from kaiwa.quiz import (
     QUIZ_SIZE,
     answer_item,
@@ -60,7 +62,7 @@ from kaiwa.quiz import (
 settings = get_settings()
 settings.sessions_dir.mkdir(parents=True, exist_ok=True)
 
-app = FastAPI(title="Kaiwa", version="0.1.0")
+app = FastAPI(title="Kaiwa", version="0.9.0")
 static_dir = ROOT / "static"
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
@@ -101,6 +103,12 @@ class PrefsUpdate(BaseModel):
     goal_level: str = "pre_n5"
     topic_preferences: list[str] = Field(default_factory=list)
     model_routing: str = "auto"
+    ui_theme: str = "night"
+    ptt_enabled: bool = False
+    ptt_binding: str = ""
+    ptt_play_reply: bool = True
+    ptt_blips_enabled: bool = True
+    ptt_blip_volume: float = 0.6
 
 
 class ProfileUpdate(BaseModel):
@@ -188,6 +196,14 @@ def index() -> FileResponse:
     return FileResponse(static_dir / "index.html")
 
 
+@app.get("/favicon.ico")
+def favicon() -> FileResponse:
+    ico = static_dir / "icons" / "kaiwa.ico"
+    if ico.is_file():
+        return FileResponse(ico, media_type="image/x-icon")
+    return FileResponse(static_dir / "icons" / "kaiwa-text-only.png", media_type="image/png")
+
+
 @app.get("/api/health")
 def health() -> dict[str, str]:
     return {"status": "ok", "model": settings.deepseek_model}
@@ -251,6 +267,106 @@ def put_prefs(body: PrefsUpdate) -> dict[str, Any]:
         "prefs": prefs.to_dict(),
         "personalities": preset_public_list(),
     }
+
+
+class PttRegisterBody(BaseModel):
+    session_id: str = ""
+
+
+class PttBindCaptureBody(BaseModel):
+    active: bool = False
+
+
+@app.get("/api/ptt/state")
+def ptt_state() -> dict[str, Any]:
+    prefs = load_prefs()
+    return {
+        "session_id": ptt_events.registered_session(),
+        "bind_capture": ptt_events.bind_capture_active(),
+        "ptt_enabled": prefs.ptt_enabled,
+        "ptt_binding": prefs.ptt_binding,
+        "ptt_play_reply": prefs.ptt_play_reply,
+        "hook_alive": ptt_events.hook_alive(),
+        **ptt_sounds.blip_state(),
+    }
+
+
+@app.post("/api/ptt/register")
+def ptt_register(body: PttRegisterBody) -> dict[str, Any]:
+    ptt_events.register_session(body.session_id.strip())
+    return {"ok": True, "session_id": ptt_events.registered_session()}
+
+
+@app.post("/api/ptt/bind_capture")
+def ptt_bind_capture(body: PttBindCaptureBody) -> dict[str, Any]:
+    ptt_events.set_bind_capture(body.active)
+    return {"ok": True, "bind_capture": ptt_events.bind_capture_active()}
+
+
+@app.post("/api/ptt/heartbeat")
+def ptt_heartbeat() -> dict[str, Any]:
+    ptt_events.heartbeat()
+    return {"ok": True, "hook_alive": True}
+
+
+class PttStatusBody(BaseModel):
+    message: str = ""
+    level: str = "info"
+
+
+@app.post("/api/ptt/status")
+def ptt_status(body: PttStatusBody) -> dict[str, Any]:
+    msg = (body.message or "").strip()
+    if msg:
+        ptt_events.push_status(msg, level=body.level or "info")
+    return {"ok": True}
+
+
+@app.post("/api/ptt/blip/{which}")
+async def ptt_blip_upload(which: str, file: UploadFile = File(...)) -> dict[str, Any]:
+    try:
+        slot = ptt_sounds.normalize_which(which)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    raw = await file.read()
+    try:
+        path = ptt_sounds.save_custom_blip(
+            slot,
+            raw,
+            filename=file.filename,
+            content_type=file.content_type,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {
+        "ok": True,
+        "which": slot,
+        "custom": True,
+        "label": "Custom",
+        "path": str(path),
+    }
+
+
+@app.delete("/api/ptt/blip/{which}")
+def ptt_blip_reset(which: str) -> dict[str, Any]:
+    try:
+        slot = ptt_sounds.normalize_which(which)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    ptt_sounds.clear_custom_blip(slot)
+    return {
+        "ok": True,
+        "which": slot,
+        "custom": False,
+        "label": "Default",
+        "path": str(ptt_sounds.resolve_blip_path(slot)),
+    }
+
+
+@app.get("/api/ptt/events")
+def ptt_events_list(after: int = 0) -> dict[str, Any]:
+    rows = ptt_events.events_after(after)
+    return {"events": rows, "after": after, "hook_alive": ptt_events.hook_alive()}
 
 
 @app.get("/api/profile")
@@ -513,6 +629,7 @@ async def import_user_profile(request: Request) -> dict[str, Any]:
 async def turn(
     audio: UploadFile = File(...),
     session_id: str = Form(default=""),
+    client_source: str = Form(default=""),
 ) -> dict[str, Any]:
     sid = session_id.strip() or uuid.uuid4().hex
     raw = await audio.read()
@@ -538,7 +655,9 @@ async def turn(
     if not transcript:
         raise HTTPException(status_code=400, detail="Could not hear any speech")
 
-    return await _run_chat_turn(sid, transcript, stt_ms=stt_ms)
+    return await _run_chat_turn(
+        sid, transcript, stt_ms=stt_ms, client_source=client_source.strip().lower()
+    )
 
 
 @app.post("/api/turn/text")
@@ -552,7 +671,13 @@ async def turn_text(body: TextTurnRequest) -> dict[str, Any]:
     return await _run_chat_turn(sid, text, stt_ms=0)
 
 
-async def _run_chat_turn(sid: str, transcript: str, *, stt_ms: int) -> dict[str, Any]:
+async def _run_chat_turn(
+    sid: str,
+    transcript: str,
+    *,
+    stt_ms: int,
+    client_source: str = "",
+) -> dict[str, Any]:
     t0 = time.perf_counter()
     history = _sessions.setdefault(sid, [])
     history.append({"role": "user", "content": transcript})
@@ -588,6 +713,10 @@ async def _run_chat_turn(sid: str, transcript: str, *, stt_ms: int) -> dict[str,
     llm_ms = int((time.perf_counter() - t1) * 1000)
 
     reply = clean_reply_for_speech(reply)
+    reply, better_phrase = split_try_phrase(reply)
+    if not reply.strip():
+        # Model only emitted TRY: — keep a minimal spoken fallback
+        reply = better_phrase or "うん。"
     history.append({"role": "assistant", "content": reply})
 
     audio_b64 = ""
@@ -632,6 +761,7 @@ async def _run_chat_turn(sid: str, transcript: str, *, stt_ms: int) -> dict[str,
             "mode": "chat",
             "transcript": transcript,
             "reply": reply,
+            "better_phrase": better_phrase,
             "tts_ok": not tts_error,
             "tts_error": tts_error,
             "tts_engine": prefs.tts_engine,
@@ -644,13 +774,23 @@ async def _run_chat_turn(sid: str, transcript: str, *, stt_ms: int) -> dict[str,
             "memory_updated": memory_updated,
             "timing": timing,
             "input": "text" if stt_ms == 0 else "voice",
+            "client_source": client_source or "ui",
         },
     )
+
+    if client_source == "ptt":
+        ptt_events.push_event(
+            user_text=transcript,
+            reply_text=reply,
+            better_phrase=better_phrase,
+            session_id=sid,
+        )
 
     return {
         "session_id": sid,
         "transcript": transcript,
         "reply_text": reply,
+        "better_phrase": better_phrase,
         "audio_base64": audio_b64,
         "audio_mime": "audio/wav",
         "tts_error": tts_error,

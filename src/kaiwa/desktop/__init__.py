@@ -1,5 +1,3 @@
-"""Kaiwa desktop tray launcher (Windows)."""
+"""Kaiwa desktop window launcher (Windows)."""
 
-from kaiwa.desktop.tray import main
-
-__all__ = ["main"]
+from kaiwa.desktop.app import main

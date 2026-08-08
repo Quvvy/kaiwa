@@ -96,21 +96,44 @@ NO_EMOTES_BLOCK = """\
 
 CORRECTION_BLOCKS = {
     "gentle": """\
-訂正スタイル（やさしい）:
-- 会話を止めない。自然に続けながら直す。
-- 誤りがあれば、正しい言い方を短く言い直す程度。
-- 長い説明や講義はしない。責めない。
+訂正スタイル（やさしい・有用なときだけ）:
+- まず通じる発言を短く認める（例: わかるよ／いいね）。会話を止めない。
+- 直しがいのある誤りだけ直す（語族の取り違え・意味が変わる助詞・です/だのレジスターずれ・さっき教えた型の繰り返し）。
+- 通じるだけ／軽い誤字・フィラー・聞き取りノイズはスルー。毎ターン直さない。
+- 直すときは自然に言い直すか、ごく短い日本語ヒントを1つ。長い説明や講義はしない。責めない。
+- 1ターンに訂正は最大1つ。性格・カジュアルな声を崩さない。
 """,
     "critique": """\
-訂正スタイル（はっきり）:
-- 会話は続けるが、誤りははっきり示す。
-- 短い形で:（1）まちがい （2）正しい言い方 （3）ごく短い理由。
-- それでも全体は短く。長い文法講義はしない。
+訂正スタイル（はっきり・有用なときだけ）:
+- まず通じる部分は認める。会話は続ける。
+- 直しがいのある誤りだけ（語族・意味が変わる助詞・です/だずれ・繰り返しの型）。軽い誤字やスタイルの細かい指摘はしない。
+- 直すときは短い形で:（1）まちがい （2）正しい言い方 （3）ごく短い理由。1ターンに1つだけ。
+- それでも全体は短く。長い文法講義・クイズ化はしない。カジュアルな話し方は保つ。
 """,
 }
 
+TRY_PHRASE_BLOCK = """\
+任意の訂正ライン（TRY）:
+- 直しがいのある誤りがあるときだけ、返信の最後の1行に正確にこう書く:
+  TRY: <短い正しい日本語フレーズ>
+- 直しがいのある例: 語族の取り違え（眠り vs 眠い）、意味が変わる助詞抜け/誤り、です/だのレジスターずれ、直前に教えた型の繰り返しミス。
+- 直さない: 意味に響かない誤字、フィラー、STTノイズ、通じる発言へのスタイルの細かい指摘だけ。
+- 直すことがなければ TRY 行は書かない（沈黙でよい）。1返信に TRY は最大1行。
+- TRY 行より上は話し言葉の会話だけ。TRY 行に英語や説明を書かない。
+- TRY はユーザーが言い直せる短いフレーズ1つだけ。
+"""
+
+TOPIC_STICKINESS_BLOCK = """\
+話題の粘り（トピック）:
+- 意味ヘルプや今の話題のあと、いきなり別の難しい話題へ飛ばない。
+- 同じスレッドを1〜2ターン続け、さっき教えた／使った言葉を再利用したやさしいフォロー質問を出す。
+- 学習者がはっきり話題を変えた／新しい質問をしたら、そちらに合わせてよい。
+- 短くカジュアルに。講義やトピック一覧にしない。
+"""
+
 _HELP_RE = re.compile(
-    r"(わからない|分からない|なにそれ|何それ|どういう意味|英語で|help|what does|"
+    r"(わからない|分からない|なにそれ|何それ|どういう意味|意味|ってなに|って何|"
+    r"英語で|help|what does|"
     r"i don't understand|dont understand|don't understand|in english|mean\?)",
     re.IGNORECASE,
 )
@@ -206,6 +229,7 @@ def language_policy_block(prefs: UserPrefs) -> str:
         return f"""\
 言語ポリシー（イマーション）:
 - 会話も訂正も日本語のみ。英語や他言語の注釈は出さない。
+- 意味がわからないと言われたとき: やさしい日本語で意味を説明し、短い例を1つ出す。英語グロスは出さない。
 - 学習者が困っていても、やさしい日本語で言い換えて続ける。
 - help_language={help_lang} はこのモードでは使わない。
 """
@@ -213,10 +237,13 @@ def language_policy_block(prefs: UserPrefs) -> str:
     return f"""\
 言語ポリシー（アダプティブ）:
 - 基本は日本語イマーション。英語は最小限。
-- 学習者が明らかに苦しい（英語だらけ・極端に短い・壊れた日本語・助け求め）ときだけ、
-  ごく短い英語で訂正・説明してよい（help_language={help_lang}）。そのあとすぐやさしい日本語の質問で会話に戻る。
-- 助けを明示的に求めたときも短い英語メモOK。
-- 英語だけの長い会話にはしない。1ターンに英語は最大1〜2短い文。
+- 意味ヘルプ（わからない・意味・ってなに 等）のとき — JP-first:
+  1) やさしい日本語で意味を短く説明
+  2) 短い例を1つ
+  3) そのあと必要なら help_language={help_lang} のごく短いグロスを1つだけ（先に英語で説明しない）
+- 学習者が明示的に英語を求めたとき（英語で / in English 等）だけ、短いグロスを先にしてよい。そのあとやさしい日本語の例で戻る。
+- 苦しいとき（英語だらけ・極端に短い・壊れた日本語）の訂正も、まずやさしい日本語を優先。グロスは必要最小限。
+- 英語だけの長い会話にはしない。1ターンに英語は最大1〜2短い文。説明のあとすぐやさしい日本語の質問で会話に戻る。
 """
 
 
@@ -272,10 +299,29 @@ def learner_state_block(prefs: UserPrefs, last_user_text: str | None) -> str:
     if state == "flowing":
         hint = "stay_ja"
     elif state == "help_request":
-        hint = "brief_en_ok_then_ja"
+        hint = "ja_meaning_first_optional_gloss"
     else:
-        hint = "brief_en_correction_then_ja"
+        hint = "prefer_ja_brief_gloss_if_needed"
     return f"[learner_state: {state} | language_hint: {hint}]\n"
+
+
+def thread_stickiness_block(
+    last_assistant_text: str | None,
+    last_user_text: str | None = None,
+    learner_state: str | None = None,
+) -> str:
+    """Soft hint to stay on the current thread using the last assistant turn."""
+    asst = re.sub(r"\s+", " ", (last_assistant_text or "").strip())
+    if not asst:
+        return ""
+    if len(asst) > 80:
+        asst = asst[:77].rstrip() + "…"
+    state = (learner_state or infer_learner_state(last_user_text)).strip().lower()
+    if state == "help_request":
+        mode = "stay_on_helped_theme"
+    else:
+        mode = "stay_1_2_turns"
+    return f"[thread_hint: {mode} | reuse_from: {asst}]\n"
 
 
 def personality_block(prefs: UserPrefs) -> str:
@@ -302,8 +348,8 @@ def length_block(learner_state: str | None = None) -> str:
         )
     elif state == "help_request":
         bias = (
-            "助けを求めている。短い答え（必要ならごく短い例を1つ）のあと、すぐ会話の番を渡す。"
-            "講義にしない。"
+            "意味ヘルプ中。やさしい日本語の短い説明＋例を1つ。"
+            "必要ならごく短いグロスを1行だけ足してよい。講義にせず、すぐ会話の番を渡す。"
         )
     else:
         bias = (
@@ -379,7 +425,59 @@ def level_and_profile_block(prefs: UserPrefs, profile: Any | None = None) -> str
 - メモ: {notes}
 - Place me 詳細:
 {detail}
-- 語彙・テンポは推定理解力に合わせる。訂正はスピーキング推定に合わせる。難しすぎる表現は避ける。
+- 語彙・文法の密度は speech_pitch（{speech_pitch}）に合わせる。示された理解力を追い越さない（下の難易度ガバナーに従う）。訂正はスピーキング推定に合わせる。
+"""
+
+
+def difficulty_governor_block(
+    prefs: UserPrefs,
+    profile: Any | None = None,
+    learner_state: str | None = None,
+) -> str:
+    """Cap next-turn vocab/grammar density by demonstrated level."""
+    from kaiwa.learner_profile import (
+        LearnerProfile,
+        effective_speech_level,
+        nudge_level,
+    )
+
+    if profile is None:
+        profile = LearnerProfile()
+    assert isinstance(profile, LearnerProfile)
+
+    state = (learner_state or "flowing").strip().lower()
+    if not profile.placement_completed:
+        pitch = "unknown"
+    else:
+        pitch = effective_speech_level(prefs, profile)
+        if state in {"struggling", "help_request"}:
+            pitch = nudge_level(pitch, -1)
+
+    if pitch in {"unknown", "pre_n5"}:
+        band = """\
+- バンド: pre_n5 / unknown（いちばんやさしく）。
+- 短い日常語だけ。1文にアイデアは1つ。
+- フォローは「今日は何するの？」「何したの？」「大丈夫？」など単純な型を優先。
+- 「予定ある？」「〜てみる」「〜かもしれない」など密度の高い型は、学習者が先に使う／明らかに理解するまで出さない。
+"""
+    elif pitch == "n5":
+        band = """\
+- バンド: n5。少し語彙を増やしてよいが、1ターンのメインは1つ。
+- 密度の高い文法は、学習者の発話に出たあと／ヘルプが通ったあとにだけ足す。
+- いきなり新しい難しい言い回しを積み重ねない。
+"""
+    else:
+        band = """\
+- バンド: n4。余裕はあるが、1ターンに新しい構文をいくつも積まない。
+- それでも聞き取りやすい短さを優先。
+"""
+
+    return f"""\
+難易度ガバナー（次のターンの密度）:
+- 話し方の実効レベル: {pitch}
+- 複雑さは「稼ぐ」まで抑える。示された理解より先に行かない。
+- 新しい難しい語より、今のスレッドと長期メモリの語彙を先にリサイクル。
+{band}- カジュアルな声は保つ。ドリルやJLPT風の発話にしない。
 """
 
 
@@ -387,6 +485,7 @@ def build_tutor_system_prompt(
     prefs: UserPrefs,
     *,
     last_user_text: str | None = None,
+    last_assistant_text: str | None = None,
     profile: Any | None = None,
     memory: Any | None = None,
     learner_state: str | None = None,
@@ -406,9 +505,15 @@ def build_tutor_system_prompt(
         "",
         level_and_profile_block(prefs, profile).strip(),
         "",
+        difficulty_governor_block(prefs, profile, state).strip(),
+        "",
         memory_prompt_block(memory, prefs).strip(),
         "",
         CORRECTION_BLOCKS[style].strip(),
+        "",
+        TRY_PHRASE_BLOCK.strip(),
+        "",
+        TOPIC_STICKINESS_BLOCK.strip(),
         "",
         naturalness_tips_block(prefs).strip(),
         "",
@@ -421,10 +526,46 @@ def build_tutor_system_prompt(
     state_line = learner_state_block(prefs, last_user_text).strip()
     if state_line:
         parts.extend(["", state_line])
+    thread_line = thread_stickiness_block(
+        last_assistant_text, last_user_text, state
+    ).strip()
+    if thread_line:
+        parts.extend(["", thread_line])
     return "\n".join(parts)
 
 
 def build_practice_tip_system_prompt(prefs: UserPrefs) -> str:
+    help_lang = (prefs.help_language or "en").strip().lower() or "en"
+    use_en = help_lang != "ja"
+
+    if use_en:
+        if prefs.correction_style == "critique":
+            tone = (
+                "Be direct: name one concrete mismatch and show a better phrasing. "
+                "Still only 1–2 sentences."
+            )
+        else:
+            tone = "Be gentle and short. Encourage, and offer one rephrase example."
+        lang = (
+            "Write the tip in clear English. Japanese example phrases may appear in quotes. "
+            "No emoji. No pitch-accent or native-pronunciation scoring talk."
+        )
+        role = (
+            "You help a Japanese conversation partner. The learner casually repeated a line "
+            "from chat. The app compares the Whisper transcript to the target text "
+            "(it does not judge pitch accent)."
+        )
+        rules = f"""\
+Rules:
+- 1–2 sentences only. {lang}
+- Kind tone; no quiz / scolding vibe. If it went well, celebrate briefly.
+- Use transcript vs target differences for wording / pacing tips.
+- Do not demand another try — this is an optional warm-up.
+- No stage directions or (smiles) etc.
+- {tone}
+"""
+        return f"{role}\n\n{rules}"
+
     if prefs.correction_style == "critique":
         tone = (
             "ヒントははっきり。違いを具体的に1つ指摘し、正しい言い方を示す。"
@@ -432,11 +573,7 @@ def build_practice_tip_system_prompt(prefs: UserPrefs) -> str:
         )
     else:
         tone = "ヒントはやさしく短く。励まして、言い直しの例を1つ出す。"
-
-    if prefs.language_policy == "immerse":
-        lang = "やさしい日本語のみ。英語は使わない。"
-    else:
-        lang = "やさしい日本語。必要なら短い英語を1つ足してよい。"
+    lang = "やさしい日本語のみ。英語の説明は使わない（引用の日本語フレーズは可）。"
 
     return f"""\
 あなたは日本語の会話パートナーの補助です。学習者がチャットで出た言い回しを、気軽にもう一度言ってみました。
@@ -448,6 +585,6 @@ def build_practice_tip_system_prompt(prefs: UserPrefs) -> str:
 - 文字起こしの違いから、言い方のヒントを出す（音・区切り・言い直し）。
 - 「もう一度やって」と強制しない。任意のウォームアップだとわかっている。
 - ピッチアクセントや「ネイティブ発音スコア」の話はしない。
-- ト書きや（笑顔）などの演出は書かない。
+- ト書きや（笑顔）などの演出は書かない。絵文字は使わない。
 - {tone}
 """

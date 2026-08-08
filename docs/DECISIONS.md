@@ -172,6 +172,32 @@ Captured from the 2026-08-05 planning conversation (Pingo-like personal Japanese
 
 80. Tutor quality next: three layers under casual chat — **(1) conversation** (natural JP, keep personality), **(2) micro-correction** (only useful/recurring errors; reuse `TRY:`), **(3) adaptive difficulty** (don’t outrun demonstrated comprehension). Prefer **JP-first** meaning help when the learner signals unknown vocab; Adaptive may add a short EN gloss only if still stuck. Topic stickiness (1–2 follow-ups) before jumping. Design input: `docs/TUTOR_EXCHANGE_CRITIQUE.md` → roadmap Phase 5.1–5.4. Do **not** textbook-ify Kaiwa’s casual voice.
 
+## JP-first meaning help (2026-08-07)
+
+81. Phase **5.1** shipped in tutor prompt policy (`persona.py`): on meaning/help signals, explain in easy Japanese + one short example **before** any gloss. Adaptive may add one short gloss in `help_language` after that (or lead with a gloss only if the learner explicitly asks for English). Immerse stays JP-only with the same easy-JP + example shape. Refines Adaptive order from #75/#80; no new prefs or UI.
+
+## Useful micro-corrections (2026-08-07)
+
+82. Phase **5.2** shipped in tutor prompt policy (`persona.py`): acknowledge understandable turns first; correct only **useful** errors (word family, meaning-changing particles, です/だ register clash, recurring just-taught patterns) with at most one soft in-flow JP tip and/or one `TRY:` line. Skip typos/filler/STT noise/style nitpicks. Builds on #69 (`TRY:` UI) and #80; no new prefs.
+
+## Topic stickiness (2026-08-07)
+
+83. Phase **5.3** shipped: static topic-stickiness rules in the tutor prompt plus a soft `[thread_hint]` from the last assistant turn (`persona.py` / `llm.chat`). Stay 1–2 turns and reuse just-taught words before jumping; learner topic pivots win. No scenario catalog or new prefs.
+
+## Difficulty governor (2026-08-07)
+
+84. Phase **5.4** shipped in tutor prompt policy (`persona.py`): density capped by `effective_speech_level` (Place-me incomplete → ultra-simple; struggle/help → one notch softer). Prefer simple follow-ups until denser patterns are earned; reuse thread + memory vocab before new dense items. Completes Phase 5; no new prefs.
+
+## Phase 6 consumer prep → 1.0.0 (2026-08-07)
+
+85. Next goal: **friend-ready Windows GitHub 1.0.0** (small non-technical share circle). **DeepSeek-only** API key on first launch (multi-LLM deferred). Secrets live under **user AppData**, not committed `.env`. Installer/first-run bootstraps **Whisper weights + AivisSpeech**; prefer CUDA Whisper, require **CPU fallback**. After 6.4, thin `.venv`-pointing `Kaiwa.exe` is **dev-only**. Roadmap slices 6.1–6.8 end in tagged `v1.0.0` with installer artifact.
+
+87. Phase **6.1** shipped: repo is **MIT** (`LICENSE`); third-party summary in `NOTICE.md`; package/desktop version staged at **0.9.0** (reserve `1.0.0` for slice 6.8); `CHANGELOG.md` started. Next: 6.2 DeepSeek AppData key gate.
+
+## Global push-to-talk (2026-08-07)
+
+86. **Phase 7:** Windows desktop global PTT — bindable key or mouse button works while Kaiwa runs unfocused. Native hook + native mic (not webview `MediaRecorder`); reuse `/api/turn`; play reply on default output; sync transcript into Chat. Default **off** until enabled + bound. Some games/anti-cheat may block hooks. Not a 1.0.0 blocker (ships after / alongside consumer prep). No tray-idle product mode, no open-mic VAD.
+
 ## Related wiki
 
 Ingested into personal llm-wiki under tag `kaiwa` (`C:\Users\elifs\Projects\llm-wiki`). See sync map in `docs/WIKI_SYNC.md`.

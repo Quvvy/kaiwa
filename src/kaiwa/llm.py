@@ -65,14 +65,23 @@ def chat(
     profile = profile or load_profile()
     memory = memory or load_memory()
     last_user = ""
+    last_assistant = ""
     for message in reversed(messages):
-        if message.get("role") == "user" and message.get("content"):
-            last_user = message["content"]
+        role = message.get("role")
+        content = (message.get("content") or "").strip()
+        if not content:
+            continue
+        if not last_user and role == "user":
+            last_user = content
+        elif not last_assistant and role == "assistant":
+            last_assistant = content
+        if last_user and last_assistant:
             break
     state = learner_state or infer_learner_state(last_user)
     system = build_tutor_system_prompt(
         prefs,
         last_user_text=last_user,
+        last_assistant_text=last_assistant or None,
         profile=profile,
         memory=memory,
         learner_state=state,

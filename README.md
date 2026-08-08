@@ -107,7 +107,7 @@ Open **http://127.0.0.1:8787**
 - **Chat** — hold to talk, free conversation; type a short line if Whisper misses you; **Replay** re-plays Kaiwa’s last line (status shows turn timing)
 - **Practice** — optional warm-up: last reply / from our chats / say again; play model, hold to repeat (not a quiz)
 - **Place me** — per-profile soft first-run (auto-open when new/reset; Skip anytime); expanded English self-ratings that shape how Kaiwa talks
-- **Settings** — profiles (switch/backup), Themes (Dark/Light presets), goals, corrections, language help, register, naturalness, personalities, TTS engine/voice, Flash/Pro routing, live learner profile, long-term memory
+- **Settings** — Profiles, Appearance, Tutor, Learning, Memory, Speech (searchable); themes, goals, corrections, TTS/PTT, learner profile, long-term memory
 
 Default port is **8787** (8765 often used by Anki on this machine).
 
@@ -117,6 +117,12 @@ Default port is **8787** (8765 often used by Anki on this machine).
 - [docs/DECISIONS.md](docs/DECISIONS.md)
 - [docs/ROADMAP.md](docs/ROADMAP.md)
 - [docs/WIKI_SYNC.md](docs/WIKI_SYNC.md)
+- [CHANGELOG.md](CHANGELOG.md)
+- [NOTICE.md](NOTICE.md)
+
+## License
+
+Kaiwa is **MIT** — see [LICENSE](LICENSE). Third-party speech engines, models, and Python deps are summarized in [NOTICE.md](NOTICE.md).
 
 ## Notes
 
@@ -125,4 +131,4 @@ Default port is **8787** (8765 often used by Anki on this machine).
 - On Windows, `nvidia-cublas-cu12` / `nvidia-cudnn-cu12` are installed so CUDA Whisper works without a full CUDA Toolkit.
 - Practice scores measure **what the app heard**, not native pitch accent.
 - Phase 3 stays **turn-based** (no OpenAI Realtime); pitch-accent grading remains deferred.
-- **Phase 4:** Core polish items done (including theme switcher). **Phase 5** (next): tutor learning quality — see [docs/ROADMAP.md](docs/ROADMAP.md).
+- **Version:** `0.9.0` (pre-release). **Phase 4–5** done. **Phase 6 (in progress):** consumer prep → Windows GitHub **1.0.0** (slice 6.1 legal/version hygiene done). **Phase 7:** global push-to-talk shipped — see [docs/ROADMAP.md](docs/ROADMAP.md).

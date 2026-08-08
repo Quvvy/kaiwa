@@ -1,43 +1,85 @@
 from __future__ import annotations
 
-from typing import Callable
+import html
+import json
 
 KAIWA_URL = "http://127.0.0.1:8787"
 
+_SPLASH_CSS = """
+:root {
+  --bg: #12141a;
+  --fg: #e8eaef;
+  --muted: #9aa3b2;
+  --accent: #3d9b8f;
+  --danger: #e8a0a0;
+}
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; height: 100%;
+  background: var(--bg); color: var(--fg);
+  font-family: "Segoe UI", system-ui, sans-serif;
+}
+.wrap {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  text-align: center;
+  gap: 0.75rem;
+}
+.brand {
+  font-size: 2rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+}
+.status {
+  color: var(--muted);
+  font-size: 1rem;
+  max-width: 36rem;
+  line-height: 1.45;
+}
+.error .status { color: var(--danger); white-space: pre-wrap; }
+.hint {
+  color: var(--muted);
+  font-size: 0.875rem;
+  max-width: 36rem;
+  line-height: 1.4;
+  opacity: 0.9;
+}
+"""
 
-def open_kaiwa_window(*, on_closed: Callable[[], None]) -> None:
-    """Block until the window is closed, then call on_closed."""
-    try:
-        import webview
-    except ImportError as exc:
-        raise RuntimeError(
-            "pywebview is required. Install with: pip install -e \".[desktop]\""
-        ) from exc
 
-    closed = {"done": False}
+def splash_html(status: str = "Starting…") -> str:
+    safe = html.escape(status)
+    return f"""<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>Kaiwa</title>
+<style>{_SPLASH_CSS}</style></head>
+<body>
+  <div class="wrap">
+    <div class="brand">Kaiwa</div>
+    <div class="status" id="status">{safe}</div>
+  </div>
+</body></html>"""
 
-    def _handle_closing() -> bool:
-        # True = allow close. Services are stopped by on_closed after window exits.
-        return True
 
-    window = webview.create_window(
-        "Kaiwa",
-        KAIWA_URL,
-        width=980,
-        height=780,
-        min_size=(640, 480),
-        text_select=True,
-    )
-    window.events.closing += _handle_closing
+def status_js(msg: str) -> str:
+    return f"var el=document.getElementById('status'); if(el) el.textContent={json.dumps(msg)};"
 
-    def _on_closed() -> None:
-        if closed["done"]:
-            return
-        closed["done"] = True
-        on_closed()
 
-    window.events.closed += _on_closed
-    webview.start()
-    # If closed event didn't fire for some backends:
-    if not closed["done"]:
-        on_closed()
+def error_html(message: str) -> str:
+    safe = html.escape(message.strip() or "Unknown error")
+    return f"""<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>Kaiwa</title>
+<style>{_SPLASH_CSS}</style></head>
+<body>
+  <div class="wrap error">
+    <div class="brand">Kaiwa</div>
+    <div class="status" id="status">Could not start</div>
+    <div class="status">{safe}</div>
+    <p class="hint">Check that your preferred TTS engine is installed and that
+    <code>.venv</code> can run <code>python -m kaiwa.app</code>. Close this window and relaunch.</p>
+  </div>
+</body></html>"""

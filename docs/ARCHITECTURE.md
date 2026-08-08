@@ -9,8 +9,8 @@
 | Realtime barge-in voice | 1–3 weeks | Closer to Pingo feel |
 | Pingo-like product | weeks–months | Scenarios, memory, pronunciation scoring — **out of scope for v0** |
 
-v0 = turn-based speaking practice + optional **Practice** intelligibility mode.
-Skip app-store polish, accounts, 200 scenarios, and pitch-accent grading.
+v0 = turn-based speaking practice + optional **Practice** intelligibility / shadowing mode.
+Skip app-store polish, accounts, 200 scenarios, and dictionary-grade pitch-accent grading.
 
 ## Pipeline (chosen)
 
@@ -39,7 +39,8 @@ Fixed questions → user self-ratings → speaking_level / comprehension_level /
 | STT | `faster-whisper` / `large-v3-turbo` / `cuda` / `float16` |
 | LLM | `deepseek-v4-flash` with `thinking: disabled` |
 | TTS | **AivisSpeech** HTTP API at `http://127.0.0.1:10101` (default); VOICEVOX at `:50021` as fallback |
-| Practice score | Intelligibility only (`score_kind: intelligibility`) via pykakasi + Levenshtein |
+| Practice score | Intelligibility (`score_kind: intelligibility`) via pykakasi + Levenshtein — not pitch accent / native pronunciation |
+
 | Tutor prefs | Active profile’s `user_prefs.json` — correction, language, register, naturalness, goals, routing, personality, voice, max sentences |
 | Learner profile | Active profile’s `learner_profile.json` — live speaking/comprehension estimates |
 | Long-term memory | Active profile’s `learner_memory.json` — comfort, topics, vocab, grammar, soft `recycle_items` |
@@ -167,7 +168,7 @@ At ~10–20 min AI speech/day, OpenAI/Google neural is usually single-digit mont
 
 ## Out of scope (v0)
 
-- Pronunciation / pitch-accent scoring
+- Pronunciation dictionary / absolute pitch-accent grading (NHK / MARINE H–L)
 - Mobile app stores
 - Multi-user / accounts / cloud sync
 - Cloning Pingo’s full scenario catalog

@@ -45,11 +45,13 @@ data/profiles/
 *.wav
 *.mp3
 *.ogg
+!src/kaiwa/desktop/assets/ptt_blip_*.ogg
 *.flac
 
 # Node (if web UI later)
 node_modules/
 dist/
+build/
 .next/
 .turbo/
 

@@ -105,7 +105,8 @@ def synthesize(
             ) from exc
         if audio.status_code >= 400:
             raise TtsError(
-                f"{label} synthesis failed ({audio.status_code}). {audio.text}"
+                f"{label} synthesis failed ({audio.status_code}). "
+                f"{engine_hint(eng)}. {audio.text}"
             )
         return audio.content
 

@@ -11,5 +11,11 @@
   "voicevox_speaker_id": 888753760,
   "goal_level": "pre_n5",
   "topic_preferences": [],
-  "model_routing": "auto"
+  "model_routing": "auto",
+  "ui_theme": "night",
+  "ptt_enabled": false,
+  "ptt_binding": "",
+  "ptt_play_reply": true,
+  "ptt_blips_enabled": true,
+  "ptt_blip_volume": 0.6
 }
