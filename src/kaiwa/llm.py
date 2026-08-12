@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
+
 from openai import OpenAI
 
 from kaiwa.config import Settings
@@ -12,6 +14,7 @@ from kaiwa.learner_profile import (
 from kaiwa.persona import (
     build_practice_tip_system_prompt,
     build_tutor_system_prompt,
+    infer_help_type,
     infer_learner_state,
 )
 from kaiwa.prefs import UserPrefs, load_prefs
@@ -50,7 +53,7 @@ def _completion(
     return content.strip()
 
 
-def chat(
+def _prepare_chat(
     settings: Settings,
     messages: list[dict[str, str]],
     *,
@@ -58,9 +61,9 @@ def chat(
     profile: LearnerProfile | None = None,
     memory: LearnerMemory | None = None,
     learner_state: str | None = None,
-    client: OpenAI | None = None,
-) -> tuple[str, str]:
-    """Return (reply_text, model_used)."""
+    help_type: str | None = None,
+) -> tuple[UserPrefs, LearnerProfile, LearnerMemory, str, str, str]:
+    """Return prefs, profile, memory, learner_state, system prompt, model id."""
     prefs = prefs or load_prefs()
     profile = profile or load_profile()
     memory = memory or load_memory()
@@ -78,6 +81,7 @@ def chat(
         if last_user and last_assistant:
             break
     state = learner_state or infer_learner_state(last_user)
+    ht = help_type if help_type is not None else infer_help_type(last_user)
     system = build_tutor_system_prompt(
         prefs,
         last_user_text=last_user,
@@ -86,10 +90,85 @@ def chat(
         memory=memory,
         learner_state=state,
     )
-    use_pro = needs_pro_routing(prefs, profile, state)
+    use_pro = needs_pro_routing(prefs, profile, state, help_type=ht)
     model = settings.deepseek_model_pro if use_pro else settings.deepseek_model
+    return prefs, profile, memory, state, system, model
+
+
+def chat(
+    settings: Settings,
+    messages: list[dict[str, str]],
+    *,
+    prefs: UserPrefs | None = None,
+    profile: LearnerProfile | None = None,
+    memory: LearnerMemory | None = None,
+    learner_state: str | None = None,
+    help_type: str | None = None,
+    client: OpenAI | None = None,
+) -> tuple[str, str]:
+    """Return (reply_text, model_used)."""
+    _prefs, _profile, _memory, _state, system, model = _prepare_chat(
+        settings,
+        messages,
+        prefs=prefs,
+        profile=profile,
+        memory=memory,
+        learner_state=learner_state,
+        help_type=help_type,
+    )
     reply = _completion(settings, system, messages, client=client, model=model)
     return reply, model
+
+
+def chat_stream(
+    settings: Settings,
+    messages: list[dict[str, str]],
+    *,
+    prefs: UserPrefs | None = None,
+    profile: LearnerProfile | None = None,
+    memory: LearnerMemory | None = None,
+    learner_state: str | None = None,
+    help_type: str | None = None,
+    client: OpenAI | None = None,
+) -> tuple[str, Iterator[str]]:
+    """Return (model_used, iterator of text deltas)."""
+    _prefs, _profile, _memory, _state, system, model = _prepare_chat(
+        settings,
+        messages,
+        prefs=prefs,
+        profile=profile,
+        memory=memory,
+        learner_state=learner_state,
+        help_type=help_type,
+    )
+    client = client or make_client(settings)
+    payload: list[dict[str, str]] = [{"role": "system", "content": system}, *messages]
+    kwargs: dict = {
+        "model": model,
+        "messages": payload,
+        "stream": True,
+    }
+    if settings.deepseek_thinking in {"disabled", "enabled"}:
+        kwargs["extra_body"] = {"thinking": {"type": settings.deepseek_thinking}}
+
+    stream = client.chat.completions.create(**kwargs)
+
+    def _deltas() -> Iterator[str]:
+        got = False
+        for chunk in stream:
+            choices = getattr(chunk, "choices", None) or []
+            if not choices:
+                continue
+            delta = getattr(choices[0], "delta", None)
+            content = getattr(delta, "content", None) if delta is not None else None
+            if not content:
+                continue
+            got = True
+            yield content
+        if not got:
+            raise RuntimeError("DeepSeek returned an empty reply")
+
+    return model, _deltas()
 
 
 def practice_tip(

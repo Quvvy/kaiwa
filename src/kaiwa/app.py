@@ -3,14 +3,17 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import threading
 import time
 import uuid
+from collections import deque
+from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -48,6 +51,7 @@ from kaiwa.learner_memory import (
     save_memory,
 )
 from kaiwa.session_log import append_session_log
+from kaiwa.stream_util import SentenceBuffer
 from kaiwa.text_clean import clean_reply_for_speech, split_try_phrase
 from kaiwa.quiz import (
     QUIZ_SIZE,
@@ -729,7 +733,7 @@ async def turn(
     suffix = Path(audio.filename or "utterance.webm").suffix or ".webm"
     t0 = time.perf_counter()
     try:
-        transcript = await asyncio.to_thread(
+        transcript, stt_meta = await asyncio.to_thread(
             stt.transcribe_audio_bytes,
             settings,
             raw,
@@ -746,7 +750,11 @@ async def turn(
         raise HTTPException(status_code=400, detail="Could not hear any speech")
 
     return await _run_chat_turn(
-        sid, transcript, stt_ms=stt_ms, client_source=client_source.strip().lower()
+        sid,
+        transcript,
+        stt_ms=stt_ms,
+        stt_meta=stt_meta,
+        client_source=client_source.strip().lower(),
     )
 
 
@@ -761,12 +769,326 @@ async def turn_text(body: TextTurnRequest) -> dict[str, Any]:
     return await _run_chat_turn(sid, text, stt_ms=0)
 
 
+def _sse_pack(event: str, data: dict[str, Any]) -> str:
+    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+def _stt_timing_fields(stt_meta: dict[str, Any] | None) -> dict[str, Any]:
+    out: dict[str, Any] = {}
+    if not stt_meta:
+        return out
+    try:
+        passes = int(stt_meta.get("passes") or 0)
+    except (TypeError, ValueError):
+        passes = 0
+    if passes:
+        out["stt_passes"] = passes
+    detected = str(stt_meta.get("detected") or "").strip()
+    if detected:
+        out["stt_lang"] = detected
+    accepted = str(stt_meta.get("accepted") or "").strip()
+    if accepted:
+        out["stt_accepted"] = accepted
+    return out
+
+
+def _stream_chat_events(
+    sid: str,
+    transcript: str,
+    *,
+    stt_ms: int,
+    stt_meta: dict[str, Any] | None = None,
+) -> Iterator[str]:
+    """Yield SSE chunks for UI Chat (LLM deltas + sentence TTS). Not used by PTT."""
+    turn_t0 = time.perf_counter()
+    try:
+        _require_deepseek_key()
+    except HTTPException as exc:
+        yield _sse_pack("error", {"detail": exc.detail})
+        return
+
+    history = _sessions.setdefault(sid, [])
+    history.append({"role": "user", "content": transcript})
+    prefs = load_prefs()
+    profile = load_profile()
+    memory = load_memory()
+    learner_state = infer_learner_state(transcript)
+    profile = apply_chat_signals(profile, learner_state, transcript)
+    save_profile(profile)
+
+    yield _sse_pack(
+        "transcript",
+        {
+            "session_id": sid,
+            "transcript": transcript,
+            "stt_ms": stt_ms,
+            **_stt_timing_fields(stt_meta),
+        },
+    )
+
+    llm_t0 = time.perf_counter()
+    raw_parts: list[str] = []
+    model_used = ""
+    tts_error: str | None = None
+    tts_ms_total = 0
+    tts_first_ms: int | None = None
+    ttfa_ms: int | None = None
+    audio_index = 0
+    buf = SentenceBuffer()
+    llm_ms = 0
+
+    try:
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            pending_jobs: deque[tuple[float, Future[bytes]]] = deque()
+
+            def submit_sentence(sentence: str) -> None:
+                spoken = clean_reply_for_speech(sentence)
+                if not spoken.strip():
+                    return
+                started = time.perf_counter()
+                pending_jobs.append(
+                    (
+                        started,
+                        pool.submit(
+                            tts.synthesize,
+                            settings,
+                            spoken,
+                            speaker_id=prefs.voicevox_speaker_id,
+                            engine=prefs.tts_engine,
+                        ),
+                    )
+                )
+
+            def drain_done(*, block: bool = False) -> Iterator[str]:
+                nonlocal audio_index, tts_ms_total, tts_first_ms, ttfa_ms, tts_error
+                while pending_jobs and (block or pending_jobs[0][1].done()):
+                    started, fut = pending_jobs.popleft()
+                    try:
+                        wav = fut.result()
+                    except Exception as exc:
+                        tts_error = str(exc)
+                        continue
+                    elapsed = int((time.perf_counter() - started) * 1000)
+                    tts_ms_total += elapsed
+                    if tts_first_ms is None:
+                        tts_first_ms = elapsed
+                    if ttfa_ms is None:
+                        ttfa_ms = int((time.perf_counter() - turn_t0) * 1000) + int(
+                            stt_ms
+                        )
+                    yield _sse_pack(
+                        "audio",
+                        {
+                            "index": audio_index,
+                            "audio_base64": base64.b64encode(wav).decode("ascii"),
+                            "audio_mime": "audio/wav",
+                        },
+                    )
+                    audio_index += 1
+
+            try:
+                model_used, deltas = llm.chat_stream(
+                    settings,
+                    history,
+                    prefs=prefs,
+                    profile=profile,
+                    memory=memory,
+                    learner_state=learner_state,
+                )
+                for delta in deltas:
+                    raw_parts.append(delta)
+                    yield _sse_pack("delta", {"text": delta})
+                    for sentence in buf.push(delta):
+                        submit_sentence(sentence)
+                    yield from drain_done(block=False)
+            except Exception as exc:
+                history.pop()
+                yield _sse_pack("error", {"detail": f"LLM failed: {exc}"})
+                return
+
+            llm_ms = int((time.perf_counter() - llm_t0) * 1000)
+            remainder = buf.flush()
+            if remainder:
+                submit_sentence(remainder)
+            yield from drain_done(block=True)
+    except Exception as exc:
+        if history and history[-1].get("role") == "user" and not raw_parts:
+            history.pop()
+        yield _sse_pack("error", {"detail": f"Stream failed: {exc}"})
+        return
+
+    raw_reply = "".join(raw_parts)
+    reply = clean_reply_for_speech(raw_reply)
+    reply, better_phrase = split_try_phrase(reply)
+    if not reply.strip():
+        reply = better_phrase or "うん。"
+    history.append({"role": "assistant", "content": reply})
+
+    memory = note_chat_turn(memory)
+    save_memory(memory)
+    history_snapshot = [{"role": m["role"], "content": m["content"]} for m in history]
+    threading.Thread(
+        target=_chat_sidework,
+        args=(transcript, learner_state, history_snapshot),
+        daemon=True,
+        name="kaiwa-chat-sidework",
+    ).start()
+
+    total_ms = int((time.perf_counter() - turn_t0) * 1000) + int(stt_ms)
+    timing: dict[str, Any] = {
+        "stt_ms": stt_ms,
+        "llm_ms": llm_ms,
+        "tts_ms": tts_first_ms if tts_first_ms is not None else tts_ms_total,
+        "tts_total_ms": tts_ms_total,
+        "total_ms": total_ms,
+    }
+    if ttfa_ms is not None:
+        timing["ttfa_ms"] = ttfa_ms
+    timing.update(_stt_timing_fields(stt_meta))
+
+    append_session_log(
+        settings.sessions_dir,
+        sid,
+        {
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "mode": "chat",
+            "transcript": transcript,
+            "reply": reply,
+            "better_phrase": better_phrase,
+            "tts_ok": not tts_error,
+            "tts_error": tts_error,
+            "tts_engine": prefs.tts_engine,
+            "correction_style": prefs.correction_style,
+            "personality_id": prefs.personality_id,
+            "learner_state": learner_state,
+            "speaking_level": profile.speaking_level,
+            "comprehension_level": profile.comprehension_level,
+            "model_used": model_used,
+            "memory_updated": False,
+            "timing": timing,
+            "input": "text" if stt_ms == 0 else "voice",
+            "client_source": "ui_stream",
+            "streamed": True,
+        },
+    )
+
+    yield _sse_pack(
+        "final",
+        {
+            "session_id": sid,
+            "transcript": transcript,
+            "reply_text": reply,
+            "better_phrase": better_phrase,
+            "tts_error": tts_error,
+            "learner_state": learner_state,
+            "speaking_level": profile.speaking_level,
+            "comprehension_level": profile.comprehension_level,
+            "model_used": model_used,
+            "memory_updated": False,
+            "timing": timing,
+        },
+    )
+
+
+def _sse_response(events: Iterator[str]) -> StreamingResponse:
+    return StreamingResponse(
+        events,
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@app.post("/api/turn/stream")
+async def turn_stream(
+    audio: UploadFile = File(...),
+    session_id: str = Form(default=""),
+) -> StreamingResponse:
+    sid = session_id.strip() or uuid.uuid4().hex
+    raw = await audio.read()
+    if not raw:
+        raise HTTPException(status_code=400, detail="Empty audio upload")
+
+    suffix = Path(audio.filename or "utterance.webm").suffix or ".webm"
+    t0 = time.perf_counter()
+    try:
+        transcript, stt_meta = await asyncio.to_thread(
+            stt.transcribe_audio_bytes,
+            settings,
+            raw,
+            suffix=suffix,
+            mode="chat",
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"STT failed: {exc}") from exc
+    stt_ms = int((time.perf_counter() - t0) * 1000)
+
+    if not transcript:
+        raise HTTPException(status_code=400, detail="Could not hear any speech")
+
+    return _sse_response(
+        _stream_chat_events(sid, transcript, stt_ms=stt_ms, stt_meta=stt_meta)
+    )
+
+
+@app.post("/api/turn/text/stream")
+async def turn_text_stream(body: TextTurnRequest) -> StreamingResponse:
+    text = (body.text or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="text is required")
+    if len(text) > 500:
+        raise HTTPException(status_code=400, detail="text must be ≤ 500 characters")
+    sid = (body.session_id or "").strip() or uuid.uuid4().hex
+    return _sse_response(_stream_chat_events(sid, text, stt_ms=0))
+
+
+def _chat_sidework(
+    transcript: str,
+    learner_state: str,
+    history_snapshot: list[dict[str, str]],
+) -> None:
+    """Assess + extract after the reply is already returned (soft-fail)."""
+    try:
+        prefs = load_prefs()
+        profile = load_profile()
+        profile = maybe_run_assess(
+            settings,
+            profile,
+            transcript=transcript,
+            learner_state=learner_state,
+            prefs=prefs,
+        )
+        save_profile(profile)
+    except Exception:
+        pass
+    try:
+        prefs = load_prefs()
+        profile = load_profile()
+        memory = load_memory()
+        memory, _ = maybe_run_extract(
+            settings,
+            memory,
+            prefs=prefs,
+            profile=profile,
+            recent_messages=history_snapshot,
+        )
+        save_memory(memory)
+    except Exception:
+        pass
+
+
 async def _run_chat_turn(
     sid: str,
     transcript: str,
     *,
     stt_ms: int,
     client_source: str = "",
+    stt_meta: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     _require_deepseek_key()
     t0 = time.perf_counter()
@@ -776,15 +1098,8 @@ async def _run_chat_turn(
     profile = load_profile()
     memory = load_memory()
     learner_state = infer_learner_state(transcript)
+    # Persist streak/signals before LLM; defer assess off the critical path.
     profile = apply_chat_signals(profile, learner_state, transcript)
-    profile = await asyncio.to_thread(
-        maybe_run_assess,
-        settings,
-        profile,
-        transcript=transcript,
-        learner_state=learner_state,
-        prefs=prefs,
-    )
     save_profile(profile)
 
     t1 = time.perf_counter()
@@ -825,24 +1140,38 @@ async def _run_chat_turn(
     except Exception as exc:
         tts_error = str(exc)
     tts_ms = int((time.perf_counter() - t2) * 1000)
+    # Timing = what the user waited for (through TTS); side-work is not included.
     total_ms = int((time.perf_counter() - t0) * 1000) + int(stt_ms)
-    timing = {
+    timing: dict[str, Any] = {
         "stt_ms": stt_ms,
         "llm_ms": llm_ms,
         "tts_ms": tts_ms,
         "total_ms": total_ms,
     }
+    if stt_meta:
+        try:
+            passes = int(stt_meta.get("passes") or 0)
+        except (TypeError, ValueError):
+            passes = 0
+        if passes:
+            timing["stt_passes"] = passes
+        detected = str(stt_meta.get("detected") or "").strip()
+        if detected:
+            timing["stt_lang"] = detected
+        accepted = str(stt_meta.get("accepted") or "").strip()
+        if accepted:
+            timing["stt_accepted"] = accepted
+
 
     memory = note_chat_turn(memory)
-    memory, memory_updated = await asyncio.to_thread(
-        maybe_run_extract,
-        settings,
-        memory,
-        prefs=prefs,
-        profile=profile,
-        recent_messages=history,
-    )
     save_memory(memory)
+    history_snapshot = [{"role": m["role"], "content": m["content"]} for m in history]
+    threading.Thread(
+        target=_chat_sidework,
+        args=(transcript, learner_state, history_snapshot),
+        daemon=True,
+        name="kaiwa-chat-sidework",
+    ).start()
 
     append_session_log(
         settings.sessions_dir,
@@ -862,7 +1191,7 @@ async def _run_chat_turn(
             "speaking_level": profile.speaking_level,
             "comprehension_level": profile.comprehension_level,
             "model_used": model_used,
-            "memory_updated": memory_updated,
+            "memory_updated": False,
             "timing": timing,
             "input": "text" if stt_ms == 0 else "voice",
             "client_source": client_source or "ui",
@@ -889,7 +1218,7 @@ async def _run_chat_turn(
         "speaking_level": profile.speaking_level,
         "comprehension_level": profile.comprehension_level,
         "model_used": model_used,
-        "memory_updated": memory_updated,
+        "memory_updated": False,
         "timing": timing,
     }
 
@@ -1009,7 +1338,7 @@ async def practice(
 
     suffix = Path(audio.filename or "utterance.webm").suffix or ".webm"
     try:
-        heard = await asyncio.to_thread(
+        heard, _stt_meta = await asyncio.to_thread(
             stt.transcribe_audio_bytes,
             settings,
             raw,

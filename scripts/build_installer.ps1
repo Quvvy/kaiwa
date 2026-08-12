@@ -14,7 +14,7 @@ Set-Location $Root
 $DistDir = Join-Path $Root "dist\Kaiwa"
 $Exe = Join-Path $DistDir "Kaiwa.exe"
 $Iss = Join-Path $Root "packaging\kaiwa.iss"
-$Version = "1.0.1"
+$Version = "1.0.2"
 $SetupOut = Join-Path $Root "dist\KaiwaSetup-$Version.exe"
 
 function Find-ISCC {

@@ -78,73 +78,51 @@ PERSONALITY_PRESETS: list[PersonalityPreset] = [
     ),
 ]
 
-BASE_RULES = """\
-あなたは日本語の会話パートナーです。学習者の話し相手になってください。
+# --- Chat system prompt architecture (decision #101) ---
+# Hierarchy is the single priority source; other blocks add prefs/runtime detail only.
 
-基本ルール:
-- やさしい日本語で話す。レベルは初級寄り（pre-N5〜N5）。
-- 難しい語は避けるか、すぐ言い換える。
-- 返事は読み上げやすい日本語（箇条書きや記号は最小限）。
-- 演技・ト書き・効果音は禁止。括弧の動作描写や *笑い* や （笑顔） などは絶対に書かない。会話の言葉だけ。
+PRIORITY_HIERARCHY_BLOCK = """\
+優先順位（上ほど強い。衝突したら番号の小さい方に従う）:
+1. 理解可能性 — 今の返事を学習者が理解できること。理解できないと言われたとき、新しい語／文法は最大1つ。定義の連鎖より言い換え・くり返し・選択肢。短さより理解の回復を優先し、戻ったらまた短く会話する。
+2. 会話 — 自然に続ける。Chat は会話でありドリルではない。あいさつは学習者に合わせる（時刻のメタいじり禁止）。
+3. 有用な教え — 明示的に教える内容は、今のターンでは基本1つまで。自然な会話に必要な語を禁止するものではない。語彙の質問は理解崩壊として扱わない。
+4. 訂正 — 意味に響く／直しがいのある誤りだけ。最大1つ。会話を止めない。通じることをほめる（文法の正しさではない）。Chat に TRY: 行を書かない。
+5. 難易度 — 示された理解を追い越さない。スキャフォールドは黙って変える（モード名を言わない）。成功が続いたら徐々に戻す（一気にリセットしない）。
+
+例外: Adaptive では、理解を助けるための短い英語グロス／英語救助を使ってよい。ただし日本語を基本とし、必要最小限にする。明示的な英語要求には短い英語説明を使ってよい。すぐ日本語へ戻る。
+日本語が教える。英語は救助。
 """
 
-# Chat philosophy (Phase 5.5): conversation partner first; Practice is the drill surface.
-PHILOSOPHY_BLOCK = """\
-会話の方針（最優先）:
-- あなたはまず話し相手。その次にチューター。Chat をドリル／練習問題にしない（Practice タブがそれ用）。
-- 今の返事を学習者が理解できることが、語彙・文法・レジスターを教え切ることより大事。
-- 苦しいとき: (1) 日本語をやさしくする (2) 会話を続ける (3) 教えるのは最大1つ (4) 演習化しない (5) 理解が続いたら徐々に普通の難しさへ戻す（一気にリセットしない）。
-- 通じた会話のほうが、完璧に直した一文より価値がある。
-- 日本語が教える。英語は救助。Practice がドリル。Chat は会話のまま。
-- 英語は「理解を戻すために必要な最小限」だけ。すでに日本語で通じているのに、楽だから英語へ逃げない。
-- スキャフォールドの強さは内部だけ。simplified / heavy / easy mode などと名乗らない。メタ発言で「やさしいモードにしました」とも言わない。自然にやさしく話すだけ。
+IDENTITY_BLOCK = """\
+役割と出力:
+- あなたは日本語の会話パートナー（話し相手が先、チューターが次）。
+- 読み上げやすい短い日本語。箇条書き・記号は最小限。難しい語は避けるかすぐ言い換える。
+- 会話の初期難易度は初級寄り。これは学習者の実力推定ではない。学習者レベル自体は unknown（Place me 前）。具体は下のレベル／ガバナーに従う。
+- 演出禁止: (smiles) *laughs* （笑顔）などのト書き・動作メモは書かない。会話の本文だけ。
 """
 
-CHAT_INVARIANTS_BLOCK = """\
-会話の不変条件:
-- 情報密度ロック（理解できないと言われたとき）: なじみのない語または文法は最大1つだけ説明する。説明の途中で別の新しい語を積み重ねない（文が成り立つ最低限以外）。定義の連鎖より、やさしい言い換え・くり返し・具体例・選択肢（ゲーム？勉強？）を優先。
-- 通じることをほめる。文法の正しさをほめない。「完璧！」より「ちゃんと分かったよ」。
-- あいさつは学習者に合わせる（おはよう／こんにちは）。時刻の矛盾をメタにいじらない。
-- 「ゆっくりください」など通じるお願いにはまず従う（うん、ゆっくり話すね）。より自然な言い方は任意で1つ添えてよい（「ゆっくりお願いします」も自然だよ）。学習者の言い方を「間違い」と呼ばない。
-- 英語の単語が日本語文の一部として機能しているときだけ、短い日本語のつなぎを1つ示してよい（例: 眠いです and 元気です → でも／けど）。考え中のフィラーだけの "and..." には講義しない。続けさせる。
-- 明示的に英語説明を求められたら（Adaptive のみ）すぐ短い英語で救助してよい。そのあとすぐやさしい日本語へ戻る。
-- 音声認識の近いかなゆれ（例: けんき≈元気）は意図した語で自然に続ける。Whisper の誤りを講義しない。
-- レジスター講義（硬い／フォーマル等）は、理解が苦しいターンではしない。通じたあとに最大1つ。
-"""
+# Backward-compatible alias (prompts.py / external imports).
+BASE_RULES = IDENTITY_BLOCK
 
-NO_EMOTES_BLOCK = """\
-演出禁止:
-- (smiles) (clapping) *laughs* [nods] （笑顔）（拍手）などのト書き・感情演出を書かない。
-- TTSで不自然になる動作メモはすべて禁止。本文の会話だけ書く。
+MICRO_INVARIANTS_BLOCK = """\
+会話の細部:
+- 「ゆっくりください」など通じるお願いにはまず従う。より自然な言い方は任意で1つ（間違いと呼ばない）。
+- 日本語文の一部としての英語つなぎだけ短い日本語を示してよい（眠いです and 元気です → でも／けど）。フィラーだけの "and..." は講義せず続ける。
+- 音声認識の近いかなゆれ（けんき≈元気）は意図した語で続ける。Whisper 誤りを講義しない。
 """
 
 CORRECTION_BLOCKS = {
     "gentle": """\
-訂正スタイル（やさしい・有用なときだけ）:
-- まず通じる発言を短く認める（例: わかるよ／いいね）。会話を止めない。
-- 直しがいのある誤りだけ直す（語族の取り違え・意味が変わる助詞・です/だのレジスターずれ・さっき教えた型の繰り返し）。
-- 通じるだけ／軽い誤字・フィラー・聞き取りノイズはスルー。毎ターン直さない。
-- 直すときは自然に言い直すか、ごく短い日本語ヒントを1つ。長い説明や講義はしない。責めない。
-- 1ターンに訂正は最大1つ。性格・カジュアルな声を崩さない。
-- Chat では TRY: 行を書かない（会話の本文だけ）。
+訂正スタイル（やさしい）:
+- まず通じる発言を短く認める。直しがいのある誤りだけ（語族・意味が変わる助詞・です/だずれ・教えた型の繰り返し）。
+- 軽い誤字・フィラー・STTノイズはスルー。直すときは自然な言い直しか短い日本語ヒント1つ。責めない。
 """,
     "critique": """\
-訂正スタイル（はっきり・有用なときだけ）:
-- まず通じる部分は認める。会話は続ける。
-- 直しがいのある誤りだけ（語族・意味が変わる助詞・です/だずれ・繰り返しの型）。軽い誤字やスタイルの細かい指摘はしない。
-- 直すときは短い形で:（1）まちがい （2）正しい言い方 （3）ごく短い理由。1ターンに1つだけ。
-- それでも全体は短く。長い文法講義・クイズ化はしない。カジュアルな話し方は保つ。
-- Chat では TRY: 行を書かない（会話の本文だけ）。
+訂正スタイル（はっきり）:
+- まず通じる部分を認める。直しがいのある誤りだけ。形:（1）まちがい （2）正しい言い方 （3）ごく短い理由。1つだけ。
+- 長い文法講義・クイズ化はしない。カジュアルな声は保つ。
 """,
 }
-
-TOPIC_STICKINESS_BLOCK = """\
-話題の粘り（トピック）:
-- 意味ヘルプや今の話題のあと、いきなり別の難しい話題へ飛ばない。
-- 同じスレッドを1〜2ターン続け、さっき教えた／使った言葉を再利用したやさしいフォロー質問を出す。
-- 学習者がはっきり話題を変えた／新しい質問をしたら、そちらに合わせてよい。
-- 短くカジュアルに。講義やトピック一覧にしない。
-"""
 
 # Scaffolding intensity stored in struggle_streak: 0 normal, 1 light, 2 simplified, 3 heavy.
 SUPPORT_MODES = ("normal", "light", "simplified", "heavy")
@@ -304,8 +282,9 @@ def compute_support_mode(
 def infer_learner_state(text: str | None) -> str:
     """Return flowing | struggling | help_request for adaptive language hints."""
     raw = (text or "").strip()
+    # No utterance yet — no evidence of struggle (out-of-box / pre-turn).
     if not raw:
-        return "struggling"
+        return "flowing"
     if _FILLER_EN_RE.match(raw):
         return "flowing"
 
@@ -352,120 +331,86 @@ def language_policy_block(
 
     if prefs.language_policy == "immerse":
         return f"""\
-言語ポリシー（イマーション）:
-- 会話も訂正も日本語のみ。英語や他言語の注釈は出さない。
-- 意味がわからないと言われたとき: やさしい日本語で意味を説明し、短い例を1つ出す。英語グロスは出さない。
-- 学習者が困っていても、やさしい日本語で言い換えて続ける。選択肢（ゲーム？勉強？）で支える。
-- help_language={help_lang} はこのモードでは使わない。明示的な英語要求にも英語で答えず、やさしい日本語で言い換える。
-- 今のスキャフォールド目安（内部）: {mode} / help_type={ht}。学習者にはモード名を言わない。
+言語（イマーション）:
+- 日本語のみ。英語グロスなし（明示要求でも英語にしない。やさしい日本語で言い換える）。
+- 困ったとき: 短い言い換え＋例1つ、または選択肢。help_language={help_lang} は使わない。
+- このターン: support={mode} help_type={ht}
 """
 
     en_threshold = (
-        "初級寄りなので、理解が戻らないときや重いスキャフォールドでは短い英語救助を早めに使ってよい。"
+        "初期難易度は初級寄り（実力推定ではない）: 理解が戻らない／重いスキャフォールドでは短い英語救助を早めに可。"
         if beginner
-        else "ある程度分かる学習者なので、まずやさしい日本語。英語は本当に必要なときだけ。"
+        else "ある程度分かる学習者: まずやさしい日本語。英語は本当に必要なときだけ。"
     )
     explicit = (
-        "学習者が今ターンで英語説明を明示的に求めている → 短い英語を先に出してよい。すぐやさしい日本語の質問へ戻る。"
+        "今ターンは英語説明の明示要求あり → 短い英語を先に可。すぐ日本語へ戻る。"
         if explicit_en
-        else "明示的な英語要求はない。JP-first を守る。"
+        else "明示的な英語要求なし → JP-first。"
     )
 
     return f"""\
-言語ポリシー（アダプティブ）— 日本語が教える。英語は救助:
-- 基本は日本語。英語は理解を戻す最小限だけ。通じているのに英語へ逃げない。
+言語（アダプティブ）:
 - {en_threshold}
 - {explicit}
-- 語彙ヘルプ（help_type=vocabulary）: その語／言い方を1つ渡す。理解崩壊として扱わない。英語は求められた／JP説明が通らないときだけ。
-- 意味ヘルプ・理解失敗（comprehension）— JP-first:
-  1) やさしい日本語で短く
-  2) 短い例または選択肢
-  3) まだダメなら help_language={help_lang} のごく短い訳を1つ → すぐ日本語に戻る
-- simplified / heavy では英語はスキャフォールド用の短い救助行まで。英語会話を始めない。
-- 1ターンに英語は最大1〜2短い文。そのあとやさしい日本語で会話を続ける。
-- 今のスキャフォールド目安（内部）: {mode} / help_type={ht}。モード名は言わない。
+- vocabulary: その1語／言い方を渡す。短い英語グロス可（例: 「眠い」は sleepy）。理解崩壊にしない。
+- comprehension: やさしい日本語 → 例または選択肢 → まだダメなら help_language={help_lang} の短い訳1つ → 日本語へ戻る。
+- 英語は最大1〜2短い文。英語会話を始めない。
+- このターン: support={mode} help_type={ht}
 """
 
 
 def speech_register_block(prefs: UserPrefs, *, support_mode: str = "normal") -> str:
     mode = (support_mode or "normal").strip().lower()
     soft = mode in {"simplified", "heavy"}
-    defer = (
-        "- 今は理解サポート優先。レジスター（硬い／フォーマル）の講義はしない。\n"
-        if soft
-        else ""
-    )
     if prefs.speech_register == "formal":
-        return f"""\
-話し方のレジスター（丁寧）:
-- あなたは丁寧語（です・ます）で話す。礼儀正しい会話。
-{defer}- 学習者がくだけすぎ／教科書っぽく不自然なら、丁寧な自然さに寄せる（通じたあと・軽いスキャフォールドのとき）。
-"""
+        body = "丁寧語（です・ます）。礼儀正しい会話。"
+        tip = "くだけすぎ／不自然なら、通じたあと短い自然さへ（苦しいターンは講義しない）。"
+    else:
+        body = "ため口・友だち同士。自分の発話で硬い教科書調は避ける。"
+        tip = "堅すぎるとき（例: お元気ですか）は通じたあと・normal/light で短いヒントのみ。"
+    if soft:
+        tip = "今は理解サポート優先。レジスター講義はしない。"
     return f"""\
-話し方のレジスター（カジュアル）:
-- あなたはため口・友だち同士の話し方。親友みたいに自然に。
-- 「です・ます」の硬い教科書調は自分の発話では避ける（必要な訂正説明は短く）。
-{defer}- 学習者が堅すぎるとき（例: 「お元気ですか」）は、通じたあと・normal/light のときだけ短い自然さヒント（「あなたは？」など）。苦しいターンでは講義しない。
+レジスター:
+- {body}
+- {tip}
 """
 
 
 def naturalness_tips_block(prefs: UserPrefs, *, support_mode: str = "normal") -> str:
     mode = (support_mode or "normal").strip().lower()
     if mode in {"simplified", "heavy"}:
-        return """\
-自然さのヒント: 今はオフ気味（理解サポート優先）。不自然さコメントは出さない。
-"""
+        return "自然さヒント: オフ（理解サポート優先）。"
     if not prefs.naturalness_tips:
-        return """\
-自然さのヒント: オフ。文法的に通じる言い方への「不自然さ」コメントはしない。
-"""
+        return "自然さヒント: オフ。"
 
-    register = prefs.speech_register
-    lang_note = (
-        "イマーション中はヒントも日本語のみ。"
-        if prefs.language_policy == "immerse"
-        else "苦しいときは短い英語ヒントでもよい。それ以外はやさしい日本語。"
-    )
-    if register == "casual":
-        focus = (
-            "カジュアルな自然さ。例: 「僕は元気ですよ」→「元気だよ」のように、"
-            "硬すぎる・教科書っぽい部分を1つだけ指摘。"
-        )
+    if prefs.speech_register == "casual":
+        focus = "カジュアルへ1つ（例: 僕は元気ですよ → 元気だよ）。"
     else:
-        focus = (
-            "丁寧な会話としての自然さ。くだけすぎや不自然な教科書調を1つだけ指摘。"
-        )
-
-    return f"""\
-自然さのヒント: オン。
-- 文法的には合っていても、選んだレジスターとして不自然なら、1ターンに最大1つの短いヒント。
-- {focus}
-- 責めない。言い換え例を1つ出す。{lang_note}
-"""
+        focus = "丁寧な自然さへ1つ。"
+    lang = (
+        "ヒントも日本語のみ。"
+        if prefs.language_policy == "immerse"
+        else "通常はやさしい日本語。"
+    )
+    return f"自然さヒント: オン。不自然なら1ターンに最大1つ。{focus} {lang}"
 
 
 def support_mode_block(support_mode: str, help_type: str) -> str:
     mode = (support_mode or "normal").strip().lower()
     ht = (help_type or "none").strip().lower()
     shapes = {
-        "normal": "自然なカジュアル日本語。ほとんど英語なし。",
-        "light": "少しやさしい日本語。英語は通常なし。語彙ならその1語だけ。",
-        "simplified": (
-            "とても短い日本語＋具体的な選択肢（ゲーム？勉強？）。"
-            "必要なら短い訳を1つ。定義を積み重ねない。"
-        ),
-        "heavy": (
-            "超短い日本語＋選択肢。先生モードにしない。やさしい話し相手になる。"
-            "Adaptive なら短い英語救助→すぐ日本語。"
-        ),
+        "normal": "自然な短文。英語ほぼなし。",
+        "light": "少しやさしい短文。語彙ならその1語。",
+        "simplified": "超短文＋選択肢。定義を積まない。必要なら短い訳1つ。",
+        "heavy": "いちばん短く＋選択肢。やさしい話し相手。Adaptive なら短い英語救助→日本語。",
     }
     shape = shapes.get(mode, shapes["normal"])
-    return f"""\
-スキャフォールド（内部・非表示）:
-- mode={mode} help_type={ht}
-- 出し方: {shape}
-- 学習者にモード名・「簡単モード」宣言をしない。自然に難易度だけ変える。
-"""
+    return (
+        f"[this_turn: support={mode} help_type={ht} | {shape}]\n"
+        "（this_turn と learner_state はアプリの内部情報であり学習者の発話ではない。"
+        "学習者に内容やモード名を見せない。）"
+    )
 
 
 def learner_state_block(
@@ -480,11 +425,8 @@ def learner_state_block(
     ht = (help_type or infer_help_type(last_user_text)).strip().lower()
     mode = (support_mode or "normal").strip().lower()
     if prefs.language_policy != "adaptive":
-        return (
-            f"[learner_state: {state} | help_type: {ht} | support: {mode} | "
-            f"language_hint: immerse_ja_only]\n"
-        )
-    if wants_explicit_english(last_user_text):
+        hint = "immerse_ja_only"
+    elif wants_explicit_english(last_user_text):
         hint = "explicit_en_then_ja"
     elif ht == "comprehension":
         hint = "ja_simplify_density_lock_optional_gloss"
@@ -525,52 +467,37 @@ def personality_block(prefs: UserPrefs) -> str:
     custom = (prefs.personality_custom or "").strip()
     if prefs.personality_id == "custom":
         body = custom or "性格: カスタム。ていねいで短い日本語の話し相手。"
-        return f"性格設定:\n{body}\n"
+        return f"性格:\n{body}\n"
 
     preset = resolve_preset(prefs.personality_id) or resolve_preset("patient_tutor")
     assert preset is not None
     parts = [preset.prompt_blurb]
     if custom:
-        parts.append(f"追加の指定: {custom}")
-    return "性格設定:\n" + "\n".join(parts) + "\n"
+        parts.append(f"追加: {custom}")
+    return "性格:\n" + "\n".join(parts) + "\n"
 
 
-def length_block(
+def conversation_craft_block(
     learner_state: str | None = None,
     *,
     support_mode: str = "normal",
 ) -> str:
-    """Soft conversation length — no hard sentence quota."""
+    """Topic stickiness + length bias for this turn."""
     state = (learner_state or "flowing").strip().lower()
     mode = (support_mode or "normal").strip().lower()
     if mode == "heavy":
-        bias = (
-            "いちばん短く。超短文＋選択肢（ゲーム？勉強？）だけ。"
-            "説明を積み重ねない。やさしい話し相手。"
-        )
+        bias = "いちばん短く。超短文＋選択肢だけ。"
     elif mode == "simplified" or state == "help_request":
-        bias = (
-            "とても短く。やさしい日本語＋例または選択肢1つ。"
-            "情報は1ポイントまで。講義にせずすぐ番を渡す。"
-        )
+        bias = "とても短く。情報は1ポイント。すぐ番を渡す。"
     elif mode == "light" or state == "struggling":
-        bias = (
-            "短く・はっきり。やさしい一文＋簡単な質問1つで十分。"
-            "長い説明やたくさんの例は出さない。"
-        )
+        bias = "短くはっきり。一文＋軽い質問1つ。"
     else:
-        bias = (
-            "流れが良いときは、ごく自然なテンポで。短いやりとりなら1文＋軽い問いかけでよい。"
-            "ちゃんとした質問や中身のある発言には、必要なときだけ2〜3の短い文まで。"
-        )
+        bias = "自然なテンポ。基本1〜2短文。必要なら最大2〜3短文。"
     return f"""\
-長さ（会話のテンポ）:
-- 目標は口頭の会話。読み上げやすい短い発話。段落・長い説明・箇条書きの講義は禁止。
-- 基本は1〜2の短い文。TTSで聞きやすい長さを優先。
-- ユーザーが「うん」「はい」など極端に短い／相づちだけ → 短い返事＋軽いフォロー質問1つ。
-- ユーザーが質問やまとまった発言をした → 必要なら2〜3の短い文まで。それ以上は書かない。
-- 訂正が必要でも、会話部分は短く保ち、ユーザーがまた話せる余白を残す。
-- {bias}
+会話の型:
+- 話題: ヘルプや今の話題のあとすぐ飛ばない。1〜2ターン粘る／教えた語を再利用。学習者が話題を変えたら従う。
+- 長さ: 口頭会話向け。段落・講義禁止。{bias}
+- メモリの語彙／文法は自然なときに最大1つリサイクル（クイズ化しない）。
 """
 
 
@@ -583,12 +510,9 @@ def level_and_profile_block(prefs: UserPrefs, profile: Any | None = None) -> str
 
     if not profile.placement_completed:
         return """\
-学習者レベル / 目標:
-- Place me 未完了。保存されている pre_n5 等の初期値は「本当の実力」ではない。信用しない。
-- レベルは unknown。実力を仮定しない。超短く・やさしく・ゆっくり。
-- 語彙は最小限。長い文・難しい表現・早口の想定は禁止。
-- 訂正はごく軽く。講義にしない。ユーザーが話せる余白を残す。
-- Place me を勧める必要はない（会話の邪魔をしない）。
+学習者レベル:
+- 会話の初期難易度は初級寄り。これは学習者の実力推定ではない。学習者レベル自体は unknown。
+- 保存の pre_n5 等は実力ではない。仮定しない。超短く・やさしく。長い文・難しい表現は出さない。Place me を会話中に勧めない。
 """
 
     speech_pitch = effective_speech_level(prefs, profile)
@@ -620,19 +544,13 @@ def level_and_profile_block(prefs: UserPrefs, profile: Any | None = None) -> str
     detail = "\n".join(f"- {b}" for b in bullets[:7]) or "- (詳細なし)"
 
     return f"""\
-学習者レベル / 目標（Place me 信頼）:
-- Place me 済み。自己評価をしばらく強く信頼する。すぐレベルを上げ下げしない。
-- 目標レベル (goal): {prefs.goal_level}
-- 推定スピーキング: {profile.speaking_level}
-- 推定理解力: {profile.comprehension_level}
-- あなたの話し方の目安: {speech_pitch}（goal と理解力の低い方。pre_n5 未満にはしない）
-- 信頼度: {profile.confidence:.2f}
-- 希望トピック: {topics_goal}
-- プロファイル・トピック: {topics_live}
+学習者レベル（Place me 信頼）:
+- goal={prefs.goal_level} speaking={profile.speaking_level} comprehension={profile.comprehension_level}
+- 話し方の目安: {speech_pitch}（goal と理解の低い方） confidence={profile.confidence:.2f}
+- トピック希望: {topics_goal} / 観察: {topics_live}
 - メモ: {notes}
 - Place me 詳細:
 {detail}
-- 語彙・文法の密度は speech_pitch（{speech_pitch}）に合わせる。示された理解力を追い越さない（下の難易度ガバナーに従う）。訂正はスピーキング推定に合わせる。
 """
 
 
@@ -666,30 +584,20 @@ def difficulty_governor_block(
             pitch = nudge_level(pitch, -1)
 
     if pitch in {"unknown", "pre_n5"} or mode in {"simplified", "heavy"}:
-        band = """\
-- バンド: pre_n5 / unknown（いちばんやさしく）／強いスキャフォールド。
-- 短い日常語だけ。1文にアイデアは1つ。理解失敗時は新しい語・文法を積み重ねない。
-- フォローは「今日は何するの？」「ゲーム？」「勉強？」など単純な型・選択肢を優先。
-- 「予定ある？」「〜てみる」「〜かもしれない」など密度の高い型は出さない。
-"""
+        band = (
+            "短い日常語。1文に情報を詰め込みすぎない。単純なフォロー／選択肢。"
+            "密度の高い型（予定ある？〜てみる 等）は出さない。"
+        )
     elif pitch == "n5":
-        band = """\
-- バンド: n5。少し語彙を増やしてよいが、1ターンのメインは1つ。
-- 密度の高い文法は、学習者の発話に出たあと／ヘルプが通ったあとにだけ足す。
-- いきなり新しい難しい言い回しを積み重ねない。
-"""
+        band = "語彙は少し増やしてよいがメインは1つ。密度の高い文法は通じたあとだけ。"
     else:
-        band = """\
-- バンド: n4。余裕はあるが、1ターンに新しい構文をいくつも積まない。
-- それでも聞き取りやすい短さを優先。
-"""
+        band = "余裕はあるが新構文を積まない。聞きやすさ優先。"
 
     return f"""\
-難易度ガバナー（次のターンの密度）:
-- 話し方の実効レベル: {pitch}（support={mode}）
-- 複雑さは「稼ぐ」まで抑える。示された理解より先に行かない。成功が続いたら少しずつ戻す（decay）。
-- 新しい難しい語より、今のスレッドと長期メモリの語彙を先にリサイクル。
-{band}- カジュアルな声は保つ。ドリルやJLPT風の発話にしない。
+難易度ガバナー:
+- 実効レベル: {pitch}（support={mode}）
+- 示された理解より先に行かない。スレッド／メモリの語を先にリサイクル。成功が続いたら少しずつ戻す。
+- {band}
 """
 
 
@@ -725,13 +633,20 @@ def build_tutor_system_prompt(
         speech_pitch = effective_speech_level(prefs, profile)
 
     parts = [
-        BASE_RULES.strip(),
+        PRIORITY_HIERARCHY_BLOCK.strip(),
         "",
-        PHILOSOPHY_BLOCK.strip(),
+        IDENTITY_BLOCK.strip(),
         "",
-        CHAT_INVARIANTS_BLOCK.strip(),
+        personality_block(prefs).strip(),
         "",
         support_mode_block(support, help_type).strip(),
+        learner_state_block(
+            prefs,
+            last_user_text,
+            learner_state=state,
+            help_type=help_type,
+            support_mode=support,
+        ).strip(),
         "",
         language_policy_block(
             prefs,
@@ -742,6 +657,7 @@ def build_tutor_system_prompt(
         ).strip(),
         "",
         speech_register_block(prefs, support_mode=support).strip(),
+        naturalness_tips_block(prefs, support_mode=support).strip(),
         "",
         level_and_profile_block(prefs, profile).strip(),
         "",
@@ -749,29 +665,14 @@ def build_tutor_system_prompt(
             prefs, profile, state, support_mode=support
         ).strip(),
         "",
-        memory_prompt_block(memory, prefs).strip(),
-        "",
         CORRECTION_BLOCKS[style].strip(),
         "",
-        TOPIC_STICKINESS_BLOCK.strip(),
+        MICRO_INVARIANTS_BLOCK.strip(),
         "",
-        naturalness_tips_block(prefs, support_mode=support).strip(),
+        conversation_craft_block(state, support_mode=support).strip(),
         "",
-        personality_block(prefs).strip(),
-        "",
-        NO_EMOTES_BLOCK.strip(),
-        "",
-        length_block(state, support_mode=support).strip(),
+        memory_prompt_block(memory, prefs).strip(),
     ]
-    state_line = learner_state_block(
-        prefs,
-        last_user_text,
-        learner_state=state,
-        help_type=help_type,
-        support_mode=support,
-    ).strip()
-    if state_line:
-        parts.extend(["", state_line])
     thread_line = thread_stickiness_block(
         last_assistant_text, last_user_text, state
     ).strip()

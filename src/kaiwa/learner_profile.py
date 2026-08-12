@@ -507,12 +507,20 @@ def needs_pro_routing(
     prefs: UserPrefs,
     profile: LearnerProfile,
     learner_state: str,
+    help_type: str | None = None,
 ) -> bool:
+    """Auto routing: Pro only for heavier comprehension / critique streak — not vocab glosses."""
     if prefs.model_routing != "auto":
         return False
-    state = (learner_state or "").strip().lower()
-    if state in {"struggling", "help_request"}:
+    ht = (help_type or "none").strip().lower()
+    # Soft help stays on Flash.
+    if ht in {"vocabulary", "expression", "correction"}:
+        return False
+    streak = max(0, int(profile.stats.struggle_streak))
+    # Comprehension with simplified+ scaffolding (streak >= 2 after signals).
+    if ht == "comprehension" and streak >= 2:
         return True
-    if prefs.correction_style == "critique" and profile.stats.struggle_streak >= 2:
+    # Weak struggle alone (EN-heavy / fragments) stays Flash.
+    if prefs.correction_style == "critique" and streak >= 2:
         return True
     return False

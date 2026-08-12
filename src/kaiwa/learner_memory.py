@@ -572,7 +572,7 @@ def memory_prompt_block(memory: LearnerMemory, prefs: UserPrefs) -> str:
     vocab_txt = "\n".join(vocab_lines) if vocab_lines else "  - (none yet)"
     grammar_txt = "\n".join(grammar_lines) if grammar_lines else "  - (none yet)"
     return f"""\
-長期メモリ（学習者について知っていること。性格プリセットの上に重ねる）:
+長期メモリ（学習者について）:
 - 呼び名: {name}
 - 雰囲気・好み: {vibe}
 - してほしい: {do}
@@ -582,9 +582,6 @@ def memory_prompt_block(memory: LearnerMemory, prefs: UserPrefs) -> str:
 {vocab_txt}
 - 繰り返しの文法メモ:
 {grammar_txt}
-- 会話が止まったら覚えているトピックで自然に続ける。
-- 語彙/文法は自然なときに1つだけ軽くリサイクル（クイズ化しない）。
-- 親しみは増やすが、選ばれた性格プリセットは壊さない。
 """
 
 

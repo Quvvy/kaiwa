@@ -3,11 +3,11 @@
 Personal Japanese AI conversation partner — turn-based chat, Practice, and a self-assessment placement check.
 
 **Repo:** [github.com/Quvvy/kaiwa](https://github.com/Quvvy/kaiwa)  
-**Version:** **1.0.1**
+**Version:** **1.0.2**
 
 ## For installation (Windows)
 
-1. Download **`KaiwaSetup-1.0.1.exe`** from the [latest GitHub Release](https://github.com/Quvvy/kaiwa/releases/latest).
+1. Download **`KaiwaSetup-1.0.2.exe`** from the [latest GitHub Release](https://github.com/Quvvy/kaiwa/releases/latest).
 2. Run the installer → open **Kaiwa** from the Start Menu.
 3. First launch may download a speech model (~1.5 GB) and voice engine (~200 MB) into `%LocalAppData%\Kaiwa\` (progress on the splash; relaunch resumes).
 4. When asked, paste a [DeepSeek](https://platform.deepseek.com/) API key (saved under AppData, not in the install folder).
@@ -93,7 +93,7 @@ Extra AivisSpeech voices (from AivisHub):
 ```
 
 - Builds a portable folder: thin **`Kaiwa.exe`** + private `runtime\` (CPU Python + deps) + `static\`.
-- `build_installer.ps1` wraps that folder into `dist\KaiwaSetup-1.0.1.exe` (Start Menu + uninstall).
+- `build_installer.ps1` wraps that folder into `dist\KaiwaSetup-1.0.2.exe` (Start Menu + uninstall).
 - Relative `Kaiwa.runtime.json` points at `runtime\Scripts\python.exe`. Shell sets `KAIWA_ROOT` for the API child.
 - Dev shell-only rebuild (points at clone `.venv`): `.\scripts\build_desktop.ps1 -DevVenv`
 - **Close the window** — stops Kaiwa + the TTS engine *we* started and exits (no tray).
@@ -141,4 +141,4 @@ Kaiwa is **MIT** — see [LICENSE](LICENSE). Third-party speech engines, models,
 - **NVIDIA GPU recommended** for faster speech recognition. Kaiwa defaults to `WHISPER_DEVICE=auto` (CUDA when a GPU and `.[cuda]` wheels are available, otherwise CPU). Owners: `pip install -e ".[desktop,cuda]"`. The portable friend runtime is **CPU-only** unless CUDA wheels are added.
 - Practice scores measure **what the app heard**, not native pitch accent.
 - Phase 3 stays **turn-based** (no OpenAI Realtime); pitch-accent grading remains deferred.
-- **Version:** `1.0.1`. **Phase 4–5** done (incl. 5.5 comprehensibility-first Chat). **Phase 6:** 6.1–6.9 done (Windows GitHub release + in-app update checker). **Phase 7:** global push-to-talk shipped — see [docs/ROADMAP.md](docs/ROADMAP.md).
+- **Version:** `1.0.2`. **Phase 4–5** done (incl. 5.5 comprehensibility-first Chat). **Phase 6:** 6.1–6.9 done (Windows GitHub release + in-app update checker). **Phase 7:** global push-to-talk shipped — see [docs/ROADMAP.md](docs/ROADMAP.md).

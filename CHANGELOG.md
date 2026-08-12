@@ -7,6 +7,16 @@ and this project aims to follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.0.2] — 2026-08-11
+
+### Changed
+
+- Chat tutor system prompt restructured: numbered priority hierarchy with less duplication (behavior preserved; decision #101). Polish: broader Adaptive EN glosses; pitch ≠ ability; density/teach-one wording; internal-state disclaimer.
+- Chat turn latency: reply returns after TTS without waiting for assess/extract; Auto→Pro only for heavier comprehension / critique streak (vocab stays Flash); status shows model used (decision #102).
+- Chat STT: accept first-pass Japanese via lower confidence + kana/kanji heuristic (avoid double Whisper when possible); status shows `stt …×2` when a second pass ran (decision #103).
+- Chat streams LLM text + sentence-by-sentence TTS over SSE (UI); status shows `ttfa`; PTT stays blocking full-turn JSON (decision #104).
+- Chat shows a scrollable disclaimer that the first reply after launch may be slower and that replies can be wrong.
+
 ## [1.0.1] — 2026-08-08
 
 ### Changed

@@ -365,7 +365,18 @@
       scroll-behavior: smooth;
     }
 
-    #log:empty::after {
+    .chat-disclaimer {
+      margin: 0;
+      padding: 0 0.15rem 0.15rem;
+      font-family: var(--font-ui);
+      font-size: 0.78rem;
+      line-height: 1.45;
+      color: var(--muted);
+      max-width: min(92%, 34rem);
+      align-self: stretch;
+    }
+
+    #log:not(:has(.bubble))::after {
       content: "Hold to talk — or type below if Whisper misses you.";
       margin: auto;
       max-width: 16rem;
@@ -1145,7 +1156,12 @@
 
     <section class="mode active" id="modeChat">
       <div class="chat-stage">
-        <div id="log" aria-live="polite"></div>
+        <div id="log" aria-live="polite">
+          <p class="chat-disclaimer" role="note">
+            The first reply after launch can take longer while models warm up.
+            Kaiwa can misunderstand you or give wrong information — treat it as practice help, not a reliable source.
+          </p>
+        </div>
       </div>
       <div class="composer">
         <div class="composer-status" id="status">Ready</div>
@@ -1625,6 +1641,15 @@
 
     let sessionId = localStorage.getItem("kaiwa_session_id") || "";
     let lastAudioB64 = sessionStorage.getItem("kaiwa_last_audio") || "";
+    let lastAudioChunks = [];
+    try {
+      const rawChunks = sessionStorage.getItem("kaiwa_last_audio_chunks");
+      if (rawChunks) lastAudioChunks = JSON.parse(rawChunks) || [];
+    } catch (_) {
+      lastAudioChunks = [];
+    }
+    let audioPlayQueue = [];
+    let audioPlaying = false;
     let mode = "chat";
     let mediaRecorder = null;
     let chunks = [];
@@ -1890,10 +1915,23 @@
       meta.className = "meta";
       meta.textContent = who === "you" ? "You" : "Kaiwa";
       const body = document.createElement("div");
-      body.textContent = text;
+      body.textContent = text || "";
       wrap.appendChild(meta);
       wrap.appendChild(body);
       logEl.appendChild(wrap);
+      logEl.scrollTop = logEl.scrollHeight;
+      return { wrap, body };
+    }
+
+    function setBubbleText(bodyEl, text) {
+      if (!bodyEl) return;
+      bodyEl.textContent = text || "";
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    function appendBubbleText(bodyEl, text) {
+      if (!bodyEl || !text) return;
+      bodyEl.textContent = (bodyEl.textContent || "") + text;
       logEl.scrollTop = logEl.scrollHeight;
     }
 
@@ -1903,36 +1941,88 @@
       audio.play().catch(() => setStatus("Audio ready (allow sound if blocked)"));
     }
 
+    function enqueueWavBase64(b64) {
+      if (!b64) return;
+      audioPlayQueue.push(b64);
+      pumpAudioQueue();
+    }
+
+    function pumpAudioQueue() {
+      if (audioPlaying) return;
+      const next = audioPlayQueue.shift();
+      if (!next) return;
+      audioPlaying = true;
+      const audio = new Audio("data:audio/wav;base64," + next);
+      const done = () => {
+        audioPlaying = false;
+        pumpAudioQueue();
+      };
+      audio.addEventListener("ended", done);
+      audio.addEventListener("error", done);
+      audio.play().catch(done);
+    }
+
+    function resetAudioQueue() {
+      audioPlayQueue = [];
+      audioPlaying = false;
+    }
+
     function updateReplayButton() {
-      const hasAudio = Boolean(lastAudioB64);
+      const hasAudio = Boolean(lastAudioB64) || (lastAudioChunks && lastAudioChunks.length > 0);
       const hasText = Boolean(localStorage.getItem("kaiwa_last_reply"));
       replayLastBtn.disabled = !(hasAudio || hasText);
     }
 
     function cacheLastAudio(b64) {
       lastAudioB64 = b64 || "";
+      lastAudioChunks = lastAudioB64 ? [lastAudioB64] : [];
       if (lastAudioB64) {
         try {
           sessionStorage.setItem("kaiwa_last_audio", lastAudioB64);
+          sessionStorage.removeItem("kaiwa_last_audio_chunks");
         } catch (_) {
           // sessionStorage may be full (large WAV); memory cache still works
         }
       } else {
         sessionStorage.removeItem("kaiwa_last_audio");
+        sessionStorage.removeItem("kaiwa_last_audio_chunks");
+      }
+      updateReplayButton();
+    }
+
+    function cacheLastAudioChunks(chunks) {
+      lastAudioChunks = Array.isArray(chunks) ? chunks.filter(Boolean) : [];
+      lastAudioB64 = lastAudioChunks[0] || "";
+      try {
+        if (lastAudioChunks.length) {
+          sessionStorage.setItem("kaiwa_last_audio_chunks", JSON.stringify(lastAudioChunks));
+          sessionStorage.setItem("kaiwa_last_audio", lastAudioB64);
+        } else {
+          sessionStorage.removeItem("kaiwa_last_audio_chunks");
+          sessionStorage.removeItem("kaiwa_last_audio");
+        }
+      } catch (_) {
+        // large multi-chunk WAVs may not fit; keep in-memory
       }
       updateReplayButton();
     }
 
     function clearLastAudioCache() {
       lastAudioB64 = "";
+      lastAudioChunks = [];
       sessionStorage.removeItem("kaiwa_last_audio");
+      sessionStorage.removeItem("kaiwa_last_audio_chunks");
       updateReplayButton();
     }
 
     async function replayLastReply() {
-      if (lastAudioB64) {
+      const chunks = (lastAudioChunks && lastAudioChunks.length)
+        ? lastAudioChunks.slice()
+        : (lastAudioB64 ? [lastAudioB64] : []);
+      if (chunks.length) {
         setStatus("Playing…");
-        playWavBase64(lastAudioB64);
+        resetAudioQueue();
+        for (const c of chunks) enqueueWavBase64(c);
         setStatus("Ready");
         return;
       }
@@ -2717,13 +2807,28 @@
       }
     }
 
+    function ensureChatDisclaimer() {
+      if (logEl.querySelector(".chat-disclaimer")) return;
+      const note = document.createElement("p");
+      note.className = "chat-disclaimer";
+      note.setAttribute("role", "note");
+      note.textContent =
+        "The first reply after launch can take longer while models warm up. " +
+        "Kaiwa can misunderstand you or give wrong information — treat it as practice help, not a reliable source.";
+      logEl.prepend(note);
+    }
+
     function clearChatSessionLocal() {
       localStorage.removeItem("kaiwa_session_id");
       localStorage.removeItem("kaiwa_last_reply");
       sessionStorage.removeItem("kaiwa_last_audio");
+      sessionStorage.removeItem("kaiwa_last_audio_chunks");
       lastAudioB64 = "";
+      lastAudioChunks = [];
+      resetAudioQueue();
       sessionId = "";
       logEl.innerHTML = "";
+      ensureChatDisclaimer();
       updateReplayButton();
     }
 
@@ -3388,6 +3493,29 @@
       });
     });
 
+    function formatChatStatus(data) {
+      let status = data.tts_error ? ("TTS issue — see alert above") : "Ready";
+      if (data.model_used) {
+        const modelLabel = String(data.model_used).replace(/^deepseek-v4-/, "");
+        status += " · " + modelLabel;
+      }
+      if (data.timing && data.timing.total_ms != null) {
+        let sttLabel = String(data.timing.stt_ms);
+        if (data.timing.stt_passes != null && Number(data.timing.stt_passes) > 1) {
+          sttLabel += "×" + data.timing.stt_passes;
+        }
+        status += " · " + data.timing.total_ms + "ms"
+          + " (stt " + sttLabel
+          + " / llm " + data.timing.llm_ms
+          + " / tts " + data.timing.tts_ms;
+        if (data.timing.ttfa_ms != null) {
+          status += " / ttfa " + data.timing.ttfa_ms;
+        }
+        status += ")";
+      }
+      return status;
+    }
+
     function applyChatTurnResult(data) {
       sessionId = data.session_id;
       localStorage.setItem("kaiwa_session_id", sessionId);
@@ -3409,14 +3537,114 @@
       if (data.tts_error) {
         showEngineAlert(data.tts_error);
       }
-      let status = data.tts_error ? ("TTS issue — see alert above") : "Ready";
-      if (data.timing && data.timing.total_ms != null) {
-        status += " · " + data.timing.total_ms + "ms"
-          + " (stt " + data.timing.stt_ms
-          + " / llm " + data.timing.llm_ms
-          + " / tts " + data.timing.tts_ms + ")";
+      setStatus(formatChatStatus(data));
+    }
+
+    async function readSseChat(res, onEvent) {
+      if (!res.ok) {
+        let detail = "Request failed";
+        try {
+          const data = await res.json();
+          detail = errorMessage(data, detail);
+        } catch (_) {}
+        throw new Error(detail);
       }
-      setStatus(status);
+      if (!res.body) throw new Error("No response body");
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let eventName = "message";
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const parts = buffer.split("\n");
+        buffer = parts.pop() || "";
+        for (const rawLine of parts) {
+          const line = rawLine.replace(/\r$/, "");
+          if (!line) {
+            continue;
+          }
+          if (line.startsWith("event:")) {
+            eventName = line.slice(6).trim() || "message";
+            continue;
+          }
+          if (line.startsWith("data:")) {
+            const payload = line.slice(5).trim();
+            let data = {};
+            try {
+              data = payload ? JSON.parse(payload) : {};
+            } catch (_) {
+              data = { raw: payload };
+            }
+            await onEvent(eventName, data);
+            eventName = "message";
+          }
+        }
+      }
+    }
+
+    async function consumeChatStream(res) {
+      let botBody = null;
+      let gotTranscript = false;
+      const turnChunks = [];
+      resetAudioQueue();
+
+      await readSseChat(res, async (eventName, data) => {
+        if (eventName === "error") {
+          throw new Error(String(data.detail || "Stream failed"));
+        }
+        if (eventName === "transcript") {
+          if (data.session_id) {
+            sessionId = data.session_id;
+            localStorage.setItem("kaiwa_session_id", sessionId);
+            registerPttSession();
+          }
+          addBubble("you", data.transcript || "");
+          botBody = addBubble("bot", "").body;
+          gotTranscript = true;
+          setStatus("Listening…");
+          return;
+        }
+        if (eventName === "delta") {
+          if (!gotTranscript) {
+            botBody = addBubble("bot", "").body;
+            gotTranscript = true;
+          }
+          appendBubbleText(botBody, data.text || "");
+          setStatus("Speaking…");
+          return;
+        }
+        if (eventName === "audio") {
+          if (data.audio_base64) {
+            turnChunks.push(data.audio_base64);
+            enqueueWavBase64(data.audio_base64);
+            clearEngineAlert();
+          }
+          return;
+        }
+        if (eventName === "final") {
+          if (data.session_id) {
+            sessionId = data.session_id;
+            localStorage.setItem("kaiwa_session_id", sessionId);
+            registerPttSession();
+          }
+          if (data.reply_text) {
+            localStorage.setItem("kaiwa_last_reply", data.reply_text);
+            if (botBody) setBubbleText(botBody, data.reply_text);
+            else addBubble("bot", data.reply_text);
+          }
+          if (turnChunks.length) {
+            cacheLastAudioChunks(turnChunks);
+          } else {
+            updateReplayButton();
+          }
+          if (data.tts_error) {
+            showEngineAlert(data.tts_error);
+          }
+          setStatus(formatChatStatus(data));
+        }
+      });
     }
 
     function setChatBusy(busy) {
@@ -3429,6 +3657,7 @@
     async function sendTurn(blob, ext) {
       if (!guardDeepseekOrExplain()) return;
       setChatBusy(true);
+      setStatus("Hearing…");
       const form = new FormData();
       const filename = "utterance." + (ext || "webm");
       form.append("audio", blob, filename);
@@ -3436,14 +3665,12 @@
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 120000);
       try {
-        const res = await fetch("/api/turn", {
+        const res = await fetch("/api/turn/stream", {
           method: "POST",
           body: form,
           signal: controller.signal,
         });
-        const data = await res.json();
-        if (!res.ok) throw new Error(errorMessage(data, "Request failed"));
-        applyChatTurnResult(data);
+        await consumeChatStream(res);
       } catch (err) {
         if (err && err.name === "AbortError") {
           setStatus("Timed out — is the server still starting Whisper, or is DeepSeek/TTS down?");
@@ -3470,16 +3697,14 @@
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 120000);
       try {
-        const res = await fetch("/api/turn/text", {
+        const res = await fetch("/api/turn/text/stream", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ text, session_id: sessionId }),
           signal: controller.signal,
         });
-        const data = await res.json();
-        if (!res.ok) throw new Error(errorMessage(data, "Request failed"));
         chatTextInput.value = "";
-        applyChatTurnResult(data);
+        await consumeChatStream(res);
       } catch (err) {
         if (err && err.name === "AbortError") {
           setStatus("Timed out — check DeepSeek/TTS");

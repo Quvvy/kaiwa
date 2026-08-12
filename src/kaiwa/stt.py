@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import sys
 import tempfile
 from pathlib import Path
@@ -239,6 +240,13 @@ def _join_segments(segments) -> str:
     return "".join(seg.text for seg in segments).strip()
 
 
+_JP_SCRIPT_RE = re.compile(r"[\u3040-\u30ff\u3400-\u9fff]")
+
+
+def _jp_script_count(text: str) -> int:
+    return len(_JP_SCRIPT_RE.findall(text or ""))
+
+
 def transcribe_file(
     settings: Settings,
     path: str | Path,
@@ -257,12 +265,14 @@ def transcribe_file(
     return _join_segments(segments)
 
 
-def transcribe_chat_file(settings: Settings, path: str | Path) -> str:
-    """Chat STT: keep clear English as English; otherwise force Japanese.
+def transcribe_chat_file(
+    settings: Settings, path: str | Path
+) -> tuple[str, dict[str, Any]]:
+    """Chat STT: keep clear English; accept first-pass JP when confident or script-rich.
 
     Forced ``language=ja`` alone would "translate" English speech into Japanese.
-    Auto-detect first; if English with decent confidence, keep that transcript.
-    Otherwise re-run with Japanese for better learner JP accuracy.
+    Auto-detect first. Second pass only when the first pass is empty, not clear EN,
+    and lacks Japanese script (decision #103).
     """
     model = get_model(settings)
     segments, info = model.transcribe(
@@ -273,15 +283,23 @@ def transcribe_chat_file(settings: Settings, path: str | Path) -> str:
     auto_text = _join_segments(segments)
     detected = (getattr(info, "language", None) or "").lower()
     prob = float(getattr(info, "language_probability", 0.0) or 0.0)
+    base_meta: dict[str, Any] = {
+        "detected": detected or "",
+        "prob": round(prob, 3),
+    }
 
     if detected == "en" and prob >= 0.55 and auto_text:
-        return auto_text
+        return auto_text, {**base_meta, "passes": 1, "accepted": "en"}
 
-    # Japanese or uncertain → force ja (accented learner speech)
-    if detected == "ja" and auto_text and prob >= 0.7:
-        return auto_text
+    if detected == "ja" and auto_text and prob >= 0.55:
+        return auto_text, {**base_meta, "passes": 1, "accepted": "ja"}
 
-    return transcribe_file(settings, path, language="ja")
+    # Whisper often mis-tags learner JP as zh/ko/etc.; keep if script is clearly JP.
+    if auto_text and _jp_script_count(auto_text) >= 2:
+        return auto_text, {**base_meta, "passes": 1, "accepted": "jp_script"}
+
+    forced = transcribe_file(settings, path, language="ja")
+    return forced, {**base_meta, "passes": 2, "accepted": "forced_ja"}
 
 
 def transcribe_audio_bytes(
@@ -290,12 +308,14 @@ def transcribe_audio_bytes(
     suffix: str = ".webm",
     *,
     mode: str = "ja",
-) -> str:
+) -> tuple[str, dict[str, Any]]:
     """Write upload bytes to a temp file and transcribe.
 
     mode:
       - ``ja`` — force Japanese (Practice)
       - ``chat`` — auto-detect English vs Japanese (Chat)
+
+    Returns ``(transcript, stt_meta)`` where meta includes ``passes`` / ``accepted``.
     """
     if not data or len(data) < 256:
         raise ValueError(
@@ -309,7 +329,8 @@ def transcribe_audio_bytes(
     try:
         if mode == "chat":
             return transcribe_chat_file(settings, tmp_path)
-        return transcribe_file(settings, tmp_path, language="ja")
+        text = transcribe_file(settings, tmp_path, language="ja")
+        return text, {"passes": 1, "detected": "ja", "accepted": "forced_ja"}
     except Exception as exc:
         msg = str(exc)
         # PyAV / FFmpeg EOF on truncated MediaRecorder webm (common on tiny holds / WebView2)
