@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -41,6 +41,8 @@ class SessionMeta:
     turn_count: int = 0
     title: str = ""
     prompt_revision: int = PROMPT_REVISION
+    replay_of: str = ""
+    replay_questions: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -64,7 +66,78 @@ def meta_from_dict(raw: dict[str, Any], *, session_id: str) -> SessionMeta:
         turn_count=turns,
         title=str(raw.get("title") or "")[:TITLE_MAX],
         prompt_revision=rev,
+        replay_of=str(raw.get("replay_of") or "").strip(),
+        replay_questions=_questions_from_raw(raw.get("replay_questions")),
     )
+
+
+def _questions_from_raw(raw: Any) -> list[str]:
+    if not isinstance(raw, list):
+        return []
+    out: list[str] = []
+    for item in raw:
+        text = str(item or "").strip()
+        if text:
+            out.append(text)
+    return out
+
+
+def assistant_questions(messages: list[dict[str, str]]) -> list[str]:
+    """Non-empty assistant lines in order (hydrate already applies rescue)."""
+    out: list[str] = []
+    for message in messages:
+        if (message.get("role") or "") != "assistant":
+            continue
+        text = str(message.get("content") or "").strip()
+        if text:
+            out.append(text)
+    return out
+
+
+def replay_title(parent_title: str) -> str:
+    base = (parent_title or "").strip() or "Untitled chat"
+    if base.startswith("Again:"):
+        return base[:TITLE_MAX]
+    return ("Again: " + base)[:TITLE_MAX]
+
+
+def questions_for_replay(sessions_dir: Path, session_id: str) -> list[str]:
+    """Prefer stored list so a child is not re-parsed into ack+question soup."""
+    meta = load_meta(sessions_dir, session_id)
+    if meta is not None and meta.replay_questions:
+        return list(meta.replay_questions)
+    return assistant_questions(hydrate(sessions_dir, session_id))
+
+
+def replay_remaining(
+    questions: list[str], history: list[dict[str, str]]
+) -> list[str]:
+    """Questions still to ask, including the current one until the learner answers it."""
+    n_user = 0
+    for message in history:
+        if (message.get("role") or "") != "user":
+            continue
+        if str(message.get("content") or "").strip():
+            n_user += 1
+    if n_user >= len(questions):
+        return []
+    return list(questions[n_user:])
+
+
+def create_replay_session(
+    sessions_dir: Path,
+    profile_id: str,
+    *,
+    parent_id: str,
+    questions: list[str],
+    parent_title: str = "",
+) -> SessionMeta:
+    meta = create_session(sessions_dir, profile_id)
+    meta.replay_of = (parent_id or "").strip()
+    meta.replay_questions = [q for q in questions if str(q).strip()]
+    meta.title = replay_title(parent_title)
+    save_meta(sessions_dir, meta)
+    return meta
 
 
 def load_meta(sessions_dir: Path, session_id: str) -> SessionMeta | None:

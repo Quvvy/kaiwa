@@ -352,6 +352,120 @@
       border: 1px solid var(--line);
       border-radius: var(--radius);
       overflow: hidden;
+      position: relative;
+    }
+
+    .chats-drawer {
+      position: absolute;
+      inset: 0;
+      z-index: 3;
+      display: flex;
+      flex-direction: column;
+      background: var(--surface);
+    }
+
+    .chats-drawer[hidden] {
+      display: none !important;
+    }
+
+    .chats-drawer-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.65rem;
+      flex-shrink: 0;
+      padding: 0.7rem 0.85rem;
+      border-bottom: 1px solid var(--line);
+      font-family: var(--font-ui);
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+
+    .chats-drawer-head button {
+      padding: 0.35rem 0.7rem;
+      font-size: 0.78rem;
+    }
+
+    .chats-list {
+      flex: 1;
+      min-height: 0;
+      overflow: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 0.15rem;
+      padding: 0.45rem;
+    }
+
+    .chats-empty {
+      margin: 1.2rem 0.85rem;
+      color: var(--muted);
+      font-size: 0.88rem;
+      line-height: 1.45;
+      text-align: center;
+    }
+
+    .chats-row {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 0.15rem;
+      background: transparent;
+      border: 0;
+      border-radius: var(--radius-sm);
+      color: var(--ink);
+      text-align: left;
+      padding: 0.55rem 0.65rem;
+      font-family: var(--font-ui);
+      font-size: 0.88rem;
+      font-weight: 500;
+      box-shadow: none;
+    }
+
+    .chats-row:hover {
+      background: color-mix(in srgb, var(--surface-raised) 80%, transparent);
+      filter: none;
+    }
+
+    .chats-row.current {
+      background: var(--accent-soft);
+      box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 40%, var(--line));
+    }
+
+    .chats-row-title {
+      line-height: 1.35;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .chats-row-meta {
+      font-size: 0.72rem;
+      font-weight: 500;
+      color: var(--muted);
+    }
+
+    .leftovers-drawer {
+      z-index: 4;
+    }
+
+    .leftovers-body {
+      padding: 0.75rem 0.9rem 1.1rem;
+      gap: 0.35rem;
+    }
+
+    .leftovers-line {
+      margin: 0;
+      padding: 0.45rem 0.15rem;
+      font-size: 1.02rem;
+      line-height: 1.45;
+    }
+
+    .leftovers-alts-head {
+      margin: 0.85rem 0 0.2rem;
+      font-family: var(--font-ui);
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--muted);
     }
 
     #log {
@@ -460,6 +574,30 @@
       font-size: 0.8rem;
       color: var(--muted);
       min-height: 1.2em;
+    }
+
+    .composer-meta {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 0.75rem;
+    }
+
+    .turn-count {
+      font-family: var(--font-ui);
+      font-size: 0.78rem;
+      font-weight: 500;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    .chat-pace-seg {
+      margin-left: auto;
+    }
+
+    .chat-pace-seg button {
+      padding: 0.55rem 0.85rem;
+      font-size: 0.85rem;
     }
 
     .composer-actions {
@@ -1181,13 +1319,36 @@
             Kaiwa can misunderstand you or give wrong information — treat it as practice help, not a reliable source.
           </p>
         </div>
+        <aside id="chatsDrawer" class="chats-drawer" hidden>
+          <div class="chats-drawer-head">
+            <span>Chats</span>
+            <button type="button" id="chatsDrawerClose" class="secondary">Close</button>
+          </div>
+          <div id="chatsList" class="chats-list"></div>
+        </aside>
+        <aside id="leftoversDrawer" class="chats-drawer leftovers-drawer" hidden>
+          <div class="chats-drawer-head">
+            <span>From this chat</span>
+            <button type="button" id="leftoversDrawerClose" class="secondary">Close</button>
+          </div>
+          <div id="leftoversBody" class="chats-list leftovers-body"></div>
+        </aside>
       </div>
       <div class="composer">
-        <div class="composer-status" id="status">Ready</div>
+        <div class="composer-meta">
+          <div class="composer-status" id="status">Ready</div>
+          <span id="turnCount" class="turn-count" hidden></span>
+        </div>
         <div class="composer-actions">
           <button id="talk" type="button">Hold to talk</button>
           <button id="replayLast" class="secondary" type="button" disabled>Replay</button>
           <button id="newChat" class="secondary" type="button" title="New chat (keeps memory)">New chat</button>
+          <button id="againBtn" class="secondary" type="button" title="Try those questions again" disabled>Again</button>
+          <button id="chatsBtn" class="secondary" type="button" title="Past chats">Chats</button>
+          <div class="seg chat-pace-seg" id="chatPaceSeg" title="Easy keeps short questions; Free talks more freely">
+            <button type="button" data-pace="easy" class="on">Easy</button>
+            <button type="button" data-pace="free">Free</button>
+          </div>
         </div>
         <div class="chat-text-row">
           <input id="chatText" type="text" maxlength="500" placeholder="Type if Whisper missed you…" autocomplete="off" />
@@ -1623,6 +1784,16 @@
     const talkBtn = document.getElementById("talk");
     const replayLastBtn = document.getElementById("replayLast");
     const newChatBtn = document.getElementById("newChat");
+    const againBtn = document.getElementById("againBtn");
+    const chatsBtn = document.getElementById("chatsBtn");
+    const chatsDrawer = document.getElementById("chatsDrawer");
+    const chatsList = document.getElementById("chatsList");
+    const chatsDrawerClose = document.getElementById("chatsDrawerClose");
+    const leftoversDrawer = document.getElementById("leftoversDrawer");
+    const leftoversBody = document.getElementById("leftoversBody");
+    const leftoversDrawerClose = document.getElementById("leftoversDrawerClose");
+    const chatPaceSeg = document.getElementById("chatPaceSeg");
+    const turnCountEl = document.getElementById("turnCount");
     const chatTextInput = document.getElementById("chatText");
     const chatTextSendBtn = document.getElementById("chatTextSend");
     const practiceTalkBtn = document.getElementById("practiceTalk");
@@ -1698,6 +1869,8 @@
     let pttPlayReply = true;
     let pttBlipsEnabled = true;
     let pttBlipVolume = 0.6;
+    let chatPace = "easy";
+    let sessionTurnCount = 0;
     let pttBindListening = false;
     let pttEventAfter = 0;
     let profileSpeaking = "pre_n5";
@@ -1707,6 +1880,51 @@
 
     function setStatus(text) {
       activeStatusEl.textContent = text;
+    }
+
+    function setSessionTurnCount(n) {
+      sessionTurnCount = Math.max(0, Number(n) || 0);
+      if (!turnCountEl) return;
+      if (sessionTurnCount < 1) {
+        turnCountEl.hidden = true;
+        turnCountEl.textContent = "";
+        return;
+      }
+      turnCountEl.hidden = false;
+      turnCountEl.textContent =
+        sessionTurnCount === 1 ? "1 turn" : sessionTurnCount + " turns";
+    }
+
+    function bumpSessionTurnCount() {
+      setSessionTurnCount(sessionTurnCount + 1);
+    }
+
+    function setChatPaceUI(pace) {
+      chatPace = pace === "free" ? "free" : "easy";
+      document.querySelectorAll("#chatPaceSeg button").forEach((b) => {
+        b.classList.toggle("on", b.dataset.pace === chatPace);
+      });
+    }
+
+    async function saveChatPace(pace) {
+      const next = pace === "free" ? "free" : "easy";
+      setChatPaceUI(next);
+      const res = await fetch("/api/prefs");
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error((data && data.detail) || "Could not load prefs");
+      }
+      const body = Object.assign({}, data.prefs || {}, { chat_pace: next });
+      const put = await fetch("/api/prefs", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const saved = await put.json().catch(() => ({}));
+      if (!put.ok) {
+        throw new Error((saved && saved.detail) || "Could not save");
+      }
+      if (saved.prefs) setChatPaceUI(saved.prefs.chat_pace || next);
     }
 
     function formatDetail(detail) {
@@ -1957,6 +2175,7 @@
       logEl.appendChild(wrap);
       logEl.scrollTop = logEl.scrollHeight;
       if (who !== "you") markLastSimpler(wrap);
+      updateAgainButton();
       return { wrap, body };
     }
 
@@ -2607,6 +2826,7 @@
       setPttBlipVolumeUI(
         prefs.ptt_blip_volume != null ? Number(prefs.ptt_blip_volume) : 0.6
       );
+      setChatPaceUI(prefs.chat_pace || "easy");
       topicPrefsInput.value = (prefs.topic_preferences || []).join(", ");
       personalityCustom.value = prefs.personality_custom || "";
       if (prefs.voicevox_speaker_id != null && voiceSelect.options.length) {
@@ -2884,6 +3104,7 @@
       logEl.innerHTML = "";
       ensureChatDisclaimer();
       updateReplayButton();
+      updateAgainButton();
     }
 
     async function startNewChat(opts) {
@@ -2904,6 +3125,277 @@
       const msg =
         (opts && opts.status) || "New chat (keeps memory).";
       setStatus(msg);
+      setSessionTurnCount(0);
+      closeChatsDrawer();
+      refreshChatList();
+      if (prev) {
+        showLeftoversFor(prev).catch(() => {});
+      } else {
+        closeLeftoversDrawer();
+      }
+    }
+
+    function resetChatLogKeepId() {
+      localStorage.removeItem("kaiwa_last_reply");
+      sessionStorage.removeItem("kaiwa_last_audio");
+      sessionStorage.removeItem("kaiwa_last_audio_chunks");
+      lastAudioB64 = "";
+      lastAudioChunks = [];
+      resetAudioQueue();
+      logEl.innerHTML = "";
+      ensureChatDisclaimer();
+      updateReplayButton();
+      updateAgainButton();
+    }
+
+    function relativeChatTime(iso) {
+      const t = Date.parse(iso || "");
+      if (!Number.isFinite(t)) return "";
+      const sec = Math.max(0, Math.round((Date.now() - t) / 1000));
+      if (sec < 45) return "just now";
+      if (sec < 3600) {
+        const n = Math.max(1, Math.floor(sec / 60));
+        return n === 1 ? "1 min ago" : n + " min ago";
+      }
+      if (sec < 86400) {
+        const n = Math.max(1, Math.floor(sec / 3600));
+        return n === 1 ? "1h ago" : n + "h ago";
+      }
+      if (sec < 86400 * 7) {
+        const n = Math.max(1, Math.floor(sec / 86400));
+        return n === 1 ? "1d ago" : n + "d ago";
+      }
+      try {
+        return new Date(t).toLocaleDateString();
+      } catch (_) {
+        return "";
+      }
+    }
+
+    async function applyHydratedSession(data, statusMsg) {
+      const sid = String((data && (data.id || data.session_id)) || "").trim();
+      if (sid) {
+        sessionId = sid;
+        localStorage.setItem("kaiwa_session_id", sessionId);
+      }
+      resetChatLogKeepId();
+      const messages = (data && data.messages) || [];
+      if (!messages.length) {
+        await registerPttSession();
+        updateAgainButton();
+        setSessionTurnCount(Number((data && data.turn_count) || 0));
+        if (statusMsg) setStatus(statusMsg);
+        return;
+      }
+      let lastAssistant = "";
+      messages.forEach((m) => {
+        const role = (m && m.role) || "";
+        const content = (m && m.content) || "";
+        if (role === "user") addBubble("you", content);
+        else if (role === "assistant") {
+          addBubble("bot", content);
+          lastAssistant = content;
+        }
+      });
+      if (lastAssistant) {
+        localStorage.setItem("kaiwa_last_reply", lastAssistant);
+        updateReplayButton();
+      }
+      await registerPttSession();
+      updateAgainButton();
+      setSessionTurnCount(Number((data && data.turn_count) || 0));
+      if (statusMsg) setStatus(statusMsg);
+    }
+
+    async function resumeCurrentSession() {
+      const id = (sessionId || localStorage.getItem("kaiwa_session_id") || "").trim();
+      if (!id) return;
+      sessionId = id;
+      try {
+        const res = await fetch("/api/sessions/" + encodeURIComponent(id));
+        if (res.status === 404 || res.status === 409) {
+          await startNewChat({ status: "New chat (keeps memory)." });
+          return;
+        }
+        if (!res.ok) return;
+        const data = await res.json().catch(() => ({}));
+        await applyHydratedSession(data);
+      } catch (_) {}
+    }
+
+    function closeChatsDrawer() {
+      if (chatsDrawer) chatsDrawer.hidden = true;
+    }
+
+    function closeLeftoversDrawer() {
+      if (leftoversDrawer) leftoversDrawer.hidden = true;
+      if (leftoversBody) leftoversBody.innerHTML = "";
+    }
+
+    function openChatsDrawer() {
+      if (!chatsDrawer) return;
+      closeLeftoversDrawer();
+      chatsDrawer.hidden = false;
+      refreshChatList();
+    }
+
+    function renderLeftoversPanel(data) {
+      if (!leftoversBody || !leftoversDrawer) return;
+      leftoversBody.innerHTML = "";
+      const chunks = (data && data.chunks) || [];
+      chunks.forEach((row) => {
+        const text = String((row && row.text) || "").trim();
+        if (!text) return;
+        const p = document.createElement("p");
+        p.className = "leftovers-line";
+        p.textContent = text;
+        leftoversBody.appendChild(p);
+      });
+      const alts = (data && data.alternatives) || [];
+      const usable = alts
+        .map((row) => String((row && row.text) || "").trim())
+        .filter(Boolean);
+      if (usable.length) {
+        const head = document.createElement("p");
+        head.className = "leftovers-alts-head";
+        head.textContent = "You could have said";
+        leftoversBody.appendChild(head);
+        usable.forEach((text) => {
+          const p = document.createElement("p");
+          p.className = "leftovers-line";
+          p.textContent = text;
+          leftoversBody.appendChild(p);
+        });
+      }
+      leftoversDrawer.hidden = false;
+    }
+
+    async function showLeftoversFor(oldId) {
+      const sid = String(oldId || "").trim();
+      if (!sid || !leftoversDrawer) return;
+      const res = await fetch("/api/sessions/" + encodeURIComponent(sid) + "/leftovers");
+      if (!res.ok) return;
+      const data = await res.json().catch(() => ({}));
+      const chunks = (data && data.chunks) || [];
+      if (!chunks.length) {
+        closeLeftoversDrawer();
+        return;
+      }
+      closeChatsDrawer();
+      renderLeftoversPanel(data);
+    }
+
+    function renderChatsList(sessions) {
+      if (!chatsList) return;
+      chatsList.innerHTML = "";
+      const rows = (sessions || []).filter((s) => {
+        const turns = Number(s && s.turn_count) || 0;
+        const id = String((s && s.id) || "");
+        const isReplay = Boolean(s && s.replay_of);
+        return turns > 0 || isReplay || id === sessionId;
+      });
+      if (!rows.length) {
+        const empty = document.createElement("p");
+        empty.className = "chats-empty";
+        empty.textContent = "No chats yet.";
+        chatsList.appendChild(empty);
+        return;
+      }
+      rows.forEach((s) => {
+        const id = String((s && s.id) || "");
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "chats-row" + (id && id === sessionId ? " current" : "");
+        const title = document.createElement("span");
+        title.className = "chats-row-title";
+        title.textContent = String((s && s.title) || "").trim() || "Untitled chat";
+        const meta = document.createElement("span");
+        meta.className = "chats-row-meta";
+        const when = relativeChatTime(s && s.updated);
+        const turns = Number(s && s.turn_count) || 0;
+        const turnLabel = turns === 1 ? "1 turn" : turns + " turns";
+        meta.textContent = when ? when + " · " + turnLabel : turnLabel;
+        btn.appendChild(title);
+        btn.appendChild(meta);
+        btn.addEventListener("click", () => {
+          openChatFromDrawer(id).catch((err) => {
+            setStatus(String(err.message || err));
+          });
+        });
+        chatsList.appendChild(btn);
+      });
+    }
+
+    async function refreshChatList() {
+      if (!chatsList) return;
+      try {
+        const res = await fetch("/api/sessions");
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) return;
+        renderChatsList(data.sessions || []);
+      } catch (_) {}
+    }
+
+    function updateAgainButton() {
+      if (!againBtn) return;
+      againBtn.disabled = !lastBotBubble();
+    }
+
+    async function startAgainChat() {
+      if (!sessionId) {
+        setStatus("Nothing to try again yet — chat first");
+        return;
+      }
+      if (!lastBotBubble()) {
+        setStatus("Nothing to try again yet — chat first");
+        return;
+      }
+      setChatBusy(true);
+      setStatus("Trying those questions again…");
+      try {
+        const res = await fetch("/api/sessions/" + encodeURIComponent(sessionId) + "/replay", {
+          method: "POST",
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error((data && data.detail) || "Could not try again");
+        closeLeftoversDrawer();
+        closeChatsDrawer();
+        await applyHydratedSession(data, "Trying those questions again.");
+        if (data.audio_base64) {
+          cacheLastAudio(data.audio_base64);
+          resetAudioQueue();
+          playWavBase64(data.audio_base64);
+          clearEngineAlert();
+        } else if (data.reply_text) {
+          localStorage.setItem("kaiwa_last_reply", data.reply_text);
+          updateReplayButton();
+        }
+        if (data.tts_error) {
+          showEngineAlert(data.tts_error);
+        }
+        refreshChatList();
+      } catch (err) {
+        const msg = String(err.message || err);
+        setStatus(msg);
+        if (looksLikeEngineError(msg)) showEngineAlert(msg);
+      } finally {
+        setChatBusy(false);
+      }
+    }
+
+    async function openChatFromDrawer(id) {
+      const sid = String(id || "").trim();
+      if (!sid) return;
+      const res = await fetch("/api/sessions/" + encodeURIComponent(sid));
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 404 || res.status === 409) {
+        closeChatsDrawer();
+        await startNewChat({ status: "New chat (keeps memory)." });
+        return;
+      }
+      if (!res.ok) throw new Error((data && data.detail) || "Could not open chat");
+      await applyHydratedSession(data, "Resumed chat.");
+      closeChatsDrawer();
     }
 
     function fillProfilesSelect(listing) {
@@ -2952,6 +3444,7 @@
         clearPlacementDismiss(activeProfileId);
       }
       maybeOfferPlacement(profilePayload, { profileId: activeProfileId, forceOpen: !placementCompleted });
+      refreshChatList();
     }
 
     async function switchSelectedProfile() {
@@ -3134,6 +3627,7 @@
         ptt_play_reply: pttPlayReply,
         ptt_blips_enabled: pttBlipsEnabled,
         ptt_blip_volume: pttBlipVolume,
+        chat_pace: chatPace,
       };
       const res = await fetch("/api/prefs", {
         method: "PUT",
@@ -3217,7 +3711,36 @@
         setStatus(String(err.message || err));
       });
     });
+    if (againBtn) {
+      againBtn.addEventListener("click", () => {
+        startAgainChat().catch((err) => {
+          setStatus(String(err.message || err));
+        });
+      });
+    }
+    if (chatsBtn) {
+      chatsBtn.addEventListener("click", () => {
+        if (chatsDrawer && !chatsDrawer.hidden) closeChatsDrawer();
+        else openChatsDrawer();
+      });
+    }
+    if (chatsDrawerClose) {
+      chatsDrawerClose.addEventListener("click", () => closeChatsDrawer());
+    }
+    if (leftoversDrawerClose) {
+      leftoversDrawerClose.addEventListener("click", () => closeLeftoversDrawer());
+    }
+    if (chatPaceSeg) {
+      chatPaceSeg.querySelectorAll("button").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          saveChatPace(btn.dataset.pace).catch((err) => {
+            setStatus(String(err.message || err));
+          });
+        });
+      });
+    }
     updateReplayButton();
+    updateAgainButton();
 
     function formatPttBinding(binding) {
       const b = canonicalizePttBinding(binding);
@@ -3478,6 +4001,7 @@
           }
         }
         const events = data.events || [];
+        let sawTurn = false;
         for (const ev of events) {
           pttEventAfter = Math.max(pttEventAfter, Number(ev.id) || 0);
           if (ev.type === "status") {
@@ -3497,7 +4021,10 @@
             updateReplayButton();
           }
           setStatus("Ready · push-to-talk");
+          bumpSessionTurnCount();
+          sawTurn = true;
         }
+        if (sawTurn) refreshChatList();
       } catch (_) {}
     }
 
@@ -3617,6 +4144,8 @@
         showEngineAlert(data.tts_error);
       }
       setStatus(formatChatStatus(data));
+      refreshChatList();
+      bumpSessionTurnCount();
     }
 
     async function readSseChat(res, onEvent) {
@@ -3731,6 +4260,8 @@
             showEngineAlert(data.tts_error);
           }
           setStatus(formatChatStatus(data));
+          refreshChatList();
+          bumpSessionTurnCount();
         }
       });
     }
@@ -3739,8 +4270,14 @@
       talkBtn.disabled = busy;
       chatTextSendBtn.disabled = busy;
       chatTextInput.disabled = busy;
+      if (newChatBtn) newChatBtn.disabled = busy;
+      if (againBtn) againBtn.disabled = busy || !lastBotBubble();
+      if (chatsBtn) chatsBtn.disabled = busy;
       setSimplerBusy(busy);
-      if (!busy) updateReplayButton();
+      if (!busy) {
+        updateReplayButton();
+        updateAgainButton();
+      }
     }
 
     async function requestRescue(wrap, bodyEl) {
@@ -3782,6 +4319,7 @@
           showEngineAlert(data.tts_error);
         }
         setStatus(formatChatStatus(data));
+        refreshChatList();
       } catch (err) {
         const msg = String(err.message || err);
         setStatus(msg);
@@ -4647,7 +5185,7 @@
         const seen = localStorage.getItem("kaiwa_prompt_revision");
         if (String(seen) !== String(rev)) {
           localStorage.setItem("kaiwa_prompt_revision", String(rev));
-          startNewChat({
+          return startNewChat({
             status: data.chat_reset
               ? "New chat — tutor update (memory kept)."
               : "New chat (keeps memory).",
@@ -4657,7 +5195,8 @@
           });
         }
       })
-      .catch(() => {});
+      .then(() => resumeCurrentSession())
+      .catch(() => resumeCurrentSession().catch(() => {}));
 
     checkForUpdates(false).catch(() => {});
 

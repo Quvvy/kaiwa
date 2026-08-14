@@ -12,6 +12,7 @@ GoalLevel = Literal["pre_n5", "n5", "n4"]
 ModelRouting = Literal["flash_only", "auto"]
 TtsEngine = Literal["aivisspeech", "voicevox"]
 UiTheme = Literal["night", "slate", "graphite", "day", "cloud", "frost"]
+ChatPace = Literal["easy", "free"]
 
 VALID_CORRECTION = {"gentle", "critique"}
 VALID_LANGUAGE_POLICY = {"immerse", "adaptive"}
@@ -20,6 +21,7 @@ VALID_GOAL_LEVEL = {"pre_n5", "n5", "n4"}
 VALID_MODEL_ROUTING = {"flash_only", "auto"}
 VALID_TTS_ENGINE = {"aivisspeech", "voicevox"}
 VALID_UI_THEME = {"night", "slate", "graphite", "day", "cloud", "frost"}
+VALID_CHAT_PACE = {"easy", "free"}
 MAX_TOPIC_PREFS = 8
 MAX_TOPIC_LEN = 40
 
@@ -45,6 +47,7 @@ class UserPrefs:
     ptt_play_reply: bool = True
     ptt_blips_enabled: bool = True
     ptt_blip_volume: float = 0.6
+    chat_pace: ChatPace = "easy"
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -171,6 +174,10 @@ def validate_prefs_dict(raw: dict[str, Any]) -> UserPrefs:
     elif ptt_blip_volume > 5.0:
         ptt_blip_volume = 5.0
 
+    chat_pace = str(raw.get("chat_pace", "easy") or "easy").strip().lower()
+    if chat_pace not in VALID_CHAT_PACE:
+        raise ValueError("chat_pace must be 'easy' or 'free'")
+
     return UserPrefs(
         correction_style=style,  # type: ignore[arg-type]
         personality_id=personality_id,
@@ -191,6 +198,7 @@ def validate_prefs_dict(raw: dict[str, Any]) -> UserPrefs:
         ptt_play_reply=ptt_play_reply,
         ptt_blips_enabled=ptt_blips_enabled,
         ptt_blip_volume=ptt_blip_volume,
+        chat_pace=chat_pace,  # type: ignore[arg-type]
     )
 
 

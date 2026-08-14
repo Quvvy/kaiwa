@@ -52,6 +52,7 @@ from kaiwa.learner_memory import (
     reset_memory,
     save_memory,
 )
+from kaiwa import leftovers
 from kaiwa import session_store
 from kaiwa.stream_util import SentenceBuffer
 from kaiwa.text_clean import clean_reply_for_speech, split_try_phrase
@@ -116,7 +117,12 @@ def _mint_session() -> str:
 
 
 def _resolve_session(sid: str) -> str:
-    """Bind or hydrate a Chat session for the active profile. May mint a new id."""
+    """Bind or hydrate a Chat session for the active profile.
+
+    Mints a new id when the client sent none, or when the id belongs to
+    another named profile. A stale prompt_revision does not mint — the
+    thread continues with the current system prompt (#118).
+    """
     active = profiles.active_profile_id()
     sid = (sid or "").strip()
     if not sid:
@@ -133,10 +139,17 @@ def _resolve_session(sid: str) -> str:
         return sid
     if session_store.other_named_profile(meta, active, _known_profile_ids()):
         return _mint_session()
-    if session_store.revision_stale(meta):
-        return _mint_session()
     session_store.ensure_ram(_sessions, settings.sessions_dir, sid)
     return sid
+
+
+def _replay_prompt_questions(
+    sid: str, history: list[dict[str, str]]
+) -> list[str] | None:
+    meta = session_store.load_meta(settings.sessions_dir, sid)
+    if meta is None or not (meta.replay_of or "").strip():
+        return None
+    return session_store.replay_remaining(meta.replay_questions, history)
 
 
 def _append_session(sid: str, record: dict[str, Any], *, kind: str) -> None:
@@ -192,6 +205,7 @@ class PrefsUpdate(BaseModel):
     ptt_play_reply: bool = True
     ptt_blips_enabled: bool = True
     ptt_blip_volume: float = 0.6
+    chat_pace: str = "easy"
 
 
 class ProfileUpdate(BaseModel):
@@ -835,6 +849,116 @@ def get_chat_session(session_id: str) -> dict[str, Any]:
     return {**meta.to_dict(), "messages": session_store.hydrate(settings.sessions_dir, sid)}
 
 
+@app.get("/api/sessions/{session_id}/leftovers")
+async def session_leftovers(session_id: str) -> dict[str, Any]:
+    """Phrases from an ended chat. Alternatives are optional Flash and may be empty."""
+    sid = (session_id or "").strip()
+    if not sid or not session_store.session_exists(settings.sessions_dir, sid):
+        raise HTTPException(status_code=404, detail="session not found")
+    active = profiles.active_profile_id()
+    meta = session_store.load_meta(settings.sessions_dir, sid)
+    if meta is None:
+        meta = session_store.attach_legacy(settings.sessions_dir, sid, active)
+    if session_store.other_named_profile(meta, active, _known_profile_ids()):
+        raise HTTPException(
+            status_code=409, detail="session belongs to another profile"
+        )
+    messages = session_store.hydrate(settings.sessions_dir, sid)
+    chunks = leftovers.leftover_chunks(messages)
+    alternatives: list[str] = []
+    if chunks:
+        alternatives = await asyncio.to_thread(
+            leftovers.suggest_alternatives,
+            settings,
+            chunks,
+            last_assistant=leftovers.last_assistant_line(messages),
+        )
+    return {
+        "session_id": sid,
+        "chunks": [{"text": text} for text in chunks],
+        "alternatives": [{"text": text} for text in alternatives],
+    }
+
+
+@app.post("/api/sessions/{session_id}/replay")
+async def replay_chat_session(session_id: str) -> dict[str, Any]:
+    """Fork a child session that re-asks the parent's Kaiwa questions."""
+    sid = (session_id or "").strip()
+    if not sid or not session_store.session_exists(settings.sessions_dir, sid):
+        raise HTTPException(status_code=404, detail="session not found")
+    active = profiles.active_profile_id()
+    parent = session_store.load_meta(settings.sessions_dir, sid)
+    if parent is None:
+        parent = session_store.attach_legacy(settings.sessions_dir, sid, active)
+    if session_store.other_named_profile(parent, active, _known_profile_ids()):
+        raise HTTPException(
+            status_code=409, detail="session belongs to another profile"
+        )
+    questions = session_store.questions_for_replay(settings.sessions_dir, sid)
+    if not questions:
+        raise HTTPException(
+            status_code=400,
+            detail="Nothing to try again yet — chat first",
+        )
+    child = session_store.create_replay_session(
+        settings.sessions_dir,
+        active,
+        parent_id=sid,
+        questions=questions,
+        parent_title=parent.title,
+    )
+    first = questions[0]
+    seed = [{"role": "assistant", "content": first}]
+    _sessions[child.id] = seed
+    ptt_events.register_session(child.id)
+
+    prefs = load_prefs()
+    audio_b64 = ""
+    tts_error = None
+    t0 = time.perf_counter()
+    try:
+        wav = await asyncio.to_thread(
+            tts.synthesize,
+            settings,
+            first,
+            speaker_id=prefs.voicevox_speaker_id,
+            engine=prefs.tts_engine,
+        )
+        audio_b64 = base64.b64encode(wav).decode("ascii")
+    except Exception as exc:
+        tts_error = str(exc)
+    tts_ms = int((time.perf_counter() - t0) * 1000)
+    session_store.append_record(
+        settings.sessions_dir,
+        child.id,
+        {
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "mode": "chat",
+            "transcript": "",
+            "reply": first,
+            "tts_ok": not tts_error,
+            "tts_error": tts_error,
+            "tts_engine": prefs.tts_engine,
+            "input": "replay_seed",
+            "client_source": "ui",
+            "timing": {"stt_ms": 0, "llm_ms": 0, "tts_ms": tts_ms, "total_ms": tts_ms},
+        },
+        profile_id=active,
+        bump_turns=False,
+    )
+    stored = session_store.load_meta(settings.sessions_dir, child.id) or child
+    return {
+        **stored.to_dict(),
+        "session_id": child.id,
+        "replay_of": sid,
+        "reply_text": first,
+        "audio_base64": audio_b64,
+        "audio_mime": "audio/wav",
+        "tts_error": tts_error,
+        "messages": seed,
+    }
+
+
 @app.post("/api/rescue")
 async def rescue_turn(body: RescueBody) -> dict[str, Any]:
     """Rewrite the last Kaiwa line one step simpler. No fake user utterance."""
@@ -880,6 +1004,7 @@ async def rescue_turn(body: RescueBody) -> dict[str, Any]:
             last_user=last_user,
             last_assistant=last_assistant,
             step=step,
+            replay_questions=_replay_prompt_questions(sid, history),
         )
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"LLM failed: {exc}") from exc
@@ -1144,6 +1269,7 @@ def _stream_chat_events(
                     profile=profile,
                     memory=memory,
                     learner_state=learner_state,
+                    replay_questions=_replay_prompt_questions(sid, history),
                 )
                 model_used = stream.model
                 shape_retry = stream.retry
@@ -1372,6 +1498,7 @@ async def _run_chat_turn(
             profile=profile,
             memory=memory,
             learner_state=learner_state,
+            replay_questions=_replay_prompt_questions(sid, history),
         )
     except Exception as exc:
         history.pop()

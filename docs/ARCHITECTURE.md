@@ -45,7 +45,7 @@ Fixed questions → user self-ratings → speaking_level / comprehension_level /
 | Learner profile | Active profile’s `learner_profile.json` — live speaking/comprehension estimates |
 | Long-term memory | Active profile’s `learner_memory.json` — comfort, topics, vocab, grammar, soft `recycle_items` |
 | User profiles | `%LocalAppData%\Kaiwa\profiles.json` + `profiles/<id>/` (prefs, learner profile, memory, custom personalities, PTT sounds). Optional `KAIWA_DATA_DIR` override. |
-| Sessions | `%LocalAppData%\Kaiwa\sessions/<id>.jsonl` plus `<id>.meta.json` (`profile_id`, title, turn_count, `prompt_revision`). Still a global folder (not under `profiles/<id>/`). Chat UI transcript is RAM + one `localStorage` id (not redrawn from disk — 8.4). LLM hydrates from JSONL on RAM miss; context is the last **16** messages. `PROMPT_REVISION` bump mints a **new session per profile** and keeps old JSONL (#115/#117). |
+| Sessions | `%LocalAppData%\Kaiwa\sessions/<id>.jsonl` plus `<id>.meta.json` (`profile_id`, title, turn_count, `prompt_revision`, optional `replay_of` + `replay_questions`). Still a global folder (not under `profiles/<id>/`). Chat UI redraws bubbles from `GET /api/sessions/{id}` on load and from the **Chats** drawer (#118). **Again** forks a child session (`POST /api/sessions/{id}/replay`, #119). After **New chat**, `GET /api/sessions/{id}/leftovers` surfaces learner lines from the ended thread (#120). LLM hydrates from JSONL on RAM miss; context is the last **16** messages. `PROMPT_REVISION` bump starts a **new session per profile** (UI New chat / `chat_reset`) and keeps old JSONL; a stale revision does **not** mint a new id mid-turn (#115/#118). |
 | Secrets | `%LocalAppData%\Kaiwa\secrets.json` (DeepSeek key; Phase 6.2) |
 
 ### Phase 2 tutor prefs
@@ -70,7 +70,7 @@ Learner profile (per active user profile) tracks estimated `speaking_level` / `c
 
 Long-term memory (per active user profile) stores comfort/personality prefs (name, vibe, do/dont), observed topics, vocab phrases, recurring grammar notes, and soft `recycle_items` for optional “say again” Practice. Occasional Flash extract after chat turns (post-TTS). Injected into the tutor prompt on top of the selected personality. `GET/PUT /api/memory`.
 
-Practice (`GET /api/practice/next`) sources: `bank` | `last_reply` | `vocab` (from memory) | `recycle` (soft retries; falls through to vocab → last reply). Chat is the main loop; Practice is an optional warm-up — not a quiz gate. Chat UI **Replay** re-plays the last TTS reply from a client cache (falls back to `POST /api/practice/speak` if audio was lost after refresh).
+Practice (`GET /api/practice/next`) sources: `bank` | `last_reply` | `vocab` (from memory) | `recycle` (soft retries; falls through to vocab → last reply). Chat is the main loop; Practice is an optional warm-up — not a quiz gate. Chat UI **Replay** re-plays the last TTS reply from a client cache (falls back to `POST /api/practice/speak` if audio was lost after refresh). Chat **Again** is a different control: it starts a child session that re-asks the same Kaiwa questions (`replay_of`).
 
 Placement APIs: `POST /api/quiz/start`, `/api/quiz/answer`, `/api/quiz/finish` (self-assessment; no `/speak`).
 
@@ -85,7 +85,7 @@ Also: `GET /api/prefs`, `PUT /api/prefs`.
 
 ### User profiles (named learner state)
 
-A **profile** is one learner’s Kaiwa state (not an account): prefs, learner profile, memory, and custom personalities. Registry: `%LocalAppData%\Kaiwa\profiles.json`; files under `profiles/<id>/`. On first launch with empty AppData, Kaiwa **copies** legacy repo `data/` (+ `sessions/`) once if present; otherwise creates a fresh `default` profile. Flat legacy `*.json` at the user-data root still fold into `profiles/default/`. Chat sessions stay in the global AppData `sessions/` folder with `profile_id` in `.meta.json` (export still omits transcripts). Switching clears browser chat session id.
+A **profile** is one learner’s Kaiwa state (not an account): prefs, learner profile, memory, and custom personalities. Registry: `%LocalAppData%\Kaiwa\profiles.json`; files under `profiles/<id>/`. On first launch with empty AppData, Kaiwa **copies** legacy repo `data/` (+ `sessions/`) once if present; otherwise creates a fresh `default` profile. Flat legacy `*.json` at the user-data root still fold into `profiles/default/`. Chat sessions stay in the global AppData `sessions/` folder with `profile_id` in `.meta.json` (export still omits transcripts). Switching clears the browser chat session id; the **Chats** list is per active profile.
 
 API:
 
@@ -98,7 +98,9 @@ API:
 - `POST /api/profiles/import` — JSON body or multipart file; always creates a new profile
 - `GET /api/sessions` — Chat session metas for the active profile
 - `POST /api/sessions` — same as `POST /api/chat/new` (durable new id; keeps old JSONL)
-- `GET /api/sessions/{id}` — meta + hydrated messages (409 if another profile)
+- `GET /api/sessions/{id}` — meta + hydrated messages (409 if another profile); Chat UI redraws bubbles from this on load and from the **Chats** drawer
+- `POST /api/sessions/{id}/replay` — child session (`replay_of`) that re-asks stored Kaiwa questions; seeds the first question + TTS
+- `GET /api/sessions/{id}/leftovers` — unique recent learner lines from a hydrated thread (cap 5); optional Flash alternatives (soft-fail → empty). Does not write SRS / recycle / memory.
 
 Replies are cleaned of stage-direction emotes (`(smiles)`, `*claps*`, etc.) before chat display and TTS.
 
@@ -110,9 +112,12 @@ See `docs/ROADMAP.md`.
 
 - **8.1 shipped:** pre-N5 reply shape — one idea (not one `。`); high-load constructions; one retry; JSONL `reply_shape`. Lock decays with pitch / support (`flow_streak`). Shape-locked Chat finishes LLM before sentence TTS.
 - **8.2 shipped:** **Simpler** on the last Kaiwa bubble (`POST /api/rescue`). No fake user line. Comprehension scaffolding bump; rewrite last assistant one step down; TTS; JSONL `rescue: true`. PTT has no Rescue hotkey.
-- **8.3 shipped:** sessions bound to `profile_id` via `<id>.meta.json`; hydrate RAM from JSONL (rescue replaces last assistant); `GET/POST /api/sessions` + durable **New chat** (keeps old JSONL). Prompt-revision mints a new session per profile. History drawer is 8.4.
+- **8.3 shipped:** sessions bound to `profile_id` via `<id>.meta.json`; hydrate RAM from JSONL (rescue replaces last assistant); `GET/POST /api/sessions` + durable **New chat** (keeps old JSONL). Prompt-revision starts a new session per profile (New chat / `chat_reset`).
+- **8.4 shipped:** **Chats** drawer lists the active profile; open or refresh redraws You/Kaiwa bubbles from `GET /api/sessions/{id}`. Stale `prompt_revision` no longer mints on a turn — opening an old chat continues that id with the current prompt + last-16 (#118).
+- **8.5 shipped:** **Again** forks a child session (`replay_of`) that re-asks the parent’s Kaiwa questions (no new teaching; Simpler still allowed). Distinct from TTS **Replay** and Practice shadowing (#119). Does not bump `PROMPT_REVISION`.
+- **8.7 shipped:** after **New chat**, **From this chat** shows 3–5 unique recent learner lines from the ended thread. Optional Flash **You could have said** (1–3, no stars, no `TRY:`) is a follow-up GET and soft-fails empty. Never live in Chat bubbles. Not SRS (#120). Does not bump `PROMPT_REVISION`.
+- **8.6 shipped:** Chat **Easy** / **Free** chip (`prefs.chat_pace`, default Easy). Free turns off `shape_lock_active` (no gym retry); **Simpler** and internal support still run. Quiet session `turn_count` by the composer. No XP. Does not bump `PROMPT_REVISION` (#121).
 - **Prompt revision (#115):** `PROMPT_REVISION` + AppData stamp; new empty chat on bump (memory kept). LLM sees last 16 turns.
-- **Not shipped:** **8.4–8.5** history drawer / replay; **8.7** after-chat leftovers; **8.6** Easy/Free chip.
 
 Silent freeze can raise `struggle_streak` via Simpler. A following `rescue: true` JSONL line is the live assistant text when hydrating.
 

@@ -12,7 +12,7 @@ from kaiwa.persona import (
     governor_pitch,
     shape_lock_active,
 )
-from kaiwa.prefs import UserPrefs
+from kaiwa.prefs import UserPrefs, validate_prefs_dict
 from kaiwa.reply_shape import (
     analyze_reply_shape,
     has_high_load,
@@ -93,6 +93,20 @@ def main() -> None:
     _check(pitch_n5 == "n5", "n5+normal pitch")
     _check(not shape_lock_active(pitch_n5, "normal"), "n5+normal unlocked")
     _check(shape_lock_active(pitch_n5, "simplified"), "simplified still locks")
+    _check(shape_lock_active(pitch_pre, "normal", chat_pace="easy"), "easy keeps pre_n5 lock")
+    _check(
+        not shape_lock_active(pitch_pre, "normal", chat_pace="free"),
+        "free unlocks pre_n5",
+    )
+    _check(
+        shape_lock_active(pitch_n5, "simplified", chat_pace="easy"),
+        "easy + simplified still locks",
+    )
+    _check(
+        not shape_lock_active(pitch_n5, "simplified", chat_pace="free"),
+        "free unlocks even simplified",
+    )
+    _check(validate_prefs_dict({}).chat_pace == "easy", "missing pref defaults easy")
 
     prompt = build_tutor_system_prompt(
         prefs_pre, last_user_text="猫好きです", profile=pre
@@ -100,6 +114,12 @@ def main() -> None:
     _check("考えは1つ" in prompt, "locked prompt says one idea")
     _check("負荷の高い型" in prompt, "locked prompt names high-load constructions")
     _check("禁止文法" in prompt, "locked prompt is scaffold not a ban")
+
+    free_prefs = UserPrefs(goal_level="pre_n5", chat_pace="free")
+    free_prompt = build_tutor_system_prompt(
+        free_prefs, last_user_text="猫好きです", profile=pre
+    )
+    _check("考えは1つ" not in free_prompt, "free prompt is not gym-locked")
 
     print("smoke_reply_shape ok")
 

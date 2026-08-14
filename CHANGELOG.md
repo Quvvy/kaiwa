@@ -13,6 +13,10 @@ and this project aims to follow [Semantic Versioning](https://semver.org/).
 - Tutor prompt updates start a **new chat** (memory kept): `PROMPT_REVISION` stamp, last-16 LLM context, Chat **New chat** (decision #115).
 - Phase **8.2**: **Simpler** on the last Kaiwa line — rewrite one step easier, keep memory, no fake “I don’t understand” turn (decision #116).
 - Phase **8.3**: Chat sessions belong to a profile (meta + JSONL hydrate); **New chat** keeps the old file; `GET/POST /api/sessions` (decision #117).
+- Phase **8.4**: **Chats** drawer lists this profile’s threads and redraws bubbles on load/open; stale prompt revision no longer mints a new id mid-turn (decision #118).
+- Phase **8.5**: **Again** starts a child chat that re-asks this thread’s Kaiwa questions (`replay_of`); TTS **Replay** is unchanged (decision #119).
+- Phase **8.7**: after **New chat**, **From this chat** shows phrases actually used in that thread; optional **You could have said** is Flash, soft-fail, and never live in Chat (decision #120).
+- Phase **8.6**: Chat **Easy** / **Free** chip (default Easy) can turn off the pre-N5 gym lock; quiet turn count, no XP (decision #121).
 
 ## [1.0.2] — 2026-08-11
 

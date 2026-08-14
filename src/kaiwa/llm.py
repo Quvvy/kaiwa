@@ -87,6 +87,7 @@ def _prepare_chat(
     memory: LearnerMemory | None = None,
     learner_state: str | None = None,
     help_type: str | None = None,
+    replay_questions: list[str] | None = None,
 ) -> tuple[UserPrefs, LearnerProfile, LearnerMemory, str, str, str, bool]:
     """Return prefs, profile, memory, learner_state, system, model, shape_lock."""
     prefs = prefs or load_prefs()
@@ -115,6 +116,7 @@ def _prepare_chat(
     locked = shape_lock_active(
         governor_pitch(prefs, profile, state, support_mode=support),
         support,
+        chat_pace=prefs.chat_pace,
     )
     system = build_tutor_system_prompt(
         prefs,
@@ -123,6 +125,7 @@ def _prepare_chat(
         profile=profile,
         memory=memory,
         learner_state=state,
+        replay_questions=replay_questions,
     )
     use_pro = needs_pro_routing(prefs, profile, state, help_type=ht)
     model = settings.deepseek_model_pro if use_pro else settings.deepseek_model
@@ -160,6 +163,7 @@ def chat(
     memory: LearnerMemory | None = None,
     learner_state: str | None = None,
     help_type: str | None = None,
+    replay_questions: list[str] | None = None,
     client: OpenAI | None = None,
 ) -> ChatGeneration:
     """Return reply text, model id, and shape-lock retry flags."""
@@ -171,6 +175,7 @@ def chat(
         memory=memory,
         learner_state=learner_state,
         help_type=help_type,
+        replay_questions=replay_questions,
     )
     reply, retry = _complete_with_retry(
         settings, system, messages, locked=locked, client=client, model=model
@@ -188,6 +193,7 @@ def rescue_rewrite(
     last_user: str = "",
     last_assistant: str = "",
     step: str = "shorter",
+    replay_questions: list[str] | None = None,
     client: OpenAI | None = None,
 ) -> ChatGeneration:
     """Rewrite the last Kaiwa line. `messages` should still include that assistant turn."""
@@ -204,6 +210,7 @@ def rescue_rewrite(
     locked = shape_lock_active(
         governor_pitch(prefs, profile, state, support_mode=support),
         support,
+        chat_pace=prefs.chat_pace,
     )
     system = build_tutor_system_prompt(
         prefs,
@@ -213,6 +220,7 @@ def rescue_rewrite(
         memory=memory,
         learner_state=state,
         help_type=ht,
+        replay_questions=replay_questions,
     )
     system = system.rstrip() + "\n\n" + rescue_rewrite_block(last_assistant, step).strip()
     use_pro = needs_pro_routing(prefs, profile, state, help_type=ht)
@@ -233,6 +241,7 @@ def chat_stream(
     memory: LearnerMemory | None = None,
     learner_state: str | None = None,
     help_type: str | None = None,
+    replay_questions: list[str] | None = None,
     client: OpenAI | None = None,
 ) -> ChatStreamStart:
     """Stream deltas. When shape-locked, finish (+ retry) before yielding so TTS waits."""
@@ -244,6 +253,7 @@ def chat_stream(
         memory=memory,
         learner_state=learner_state,
         help_type=help_type,
+        replay_questions=replay_questions,
     )
     client = client or make_client(settings)
 

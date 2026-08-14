@@ -84,6 +84,10 @@ def main() -> None:
 
         messages = hydrate(root, meta.id)
         _check(len(messages) == 2, "hydrate is one exchange")
+        _check(
+            [m["role"] for m in messages] == ["user", "assistant"],
+            "hydrate user then assistant",
+        )
         _check(messages[0] == {"role": "user", "content": "猫好きです"}, "user line kept")
         _check(
             messages[1]["content"] == "猫、好き？それとも犬？",
@@ -99,6 +103,10 @@ def main() -> None:
 
         listed = list_sessions(root, "alice")
         _check(len(listed) == 1 and listed[0].id == meta.id, "list by profile")
+        row = listed[0].to_dict()
+        _check(row.get("title") == "猫好きです", "list payload has title")
+        _check(bool(row.get("updated")), "list payload has updated")
+        _check(row.get("turn_count") == 1, "list payload has turn_count")
         _check(list_sessions(root, "bob") == [], "other profile sees nothing")
 
         old_id = meta.id

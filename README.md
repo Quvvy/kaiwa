@@ -115,7 +115,7 @@ Extra AivisSpeech voices (from AivisHub):
 
 Open **http://127.0.0.1:8787**
 
-- **Chat** — hold to talk, free conversation; type a short line if Whisper misses you; **Replay** re-plays Kaiwa’s last line; **Simpler** on Kaiwa’s last bubble says it more easily; **New chat** starts a fresh thread (keeps memory; past chats stay on disk)
+- **Chat** — hold to talk, free conversation; type a short line if Whisper misses you; **Replay** re-plays Kaiwa’s last line; **Simpler** on Kaiwa’s last bubble says it more easily; **Easy** / **Free** picks the gym lock (Easy is the default); a quiet turn count sits by the status; **New chat** starts a fresh thread (keeps memory; past chats stay on disk) and may show **From this chat** leftovers; **Chats** lists and reopens this profile’s threads; **Again** re-asks this thread’s questions as a new chat
 - **Practice** — optional warm-up: last reply / from our chats / say again; play model, hold to repeat (not a quiz)
 - **Place me** — per-profile soft first-run (auto-open when new/reset; Skip anytime); expanded English self-ratings that shape how Kaiwa talks
 - **Settings** — Profiles, Appearance, Tutor, Learning, Memory, Speech (searchable); themes, goals, corrections, TTS/PTT, learner profile, long-term memory
@@ -142,4 +142,4 @@ Kaiwa is **MIT** — see [LICENSE](LICENSE). Third-party speech engines, models,
 - **NVIDIA GPU recommended** for faster speech recognition. Kaiwa defaults to `WHISPER_DEVICE=auto` (CUDA when a GPU and `.[cuda]` wheels are available, otherwise CPU). Owners: `pip install -e ".[desktop,cuda]"`. The portable friend runtime is **CPU-only** unless CUDA wheels are added.
 - Practice scores measure **what the app heard**, not native pitch accent.
 - Phase 3 stays **turn-based** (no OpenAI Realtime); pitch-accent grading remains deferred.
-- **Version:** `1.0.2`. **Phase 4–5** done (incl. 5.5 comprehensibility-first Chat). **Phase 6:** 6.1–6.9 done (Windows GitHub release + in-app update checker). **Phase 7:** global push-to-talk shipped. **Phase 8.1–8.3** shipped (reply shape, Simpler, durable sessions); 8.4–8.7 still planned — see [docs/ROADMAP.md](docs/ROADMAP.md).
+- **Version:** `1.0.2`. **Phase 4–5** done (incl. 5.5 comprehensibility-first Chat). **Phase 6:** 6.1–6.9 done (Windows GitHub release + in-app update checker). **Phase 7:** global push-to-talk shipped. **Phase 8.1–8.7** shipped (reply shape, Simpler, durable sessions, Chats drawer, Again, leftovers, Easy/Free) — see [docs/ROADMAP.md](docs/ROADMAP.md).

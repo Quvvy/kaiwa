@@ -601,12 +601,19 @@ def governor_pitch(
     return pitch
 
 
-def shape_lock_active(pitch: str, support_mode: str = "normal") -> bool:
+def shape_lock_active(
+    pitch: str,
+    support_mode: str = "normal",
+    *,
+    chat_pace: str = "easy",
+) -> bool:
     """Temporary scaffold: pre-N5 / unknown, or simplified/heavy support.
 
     Turns off when pitch leaves pre_n5 (flow_streak / level nudge) or support
-    decays. Not a permanent speaking style.
+    decays. Free pace opts out of the gym lock. Not a permanent speaking style.
     """
+    if (chat_pace or "easy").strip().lower() == "free":
+        return False
     mode = (support_mode or "normal").strip().lower()
     p = (pitch or "").strip().lower()
     return p in {"unknown", "pre_n5"} or mode in {"simplified", "heavy"}
@@ -644,6 +651,31 @@ def rescue_rewrite_block(original: str, step: str) -> str:
 """
 
 
+def replay_block(questions: list[str] | None) -> str:
+    """Child-session only. None means not a replay thread."""
+    if questions is None:
+        return ""
+    if not questions:
+        return """\
+[replay]
+これはやり直しの会話。用意した質問には答え終わった。
+短い温かい一言だけ。新しい質問は出さない。新しい話題・文法は出さない。
+TRY: は出さない。モード名は言わない。
+（replay は内部指示。学習者に見せない。）
+"""
+    numbered = "\n".join(f"{i + 1}. {q}" for i, q in enumerate(questions))
+    return f"""\
+[replay]
+これはやり直しの会話。新しい教え・新しい話題・新しい文法は出さない。
+用意した質問をこの順で出す（今の質問を含む）:
+{numbered}
+学習者が答えたら、短いあいづちのあと、次の質問を出す（ほぼ同じ聞き方）。
+最後の質問の答えのあとは短い温かい一言だけ。新しい質問は出さない。
+TRY: は出さない。モード名は言わない。
+（replay は内部指示。学習者に見せない。）
+"""
+
+
 def difficulty_governor_block(
     prefs: UserPrefs,
     profile: Any | None = None,
@@ -656,7 +688,7 @@ def difficulty_governor_block(
     pitch = governor_pitch(
         prefs, profile, learner_state, support_mode=mode
     )
-    lock = shape_lock_active(pitch, mode)
+    lock = shape_lock_active(pitch, mode, chat_pace=prefs.chat_pace)
 
     if lock:
         band = (
@@ -689,6 +721,7 @@ def build_tutor_system_prompt(
     memory: Any | None = None,
     learner_state: str | None = None,
     help_type: str | None = None,
+    replay_questions: list[str] | None = None,
 ) -> str:
     style = prefs.correction_style if prefs.correction_style in CORRECTION_BLOCKS else "gentle"
     from kaiwa.learner_memory import LearnerMemory, memory_prompt_block
@@ -717,6 +750,7 @@ def build_tutor_system_prompt(
     lock = shape_lock_active(
         governor_pitch(prefs, profile, state, support_mode=support),
         support,
+        chat_pace=prefs.chat_pace,
     )
 
     parts = [
@@ -767,6 +801,9 @@ def build_tutor_system_prompt(
     ).strip()
     if thread_line:
         parts.extend(["", thread_line])
+    replay_line = replay_block(replay_questions).strip()
+    if replay_line:
+        parts.extend(["", replay_line])
     return "\n".join(parts)
 
 
