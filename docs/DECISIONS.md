@@ -117,7 +117,7 @@ Captured from the 2026-08-05 planning conversation (Pingo-like personal Japanese
 
 ## Per-profile first-run Place me (2026-08-06)
 
-63. Soft first-run per named profile: auto-open Place me when `placement_completed` is false; **Skip** dismisses for the browser session; Chat still works.
+63. Soft first-run per named profile: auto-open **Settings → Place me** when `placement_completed` is false; **Skip** dismisses for the browser session; Chat still works. Restated by **#123** (Place me is not a top-level tab).
 64. Expanded English self-assessment (kana / reading / grammar / follow / topics / help style) — still no scored JP items. Answers soft-min comprehension, set topics + `language_policy`, and store a `placement` dict.
 65. Until Place me finishes, the tutor prompt treats level as **unknown** (do not trust default `pre_n5`). After finish, trust placement strongly and protect levels for ~15 chat turns.
 66. Missing `placement_completed` on load → grandfather **true** (existing profiles). Create / reset write **false**.
@@ -130,11 +130,11 @@ Captured from the 2026-08-05 planning conversation (Pingo-like personal Japanese
 
 ## Chat UI redesign (2026-08-07)
 
-70. Chat uses a dark **night studio** shell (charcoal + warm lamp + teal accent) by default: full-height transcript, quiet underline tabs, grounded hold-to-talk composer. Colors live in CSS variables / `data-theme`.
+70. Chat uses a dark **night studio** shell (charcoal + warm lamp + teal accent) by default: full-height transcript, quiet underline tabs, grounded hold-to-talk composer. Colors live in CSS variables / `data-theme`. Flattened in **#122** (one desk sheet, composer as a floor).
 
 ## Settings rail + remaining tabs (2026-08-07)
 
-71. Settings uses a **section rail** (left list on desktop; horizontal chips when narrow): Profiles, Themes, Conversation, Voice, Level, Learner, Memory, Presets — one group visible at a time. **No settings removed**; save flows stay domain-specific (prefs sticky Save on Themes/Conversation/Voice/Level; Learner and Memory keep their own save/reset). Practice and Place me reuse the same night-studio surfaces/composer tokens as Chat.
+71. Settings uses a **section rail** (left list on desktop; horizontal chips when narrow): Profiles, Appearance, Tutor, Learning, **Place me**, Memory, Speech, About — one group visible at a time. **No settings removed**; save flows stay domain-specific (prefs sticky Save on Appearance/Tutor/Speech/Learning; Learner and Memory keep their own save/reset). Practice reuses night-studio surfaces/composer tokens as Chat. Place me lives in that rail, not as its own tab (**#123**).
 
 ## Brand icons (2026-08-07)
 
@@ -166,7 +166,7 @@ Captured from the 2026-08-05 planning conversation (Pingo-like personal Japanese
 
 ## Theme switcher (2026-08-07)
 
-79. Pref `ui_theme` with six built-ins — **Dark:** `night` (default), `slate`, `graphite`; **Light:** `day`, `cloud`, `frost`. Settings → **Themes** section (own rail item) shows Light/Dark groups with 4-color swatch cards. Click previews; sticky Save persists on the profile. Custom color editors and OS auto light/dark stay deferred. (`PrefsUpdate` must include `ui_theme` or saves silently fall back to night.)
+79. Pref `ui_theme` with fifteen built-ins — **Dark:** `night` (default), `slate`, `graphite`, `dusk`, `sage`, `ink`, `indigo`, `amber`; **Light:** `day`, `cloud`, `frost`, `blush`, `matcha`, `paper`, `wisteria`. Settings → **Themes** shows Light/Dark groups with 4-color swatch cards. Click previews; sticky Save persists on the profile. Custom color editors and OS auto light/dark stay deferred. (`PrefsUpdate` must include `ui_theme` or saves silently fall back to night.)
 
 ## Phase 5 tutor learning layers (2026-08-07)
 
@@ -237,6 +237,9 @@ Captured from the 2026-08-05 planning conversation (Pingo-like personal Japanese
 119. **Phase 8.5 shipped:** **Again** (not TTS **Replay**) forks a child Chat (`replay_of` + stored `replay_questions`) from a thread that has Kaiwa lines. Seeds the first question + TTS. Child prompt: re-ask those questions in order, no new teaching; after the last answer, a closer only. **Simpler** still rewrites the current last assistant line. Again on a child copies the stored list (not ack+question soup). Does not bump `PROMPT_REVISION`. Restates #111.
 120. **Phase 8.7 shipped:** after a successful **New chat** (including tutor-update New chat), if the previous id had at least one user line, show **From this chat** with unique recent learner lines (most recent first, cap 5, chronological, clip ~80). Optional Flash **You could have said** (1–3 Japanese alternatives; no stars, no “wrong”, no `TRY:`) is a follow-up `GET /api/sessions/{id}/leftovers`, not extra work inside `POST /api/chat/new`. Timeout / parse / key failure → empty alternatives. Skip empty / disclaimer-only threads. Do not show on Chats open, Again, refresh, profile switch, or live Chat turns. Never put leftovers into Chat bubbles. Does not write SRS / recycle / memory. Does not bump `PROMPT_REVISION`. Restates #112.
 121. **Phase 8.6 shipped:** Chat **Easy** / **Free** chip (`prefs.chat_pace`, default **easy**). Easy keeps the 8.1 shape lock. Free turns `shape_lock_active` off (no one-idea gym prompt, no density retry). Internal `support_mode` and **Simpler** still run. Quiet session `turn_count` by the composer (`N turns`, hidden at 0); no XP, no “survive” copy. Persist via prefs GET-merge-PUT (Settings Save must send `chat_pace` so it cannot reset Free). Does not bump `PROMPT_REVISION`. Restates #113’s optional chip.
+122. **Chat flatten:** Chat is one **desk** on the page `--bg`: `#modeChat` is a single `--surface` sheet (1px `--line`, radius). Stage + composer share that sheet — no stacked cards, no floating void. Composer is a floor (hairline, `--surface-raised` fill, not a second card). Empty-state “Hold to talk…” copy is gone — the button is the instruction. **New chat** and **Chats** live in the header next to the Kaiwa mark (visible on every tab; click switches to Chat, then starts a thread or opens the overlay). Those two controls use Microsoft Fluent UI System Icons only (`chat_add` / `chat_multiple`, 20 regular, `currentColor`); no other chrome uses Fluent icons. Not a persistent ChatGPT-style rail — Chats / leftovers still cover the desk. Composer is talk: meta (status + turns, Easy/Free) → **full-width Hold to talk** → quieter type + Send → quiet Replay / Again (hidden when unused; the row hides when both are unused). Bubbles lift with `--surface-raised` on the desk. **Practice** and **Settings** use the same desk: Practice’s **Hold to repeat** is a full-width raised floor; Settings is one sheet with a hairline between rail and pane (save bar stays a raised floor). Place me inherits Settings. Motion is short (~120ms) and respects `prefers-reduced-motion`. Restates #70.
+123. **Place me in Settings:** Place me is a Settings rail section, not a top-level tab. Header tabs are Chat / Practice / Settings. First-run / new / reset still auto-opens Settings → Place me when `placement_completed` is false (**#63**). Skip still goes to Chat. Live speaking / listening / goal knobs stay under Learning. Restates #71.
+124. Shipped **1.0.3** (`v1.0.3`, `KaiwaSetup-1.0.3.exe`) with Phase 8 Keep talking (#114–#121), one-desk Chat/Practice/Settings (#122), Place me in Settings (#123), and fifteen themes (#79). In-app update checker should offer this over 1.0.2. Does not bump `PROMPT_REVISION`.
 
 ## Global push-to-talk (2026-08-07)
 

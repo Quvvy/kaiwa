@@ -1,4 +1,4 @@
-# Build portable Kaiwa.exe + private CPU runtime (no friend .venv required).
+# Build portable Kaiwa.exe + private CPU runtime (no clone .venv required).
 # Usage:
 #   .\scripts\build_desktop.ps1              # shell + runtime (release)
 #   .\scripts\build_desktop.ps1 -DevVenv     # shell only; points at clone .venv

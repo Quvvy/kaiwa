@@ -7,6 +7,8 @@ and this project aims to follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.0.3] — 2026-08-13
+
 ### Changed
 
 - Phase **8.1**: pre-N5 Chat reply shape — one idea, reuse learner words, high-load constructions (not grammar bans), one retry, silent `reply_shape` session log (decision #114).
@@ -17,6 +19,9 @@ and this project aims to follow [Semantic Versioning](https://semver.org/).
 - Phase **8.5**: **Again** starts a child chat that re-asks this thread’s Kaiwa questions (`replay_of`); TTS **Replay** is unchanged (decision #119).
 - Phase **8.7**: after **New chat**, **From this chat** shows phrases actually used in that thread; optional **You could have said** is Flash, soft-fail, and never live in Chat (decision #120).
 - Phase **8.6**: Chat **Easy** / **Free** chip (default Easy) can turn off the pre-N5 gym lock; quiet turn count, no XP (decision #121).
+- Chat UI flatten: one desk sheet on the dark room for Chat, Practice, and Settings; composer/save as a raised floor (decision #122).
+- **Place me** moved from a top-level tab into Settings (decision #123).
+- Themes: Dusk, Sage, Blush, Matcha, Paper, Ink, Indigo, Amber, Wisteria beside Night, Slate, Graphite, Day, Cloud, Frost (decision #79).
 
 ## [1.0.2] — 2026-08-11
 

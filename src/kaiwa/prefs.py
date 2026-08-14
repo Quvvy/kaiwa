@@ -11,7 +11,23 @@ SpeechRegister = Literal["formal", "casual"]
 GoalLevel = Literal["pre_n5", "n5", "n4"]
 ModelRouting = Literal["flash_only", "auto"]
 TtsEngine = Literal["aivisspeech", "voicevox"]
-UiTheme = Literal["night", "slate", "graphite", "day", "cloud", "frost"]
+UiTheme = Literal[
+    "night",
+    "slate",
+    "graphite",
+    "dusk",
+    "sage",
+    "ink",
+    "indigo",
+    "amber",
+    "day",
+    "cloud",
+    "frost",
+    "blush",
+    "matcha",
+    "paper",
+    "wisteria",
+]
 ChatPace = Literal["easy", "free"]
 
 VALID_CORRECTION = {"gentle", "critique"}
@@ -20,7 +36,23 @@ VALID_SPEECH_REGISTER = {"formal", "casual"}
 VALID_GOAL_LEVEL = {"pre_n5", "n5", "n4"}
 VALID_MODEL_ROUTING = {"flash_only", "auto"}
 VALID_TTS_ENGINE = {"aivisspeech", "voicevox"}
-VALID_UI_THEME = {"night", "slate", "graphite", "day", "cloud", "frost"}
+VALID_UI_THEME = {
+    "night",
+    "slate",
+    "graphite",
+    "dusk",
+    "sage",
+    "ink",
+    "indigo",
+    "amber",
+    "day",
+    "cloud",
+    "frost",
+    "blush",
+    "matcha",
+    "paper",
+    "wisteria",
+}
 VALID_CHAT_PACE = {"easy", "free"}
 MAX_TOPIC_PREFS = 8
 MAX_TOPIC_LEN = 40
@@ -154,7 +186,8 @@ def validate_prefs_dict(raw: dict[str, Any]) -> UserPrefs:
     ui_theme = str(raw.get("ui_theme", "night") or "night").strip().lower()
     if ui_theme not in VALID_UI_THEME:
         raise ValueError(
-            "ui_theme must be one of: night, slate, graphite, day, cloud, frost"
+            "ui_theme must be one of: night, slate, graphite, dusk, sage, ink, indigo, amber, "
+            "day, cloud, frost, blush, matcha, paper, wisteria"
         )
 
     ptt_enabled = _as_bool(raw.get("ptt_enabled", False), False)

@@ -35,7 +35,7 @@ Fixed questions → user self-ratings → speaking_level / comprehension_level /
 
 | Piece | Default |
 |-------|---------|
-| App | FastAPI + Chat / Practice / Place me / Settings tabs on port **8787** |
+| App | FastAPI + Chat / Practice / Settings tabs on port **8787** (Place me is a Settings section) |
 | STT | `faster-whisper` / `large-v3-turbo` / `cuda` / `float16` |
 | LLM | `deepseek-v4-flash` with `thinking: disabled` |
 | TTS | **AivisSpeech** HTTP API at `http://127.0.0.1:10101` (default); VOICEVOX at `:50021` as fallback |
@@ -196,9 +196,9 @@ Two processes:
 
 **First-run bootstrap** (before TTS/API): shell runs `python -m kaiwa.bootstrap ensure` via the runtime interpreter. Downloads Whisper weights to `%LocalAppData%\Kaiwa\models\whisper\` and installs AivisSpeech Engine under `tts\aivisspeech\` if not already found (Program Files / tools / AppData). Splash shows progress; downloads resume after interrupt. STT then loads with `local_files_only` when the AppData model is present.
 
-User data stays under `%LocalAppData%\Kaiwa\`. **Hardware:** `WHISPER_DEVICE=auto` prefers CUDA when a GPU and nvidia wheels are present, else CPU (`int8`). Owners: `pip install -e ".[cuda]"`. Friend portable runtime is CPU unless CUDA wheels are added. Dev-only: `build_desktop.ps1 -DevVenv` points the shell at the clone `.venv`.
+User data stays under `%LocalAppData%\Kaiwa\`. **Hardware:** `WHISPER_DEVICE=auto` prefers CUDA when a GPU and nvidia wheels are present, else CPU (`int8`). Owners: `pip install -e ".[cuda]"`. The portable runtime is CPU unless CUDA wheels are added. Dev-only: `build_desktop.ps1 -DevVenv` points the shell at the clone `.venv`.
 
-**Installer:** `scripts/build_installer.ps1` (Inno Setup 6) packs `dist/Kaiwa/` into `dist/KaiwaSetup-*.exe` — Program Files install, Start Menu shortcut, Add/Remove Programs uninstall. Uninstall does **not** delete AppData. Friend path is the Setup.exe from the GitHub Release (portable folder remains a build intermediate).
+**Installer:** `scripts/build_installer.ps1` (Inno Setup 6) packs `dist/Kaiwa/` into `dist/KaiwaSetup-*.exe` — Program Files install, Start Menu shortcut, Add/Remove Programs uninstall. Uninstall does **not** delete AppData. The GitHub Release Setup.exe is the install path (portable folder remains a build intermediate).
 
 **Updates (6.9):** UI calls `/api/updates/check` (GitHub Releases latest; 24h AppData cache). When newer, a banner + Settings → About offer **Update now**, which downloads `KaiwaSetup-*.exe` to `%LocalAppData%\Kaiwa\downloads\updates\` and launches it (`os.startfile`). Desktop log: `%LocalAppData%\Kaiwa\Kaiwa.desktop.log`.
 

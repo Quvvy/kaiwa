@@ -5,7 +5,7 @@
 ; %LocalAppData%\Kaiwa\ (secrets, models, profiles) is left intact.
 
 #define MyAppName "Kaiwa"
-#define MyAppVersion "1.0.2"
+#define MyAppVersion "1.0.3"
 #define MyAppPublisher "Kaiwa"
 #define MyAppExeName "Kaiwa.exe"
 #define MyAppURL "https://github.com/Quvvy/kaiwa"

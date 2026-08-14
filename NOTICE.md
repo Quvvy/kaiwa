@@ -1,6 +1,6 @@
 # Third-party notices
 
-Kaiwa itself is MIT-licensed (see [LICENSE](LICENSE)). It depends on other projects. This is a plain-English summary for friends shipping or running Kaiwa — not a full dump of every transitive wheel. Prefer each package’s own metadata / upstream LICENSE for the authoritative text.
+Kaiwa itself is MIT-licensed (see [LICENSE](LICENSE)). It depends on other projects. This is a plain-English summary for shipping or running Kaiwa — not a full dump of every transitive wheel. Prefer each package’s own metadata / upstream LICENSE for the authoritative text.
 
 ## Speech & models
 
@@ -45,6 +45,12 @@ CUDA Math libraries on Windows are distributed under NVIDIA’s CUDA EULA / redi
 ## DeepSeek
 
 Chat completions go to DeepSeek’s cloud API. Use of the API is governed by [DeepSeek’s terms](https://www.deepseek.com/) and your API key account — the key is never committed to this repo.
+
+## UI assets
+
+| Component | Notes |
+|-----------|--------|
+| [Fluent UI System Icons](https://github.com/microsoft/fluentui-system-icons) | MIT. Header **New chat** (`chat_add_20_regular`) and **Chats** (`chat_multiple_20_regular`) only. Vendored under `static/icons/fluent/`. |
 
 ## Questions
 

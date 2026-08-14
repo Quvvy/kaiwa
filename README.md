@@ -3,11 +3,11 @@
 Personal Japanese AI conversation partner — turn-based chat, Practice, and a self-assessment placement check.
 
 **Repo:** [github.com/Quvvy/kaiwa](https://github.com/Quvvy/kaiwa)  
-**Version:** **1.0.2**
+**Version:** **1.0.3**
 
 ## For installation (Windows)
 
-1. Download **`KaiwaSetup-1.0.2.exe`** from the [latest GitHub Release](https://github.com/Quvvy/kaiwa/releases/latest).
+1. Download **`KaiwaSetup-1.0.3.exe`** from the [latest GitHub Release](https://github.com/Quvvy/kaiwa/releases/latest).
 2. Run the installer → open **Kaiwa** from the Start Menu.
 3. First launch may download a speech model (~1.5 GB) and voice engine (~200 MB) into `%LocalAppData%\Kaiwa\` (progress on the splash; relaunch resumes).
 4. When asked, paste a [DeepSeek](https://platform.deepseek.com/) API key (saved under AppData, not in the install folder).
@@ -32,7 +32,7 @@ Quiz:     Self-assessment placement (stage / listening / speaking / pace) → pr
 | Tutor prefs | Goals, Immersion/Adaptive, Formal/Casual, naturalness, personalities, TTS engine/voice, Flash/Pro routing |
 | Learner profile | Live speaking/comprehension estimates (auto-updating) |
 | Long-term memory | Comfort prefs, topics, vocab, grammar (auto-updating) |
-| App | FastAPI + Chat / Practice / Place me / Settings tabs at `/` |
+| App | FastAPI + Chat / Practice / Settings tabs at `/` |
 
 ## Setup (developers / owners)
 
@@ -94,7 +94,7 @@ Extra AivisSpeech voices (from AivisHub):
 ```
 
 - Builds a portable folder: thin **`Kaiwa.exe`** + private `runtime\` (CPU Python + deps) + `static\`.
-- `build_installer.ps1` wraps that folder into `dist\KaiwaSetup-1.0.2.exe` (Start Menu + uninstall).
+- `build_installer.ps1` wraps that folder into `dist\KaiwaSetup-1.0.3.exe` (Start Menu + uninstall).
 - Relative `Kaiwa.runtime.json` points at `runtime\Scripts\python.exe`. Shell sets `KAIWA_ROOT` for the API child.
 - Dev shell-only rebuild (points at clone `.venv`): `.\scripts\build_desktop.ps1 -DevVenv`
 - **Close the window** — stops Kaiwa + the TTS engine *we* started and exits (no tray).
@@ -117,8 +117,8 @@ Open **http://127.0.0.1:8787**
 
 - **Chat** — hold to talk, free conversation; type a short line if Whisper misses you; **Replay** re-plays Kaiwa’s last line; **Simpler** on Kaiwa’s last bubble says it more easily; **Easy** / **Free** picks the gym lock (Easy is the default); a quiet turn count sits by the status; **New chat** starts a fresh thread (keeps memory; past chats stay on disk) and may show **From this chat** leftovers; **Chats** lists and reopens this profile’s threads; **Again** re-asks this thread’s questions as a new chat
 - **Practice** — optional warm-up: last reply / from our chats / say again; play model, hold to repeat (not a quiz)
-- **Place me** — per-profile soft first-run (auto-open when new/reset; Skip anytime); expanded English self-ratings that shape how Kaiwa talks
-- **Settings** — Profiles, Appearance, Tutor, Learning, Memory, Speech (searchable); themes, goals, corrections, TTS/PTT, learner profile, long-term memory
+- **Place me** — Settings section; per-profile soft first-run (auto-open when new/reset; Skip anytime); expanded English self-ratings that shape how Kaiwa talks
+- **Settings** — Profiles, Appearance, Tutor, Learning, Place me, Memory, Speech (searchable); themes, goals, corrections, TTS/PTT, learner profile, long-term memory
 
 Default port is **8787** (8765 often used by Anki on this machine).
 
@@ -139,7 +139,7 @@ Kaiwa is **MIT** — see [LICENSE](LICENSE). Third-party speech engines, models,
 
 - Never commit `.env` or AppData `secrets.json` / profile data.
 - Whisper weights download on first launch into `%LocalAppData%\Kaiwa\models\whisper\` (splash progress).
-- **NVIDIA GPU recommended** for faster speech recognition. Kaiwa defaults to `WHISPER_DEVICE=auto` (CUDA when a GPU and `.[cuda]` wheels are available, otherwise CPU). Owners: `pip install -e ".[desktop,cuda]"`. The portable friend runtime is **CPU-only** unless CUDA wheels are added.
+- **NVIDIA GPU recommended** for faster speech recognition. Kaiwa defaults to `WHISPER_DEVICE=auto` (CUDA when a GPU and `.[cuda]` wheels are available, otherwise CPU). Owners: `pip install -e ".[desktop,cuda]"`. The portable runtime is **CPU-only** unless CUDA wheels are added.
 - Practice scores measure **what the app heard**, not native pitch accent.
 - Phase 3 stays **turn-based** (no OpenAI Realtime); pitch-accent grading remains deferred.
-- **Version:** `1.0.2`. **Phase 4–5** done (incl. 5.5 comprehensibility-first Chat). **Phase 6:** 6.1–6.9 done (Windows GitHub release + in-app update checker). **Phase 7:** global push-to-talk shipped. **Phase 8.1–8.7** shipped (reply shape, Simpler, durable sessions, Chats drawer, Again, leftovers, Easy/Free) — see [docs/ROADMAP.md](docs/ROADMAP.md).
+- **Version:** `1.0.3`. **Phase 4–5** done (incl. 5.5 comprehensibility-first Chat). **Phase 6:** 6.1–6.9 done (Windows GitHub release + in-app update checker). **Phase 7:** global push-to-talk shipped. **Phase 8.1–8.7** shipped (reply shape, Simpler, durable sessions, Chats drawer, Again, leftovers, Easy/Free). Chat / Practice / Settings share one desk; Place me is a Settings section; fifteen themes — see [docs/ROADMAP.md](docs/ROADMAP.md).

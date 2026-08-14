@@ -64,7 +64,7 @@ Core loop is usable. Prefer friction-killers and learning feedback over new prod
 - [x] Settings / Practice / Place me visual polish — section rail Settings; Practice + Place me match night-studio tokens (all options kept)
 - [x] Windows `Kaiwa.exe` desktop shell — PyInstaller windowed webview so taskbar is Kaiwa (API still venv)
 - [x] Practice = intelligibility + shadowing (model-contour pitch % removed)
-- [x] Theme switcher — Settings → Themes; six Dark/Light presets with swatch cards (`ui_theme`)
+- [x] Theme switcher — Settings → Themes; fifteen Dark/Light presets with swatch cards (`ui_theme`)
 
 **Priority** (completed)
 
@@ -72,7 +72,7 @@ Core loop is usable. Prefer friction-killers and learning feedback over new prod
 2. ~~Clearer engine-down / TTS errors~~ **done**
 3. ~~Stronger correction surfacing~~ **done**
 4. ~~Settings / Practice / Place me visual polish~~ **done**
-5. ~~Theme switcher~~ **done** (six presets; custom editors deferred)
+5. ~~Theme switcher~~ **done** (fifteen presets; custom editors deferred)
 
 ## Phase 5 — Tutor learning quality (done)
 
@@ -105,7 +105,7 @@ Design input: real chat critique (`docs/TUTOR_EXCHANGE_CRITIQUE.md`). Teach unde
 
 **Only if needed later** (from Phase 4 backlog)
 
-- Custom / extra theme editor beyond the six presets
+- Custom / extra theme editor beyond the built-in presets
 - Dictionary-absolute pitch accent (NHK / MARINE H–L) / OJAD-style sentence graphs
 - Realtime barge-in speech APIs
 - Larger scenario catalog
