@@ -13,12 +13,12 @@ from kaiwa import llm
 def main() -> None:
     settings = get_settings()
     print(f"model={settings.deepseek_model} base={settings.deepseek_base_url}")
-    reply = llm.chat(
+    gen = llm.chat(
         settings,
         [{"role": "user", "content": "こんにちは！今日は短い日本語で話しましょう。"}],
     )
     print("--- reply ---")
-    sys.stdout.buffer.write((reply + "\n").encode("utf-8", errors="replace"))
+    sys.stdout.buffer.write((gen.reply + "\n").encode("utf-8", errors="replace"))
     sys.stdout.buffer.flush()
 
 

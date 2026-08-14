@@ -80,6 +80,8 @@ PERSONALITY_PRESETS: list[PersonalityPreset] = [
 
 # --- Chat system prompt architecture (decision #101) ---
 # Hierarchy is the single priority source; other blocks add prefs/runtime detail only.
+# Bump when tutor policy changes (not TTS/installer/PTT). Missing AppData stamp = 0.
+PROMPT_REVISION = 2
 
 PRIORITY_HIERARCHY_BLOCK = """\
 優先順位（上ほど強い。衝突したら番号の小さい方に従う）:
@@ -481,21 +483,36 @@ def conversation_craft_block(
     learner_state: str | None = None,
     *,
     support_mode: str = "normal",
+    shape_lock: bool = False,
 ) -> str:
     """Topic stickiness + length bias for this turn."""
     state = (learner_state or "flowing").strip().lower()
     mode = (support_mode or "normal").strip().lower()
-    if mode == "heavy":
-        bias = "いちばん短く。超短文＋選択肢だけ。"
-    elif mode == "simplified" or state == "help_request":
-        bias = "とても短く。情報は1ポイント。すぐ番を渡す。"
-    elif mode == "light" or state == "struggling":
-        bias = "短くはっきり。一文＋軽い質問1つ。"
+    if shape_lock:
+        topic = (
+            "学習者の言葉を再利用。今の考えに粘る。学習者が話題を変えたら従う。"
+        )
+        bias = (
+            "考えは1つ（句点はいくつでもよい。こんにちは！元気？ は一つの流れ）。"
+            "認める／くり返し＋短い確認（はい／いいえ、または A/B）1つ。"
+            "助言・励ましの追加や話題のジャンプはしない。"
+        )
     else:
-        bias = "自然なテンポ。基本1〜2短文。必要なら最大2〜3短文。"
+        topic = (
+            "ヘルプや今の話題のあとすぐ飛ばない。1〜2ターン粘る／教えた語を再利用。"
+            "学習者が話題を変えたら従う。"
+        )
+        if mode == "heavy":
+            bias = "いちばん短く。超短文＋選択肢だけ。"
+        elif mode == "simplified" or state == "help_request":
+            bias = "とても短く。情報は1ポイント。すぐ番を渡す。"
+        elif mode == "light" or state == "struggling":
+            bias = "短くはっきり。一文＋軽い質問1つ。"
+        else:
+            bias = "自然なテンポ。基本1〜2短文。必要なら最大2〜3短文。"
     return f"""\
 会話の型:
-- 話題: ヘルプや今の話題のあとすぐ飛ばない。1〜2ターン粘る／教えた語を再利用。学習者が話題を変えたら従う。
+- 話題: {topic}
 - 長さ: 口頭会話向け。段落・講義禁止。{bias}
 - メモリの語彙／文法は自然なときに最大1つリサイクル（クイズ化しない）。
 """
@@ -554,14 +571,14 @@ def level_and_profile_block(prefs: UserPrefs, profile: Any | None = None) -> str
 """
 
 
-def difficulty_governor_block(
+def governor_pitch(
     prefs: UserPrefs,
     profile: Any | None = None,
     learner_state: str | None = None,
     *,
     support_mode: str = "normal",
 ) -> str:
-    """Cap next-turn vocab/grammar density by demonstrated level."""
+    """Effective speech pitch after support/struggle nudge. Shared by prompt + retry."""
     from kaiwa.learner_profile import (
         LearnerProfile,
         effective_speech_level,
@@ -575,18 +592,80 @@ def difficulty_governor_block(
     state = (learner_state or "flowing").strip().lower()
     mode = (support_mode or "normal").strip().lower()
     if not profile.placement_completed:
-        pitch = "unknown"
-    else:
-        pitch = effective_speech_level(prefs, profile)
-        if mode in {"simplified", "heavy"} or state in {"struggling", "help_request"}:
-            pitch = nudge_level(pitch, -1)
-        if mode == "heavy":
-            pitch = nudge_level(pitch, -1)
+        return "unknown"
+    pitch = effective_speech_level(prefs, profile)
+    if mode in {"simplified", "heavy"} or state in {"struggling", "help_request"}:
+        pitch = nudge_level(pitch, -1)
+    if mode == "heavy":
+        pitch = nudge_level(pitch, -1)
+    return pitch
 
-    if pitch in {"unknown", "pre_n5"} or mode in {"simplified", "heavy"}:
+
+def shape_lock_active(pitch: str, support_mode: str = "normal") -> bool:
+    """Temporary scaffold: pre-N5 / unknown, or simplified/heavy support.
+
+    Turns off when pitch leaves pre_n5 (flow_streak / level nudge) or support
+    decays. Not a permanent speaking style.
+    """
+    mode = (support_mode or "normal").strip().lower()
+    p = (pitch or "").strip().lower()
+    return p in {"unknown", "pre_n5"} or mode in {"simplified", "heavy"}
+
+
+SHAPE_RETRY_BLOCK = """\
+[shape_retry]
+直前の返事は考えが多すぎた。新しい考えは最大1つ。
+学習者の言葉を再利用し、同じ話題で短い確認（はい／いいえ、または A/B）だけ。
+この難易度では負荷の高い型（〜れば／たら／なら など）は出さない（禁止ではなく今の負荷）。
+助言・励ましの追加や話題のジャンプはしない。モード名は言わない。
+（shape_retry は内部指示。学習者に見せない。）
+"""
+
+
+def rescue_rewrite_block(original: str, step: str) -> str:
+    """Rescue-only system addendum. Not used on ordinary Chat turns."""
+    key = (step or "shorter").strip().lower()
+    if key == "yes_no":
+        target = "はい／いいえで答えられる短い確認"
+    elif key == "ab":
+        target = "A と B の短い選択肢（それとも）"
+    else:
+        target = "同じ話題で考えは1つの短い言い直し"
+        key = "shorter"
+    orig = (original or "").strip()
+    return f"""\
+[rescue]
+学習者は直前の発話がわからなかった（ボタン。学習者の発言ではない）。
+元の発話: 「{orig}」
+一段やさしく書き直す。目標: {target}（{key}）。
+同じ話題。新しい考えは足さない。TRY: は出さない。モード名は言わない。
+学習者が「わからない」と言った体にしない。
+（rescue は内部指示。学習者に見せない。）
+"""
+
+
+def difficulty_governor_block(
+    prefs: UserPrefs,
+    profile: Any | None = None,
+    learner_state: str | None = None,
+    *,
+    support_mode: str = "normal",
+) -> str:
+    """Cap next-turn vocab/grammar density by demonstrated level."""
+    mode = (support_mode or "normal").strip().lower()
+    pitch = governor_pitch(
+        prefs, profile, learner_state, support_mode=mode
+    )
+    lock = shape_lock_active(pitch, mode)
+
+    if lock:
         band = (
-            "短い日常語。1文に情報を詰め込みすぎない。単純なフォロー／選択肢。"
-            "密度の高い型（予定ある？〜てみる 等）は出さない。"
+            "考えは1つ（句点の数ではない。こんにちは！元気？ は一つの流れ）。"
+            "学習者の言葉を再利用し、同じ話題で短い確認（はい／いいえ、または A/B）。"
+            "第二の考え（励まし・助言・話題ジャンプ）は足さない。"
+            "この難易度では負荷の高い型（〜れば／たら／なら など）は出さない。"
+            "禁止文法ではなく今の負荷。余裕が出たら戻す。"
+            "開き質問（どうした／何をしました／予定）は出さない。"
         )
     elif pitch == "n5":
         band = "語彙は少し増やしてよいがメインは1つ。密度の高い文法は通じたあとだけ。"
@@ -609,6 +688,7 @@ def build_tutor_system_prompt(
     profile: Any | None = None,
     memory: Any | None = None,
     learner_state: str | None = None,
+    help_type: str | None = None,
 ) -> str:
     style = prefs.correction_style if prefs.correction_style in CORRECTION_BLOCKS else "gentle"
     from kaiwa.learner_memory import LearnerMemory, memory_prompt_block
@@ -621,7 +701,10 @@ def build_tutor_system_prompt(
     assert isinstance(profile, LearnerProfile)
 
     state = learner_state or infer_learner_state(last_user_text)
-    help_type = infer_help_type(last_user_text)
+    ht = (help_type or infer_help_type(last_user_text)).strip().lower()
+    if ht not in {"none", "comprehension", "vocabulary", "expression", "correction"}:
+        ht = infer_help_type(last_user_text)
+    help_type = ht
     support = compute_support_mode(
         learner_state=state,
         help_type=help_type,
@@ -631,6 +714,10 @@ def build_tutor_system_prompt(
         speech_pitch = "unknown"
     else:
         speech_pitch = effective_speech_level(prefs, profile)
+    lock = shape_lock_active(
+        governor_pitch(prefs, profile, state, support_mode=support),
+        support,
+    )
 
     parts = [
         PRIORITY_HIERARCHY_BLOCK.strip(),
@@ -669,7 +756,9 @@ def build_tutor_system_prompt(
         "",
         MICRO_INVARIANTS_BLOCK.strip(),
         "",
-        conversation_craft_block(state, support_mode=support).strip(),
+        conversation_craft_block(
+            state, support_mode=support, shape_lock=lock
+        ).strip(),
         "",
         memory_prompt_block(memory, prefs).strip(),
     ]

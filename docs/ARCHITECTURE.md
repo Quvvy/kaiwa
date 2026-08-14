@@ -45,7 +45,7 @@ Fixed questions → user self-ratings → speaking_level / comprehension_level /
 | Learner profile | Active profile’s `learner_profile.json` — live speaking/comprehension estimates |
 | Long-term memory | Active profile’s `learner_memory.json` — comfort, topics, vocab, grammar, soft `recycle_items` |
 | User profiles | `%LocalAppData%\Kaiwa\profiles.json` + `profiles/<id>/` (prefs, learner profile, memory, custom personalities, PTT sounds). Optional `KAIWA_DATA_DIR` override. |
-| Sessions | `%LocalAppData%\Kaiwa\sessions/<id>.jsonl` with `mode: chat` or `mode: practice` (global, not per profile) |
+| Sessions | `%LocalAppData%\Kaiwa\sessions/<id>.jsonl` plus `<id>.meta.json` (`profile_id`, title, turn_count, `prompt_revision`). Still a global folder (not under `profiles/<id>/`). Chat UI transcript is RAM + one `localStorage` id (not redrawn from disk — 8.4). LLM hydrates from JSONL on RAM miss; context is the last **16** messages. `PROMPT_REVISION` bump mints a **new session per profile** and keeps old JSONL (#115/#117). |
 | Secrets | `%LocalAppData%\Kaiwa\secrets.json` (DeepSeek key; Phase 6.2) |
 
 ### Phase 2 tutor prefs
@@ -85,7 +85,7 @@ Also: `GET /api/prefs`, `PUT /api/prefs`.
 
 ### User profiles (named learner state)
 
-A **profile** is one learner’s Kaiwa state (not an account): prefs, learner profile, memory, and custom personalities. Registry: `%LocalAppData%\Kaiwa\profiles.json`; files under `profiles/<id>/`. On first launch with empty AppData, Kaiwa **copies** legacy repo `data/` (+ `sessions/`) once if present; otherwise creates a fresh `default` profile. Flat legacy `*.json` at the user-data root still fold into `profiles/default/`. Sessions stay global under AppData `sessions/`; switching clears browser chat session id.
+A **profile** is one learner’s Kaiwa state (not an account): prefs, learner profile, memory, and custom personalities. Registry: `%LocalAppData%\Kaiwa\profiles.json`; files under `profiles/<id>/`. On first launch with empty AppData, Kaiwa **copies** legacy repo `data/` (+ `sessions/`) once if present; otherwise creates a fresh `default` profile. Flat legacy `*.json` at the user-data root still fold into `profiles/default/`. Chat sessions stay in the global AppData `sessions/` folder with `profile_id` in `.meta.json` (export still omits transcripts). Switching clears browser chat session id.
 
 API:
 
@@ -96,10 +96,25 @@ API:
 - `POST /api/profiles/{id}/reset` — wipe four files to defaults (keep id/label)
 - `GET /api/profiles/{id}/export` — versioned `kaiwa-profile` JSON download
 - `POST /api/profiles/import` — JSON body or multipart file; always creates a new profile
+- `GET /api/sessions` — Chat session metas for the active profile
+- `POST /api/sessions` — same as `POST /api/chat/new` (durable new id; keeps old JSONL)
+- `GET /api/sessions/{id}` — meta + hydrated messages (409 if another profile)
 
 Replies are cleaned of stage-direction emotes (`(smiles)`, `*claps*`, etc.) before chat display and TTS.
 
 Chat turns log `timing: {stt_ms, llm_ms, tts_ms, total_ms}` in session JSONL and return it on `/api/turn`. Summarize with `scripts/eval_turn_latency.py`.
+
+### Phase 8 — Keep talking
+
+See `docs/ROADMAP.md`.
+
+- **8.1 shipped:** pre-N5 reply shape — one idea (not one `。`); high-load constructions; one retry; JSONL `reply_shape`. Lock decays with pitch / support (`flow_streak`). Shape-locked Chat finishes LLM before sentence TTS.
+- **8.2 shipped:** **Simpler** on the last Kaiwa bubble (`POST /api/rescue`). No fake user line. Comprehension scaffolding bump; rewrite last assistant one step down; TTS; JSONL `rescue: true`. PTT has no Rescue hotkey.
+- **8.3 shipped:** sessions bound to `profile_id` via `<id>.meta.json`; hydrate RAM from JSONL (rescue replaces last assistant); `GET/POST /api/sessions` + durable **New chat** (keeps old JSONL). Prompt-revision mints a new session per profile. History drawer is 8.4.
+- **Prompt revision (#115):** `PROMPT_REVISION` + AppData stamp; new empty chat on bump (memory kept). LLM sees last 16 turns.
+- **Not shipped:** **8.4–8.5** history drawer / replay; **8.7** after-chat leftovers; **8.6** Easy/Free chip.
+
+Silent freeze can raise `struggle_streak` via Simpler. A following `rescue: true` JSONL line is the live assistant text when hydrating.
 
 ### Why hybrid
 

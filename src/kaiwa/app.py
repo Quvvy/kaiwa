@@ -5,7 +5,6 @@ import base64
 import json
 import threading
 import time
-import uuid
 from collections import deque
 from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import datetime, timezone
@@ -19,6 +18,7 @@ from pydantic import BaseModel, Field
 
 from kaiwa.config import ROOT, get_settings, reload_settings
 from kaiwa import __version__, llm, profiles, secrets_store, stt, tts, updates
+from kaiwa import prompt_stamp
 from kaiwa.persona import PERSONALITY_PRESETS, infer_learner_state, preset_public_list
 from kaiwa.personalities_store import (
     create_user_preset,
@@ -28,6 +28,7 @@ from kaiwa.personalities_store import (
 )
 from kaiwa.practice import next_phrase, score_intelligibility
 from kaiwa.prefs import load_prefs, save_prefs, validate_prefs_dict
+from kaiwa.reply_shape import analyze_reply_shape
 from kaiwa import ptt_events
 from kaiwa import ptt_sounds
 from kaiwa.learner_profile import (
@@ -39,6 +40,7 @@ from kaiwa.learner_profile import (
     reset_profile,
     save_profile,
 )
+from kaiwa.rescue import apply_rescue_signals, next_rescue_step
 from kaiwa.learner_memory import (
     apply_manual_memory,
     load_memory,
@@ -50,7 +52,7 @@ from kaiwa.learner_memory import (
     reset_memory,
     save_memory,
 )
-from kaiwa.session_log import append_session_log
+from kaiwa import session_store
 from kaiwa.stream_util import SentenceBuffer
 from kaiwa.text_clean import clean_reply_for_speech, split_try_phrase
 from kaiwa.quiz import (
@@ -89,11 +91,72 @@ app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 # In-memory chat history keyed by browser session id.
 _sessions: dict[str, list[dict[str, str]]] = {}
 _practice_cursor: dict[str, str] = {}
+# Live Chat still keeps full RAM history for the UI; the LLM only sees the tail.
+CHAT_LLM_HISTORY = 16
+
+
+def _llm_messages(history: list[dict[str, str]]) -> list[dict[str, str]]:
+    if len(history) <= CHAT_LLM_HISTORY:
+        return history
+    return history[-CHAT_LLM_HISTORY:]
+
+
+def _known_profile_ids() -> set[str]:
+    listing = profiles.list_profiles()
+    return {str(p.get("id") or "") for p in listing.get("profiles") or [] if p.get("id")}
+
+
+def _mint_session() -> str:
+    meta = session_store.create_session(
+        settings.sessions_dir, profiles.active_profile_id()
+    )
+    _sessions[meta.id] = []
+    ptt_events.register_session(meta.id)
+    return meta.id
+
+
+def _resolve_session(sid: str) -> str:
+    """Bind or hydrate a Chat session for the active profile. May mint a new id."""
+    active = profiles.active_profile_id()
+    sid = (sid or "").strip()
+    if not sid:
+        return _mint_session()
+    meta = session_store.load_meta(settings.sessions_dir, sid)
+    if meta is None and session_store.session_exists(settings.sessions_dir, sid):
+        meta = session_store.attach_legacy(settings.sessions_dir, sid, active)
+    if meta is None:
+        session_store.create_session(
+            settings.sessions_dir, active, session_id=sid
+        )
+        _sessions.setdefault(sid, [])
+        ptt_events.register_session(sid)
+        return sid
+    if session_store.other_named_profile(meta, active, _known_profile_ids()):
+        return _mint_session()
+    if session_store.revision_stale(meta):
+        return _mint_session()
+    session_store.ensure_ram(_sessions, settings.sessions_dir, sid)
+    return sid
+
+
+def _append_session(sid: str, record: dict[str, Any], *, kind: str) -> None:
+    pid = profiles.active_profile_id()
+    title = str(record.get("transcript") or "") if kind == "chat" else ""
+    session_store.append_record(
+        settings.sessions_dir,
+        sid,
+        record,
+        profile_id=pid,
+        bump_turns=(kind == "chat"),
+        title_hint=title,
+    )
 
 
 @app.on_event("startup")
 async def _warm_stt() -> None:
     """Load Whisper in a worker thread so the first chat turn doesn't freeze the server."""
+
+    prompt_stamp.apply_on_startup(_sessions)
 
     def _load() -> None:
         try:
@@ -204,7 +267,9 @@ def _export_filename(label: str) -> str:
 
 
 def _last_assistant_text(session_id: str) -> str | None:
-    history = _sessions.get(session_id) or []
+    if not session_id:
+        return None
+    history = session_store.ensure_ram(_sessions, settings.sessions_dir, session_id)
     for message in reversed(history):
         if message.get("role") == "assistant" and message.get("content"):
             return message["content"]
@@ -239,6 +304,8 @@ def health() -> dict[str, Any]:
         "whisper_reason": str(info.get("reason") or ""),
         "whisper_cuda_available": "true" if info.get("cuda_available") else "false",
         "whisper_local_model": "true" if info.get("local_model") else "false",
+        "prompt_revision": prompt_stamp.PROMPT_REVISION,
+        "chat_reset": bool(prompt_stamp.chat_reset_this_process),
     }
 
 
@@ -719,13 +786,194 @@ async def import_user_profile(request: Request) -> dict[str, Any]:
     return {**profiles.list_profiles(), "imported": meta.to_dict()}
 
 
+class ChatNewBody(BaseModel):
+    session_id: str = ""
+
+
+class RescueBody(BaseModel):
+    session_id: str = ""
+
+
+@app.post("/api/chat/new")
+def chat_new(body: ChatNewBody) -> dict[str, Any]:
+    """Start a new durable chat. Keeps profile memory and the old JSONL."""
+    old = (body.session_id or "").strip()
+    if old:
+        _sessions.pop(old, None)
+    new_id = _mint_session()
+    return {"ok": True, "session_id": new_id}
+
+
+@app.get("/api/sessions")
+def list_chat_sessions() -> dict[str, Any]:
+    active = profiles.active_profile_id()
+    metas = session_store.list_sessions(settings.sessions_dir, active)
+    return {
+        "active_id": active,
+        "sessions": [m.to_dict() for m in metas],
+    }
+
+
+@app.post("/api/sessions")
+def post_chat_session(body: ChatNewBody) -> dict[str, Any]:
+    return chat_new(body)
+
+
+@app.get("/api/sessions/{session_id}")
+def get_chat_session(session_id: str) -> dict[str, Any]:
+    sid = (session_id or "").strip()
+    if not sid or not session_store.session_exists(settings.sessions_dir, sid):
+        raise HTTPException(status_code=404, detail="session not found")
+    active = profiles.active_profile_id()
+    meta = session_store.load_meta(settings.sessions_dir, sid)
+    if meta is None:
+        meta = session_store.attach_legacy(settings.sessions_dir, sid, active)
+    if session_store.other_named_profile(meta, active, _known_profile_ids()):
+        raise HTTPException(
+            status_code=409, detail="session belongs to another profile"
+        )
+    return {**meta.to_dict(), "messages": session_store.hydrate(settings.sessions_dir, sid)}
+
+
+@app.post("/api/rescue")
+async def rescue_turn(body: RescueBody) -> dict[str, Any]:
+    """Rewrite the last Kaiwa line one step simpler. No fake user utterance."""
+    _require_deepseek_key()
+    sid = (body.session_id or "").strip()
+    if not sid:
+        raise HTTPException(status_code=400, detail="session_id is required")
+    sid = _resolve_session(sid)
+    history = session_store.ensure_ram(_sessions, settings.sessions_dir, sid)
+    if (
+        not history
+        or history[-1].get("role") != "assistant"
+        or not str(history[-1].get("content") or "").strip()
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Nothing to simplify yet — chat first",
+        )
+
+    last_assistant = str(history[-1].get("content") or "").strip()
+    last_user = ""
+    for message in reversed(history[:-1]):
+        if message.get("role") == "user" and str(message.get("content") or "").strip():
+            last_user = str(message["content"]).strip()
+            break
+
+    prefs = load_prefs()
+    profile = load_profile()
+    memory = load_memory()
+    profile = apply_rescue_signals(profile)
+    save_profile(profile)
+    step = next_rescue_step(last_assistant)
+
+    t0 = time.perf_counter()
+    try:
+        gen = await asyncio.to_thread(
+            llm.rescue_rewrite,
+            settings,
+            _llm_messages(history),
+            prefs=prefs,
+            profile=profile,
+            memory=memory,
+            last_user=last_user,
+            last_assistant=last_assistant,
+            step=step,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"LLM failed: {exc}") from exc
+    llm_ms = int((time.perf_counter() - t0) * 1000)
+
+    reply = clean_reply_for_speech(gen.reply)
+    reply, better_phrase = split_try_phrase(reply)
+    if not reply.strip():
+        reply = better_phrase or last_assistant
+    history[-1] = {"role": "assistant", "content": reply}
+    reply_shape = analyze_reply_shape(
+        reply=reply,
+        user_text=last_user,
+        locked=gen.locked,
+        retry=gen.retry,
+    )
+
+    audio_b64 = ""
+    tts_error = None
+    t1 = time.perf_counter()
+    try:
+        wav = await asyncio.to_thread(
+            tts.synthesize,
+            settings,
+            reply,
+            speaker_id=prefs.voicevox_speaker_id,
+            engine=prefs.tts_engine,
+        )
+        audio_b64 = base64.b64encode(wav).decode("ascii")
+    except Exception as exc:
+        tts_error = str(exc)
+    tts_ms = int((time.perf_counter() - t1) * 1000)
+    total_ms = int((time.perf_counter() - t0) * 1000)
+    timing: dict[str, Any] = {
+        "stt_ms": 0,
+        "llm_ms": llm_ms,
+        "tts_ms": tts_ms,
+        "total_ms": total_ms,
+    }
+
+    _append_session(
+        sid,
+        {
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "mode": "chat",
+            "rescue": True,
+            "rescue_step": step,
+            "transcript": "",
+            "reply": reply,
+            "better_phrase": better_phrase,
+            "tts_ok": not tts_error,
+            "tts_error": tts_error,
+            "tts_engine": prefs.tts_engine,
+            "correction_style": prefs.correction_style,
+            "personality_id": prefs.personality_id,
+            "learner_state": "help_request",
+            "speaking_level": profile.speaking_level,
+            "comprehension_level": profile.comprehension_level,
+            "model_used": gen.model,
+            "memory_updated": False,
+            "timing": timing,
+            "input": "rescue",
+            "client_source": "ui",
+            "reply_shape": reply_shape,
+        },
+        kind="rescue",
+    )
+
+    return {
+        "session_id": sid,
+        "rescue": True,
+        "rescue_step": step,
+        "transcript": "",
+        "reply_text": reply,
+        "better_phrase": better_phrase,
+        "audio_base64": audio_b64,
+        "audio_mime": "audio/wav",
+        "tts_error": tts_error,
+        "learner_state": "help_request",
+        "speaking_level": profile.speaking_level,
+        "comprehension_level": profile.comprehension_level,
+        "model_used": gen.model,
+        "memory_updated": False,
+        "timing": timing,
+    }
+
+
 @app.post("/api/turn")
 async def turn(
     audio: UploadFile = File(...),
     session_id: str = Form(default=""),
     client_source: str = Form(default=""),
 ) -> dict[str, Any]:
-    sid = session_id.strip() or uuid.uuid4().hex
+    sid = _resolve_session(session_id.strip())
     raw = await audio.read()
     if not raw:
         raise HTTPException(status_code=400, detail="Empty audio upload")
@@ -765,7 +1013,7 @@ async def turn_text(body: TextTurnRequest) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail="text is required")
     if len(text) > 500:
         raise HTTPException(status_code=400, detail="text must be ≤ 500 characters")
-    sid = (body.session_id or "").strip() or uuid.uuid4().hex
+    sid = _resolve_session((body.session_id or "").strip())
     return await _run_chat_turn(sid, text, stt_ms=0)
 
 
@@ -807,7 +1055,7 @@ def _stream_chat_events(
         yield _sse_pack("error", {"detail": exc.detail})
         return
 
-    history = _sessions.setdefault(sid, [])
+    history = session_store.ensure_ram(_sessions, settings.sessions_dir, sid)
     history.append({"role": "user", "content": transcript})
     prefs = load_prefs()
     profile = load_profile()
@@ -836,6 +1084,8 @@ def _stream_chat_events(
     audio_index = 0
     buf = SentenceBuffer()
     llm_ms = 0
+    shape_retry = False
+    shape_locked = False
 
     try:
         with ThreadPoolExecutor(max_workers=1) as pool:
@@ -887,15 +1137,18 @@ def _stream_chat_events(
                     audio_index += 1
 
             try:
-                model_used, deltas = llm.chat_stream(
+                stream = llm.chat_stream(
                     settings,
-                    history,
+                    _llm_messages(history),
                     prefs=prefs,
                     profile=profile,
                     memory=memory,
                     learner_state=learner_state,
                 )
-                for delta in deltas:
+                model_used = stream.model
+                shape_retry = stream.retry
+                shape_locked = stream.locked
+                for delta in stream.deltas:
                     raw_parts.append(delta)
                     yield _sse_pack("delta", {"text": delta})
                     for sentence in buf.push(delta):
@@ -923,6 +1176,12 @@ def _stream_chat_events(
     if not reply.strip():
         reply = better_phrase or "うん。"
     history.append({"role": "assistant", "content": reply})
+    reply_shape = analyze_reply_shape(
+        reply=reply,
+        user_text=transcript,
+        locked=shape_locked,
+        retry=shape_retry,
+    )
 
     memory = note_chat_turn(memory)
     save_memory(memory)
@@ -946,8 +1205,7 @@ def _stream_chat_events(
         timing["ttfa_ms"] = ttfa_ms
     timing.update(_stt_timing_fields(stt_meta))
 
-    append_session_log(
-        settings.sessions_dir,
+    _append_session(
         sid,
         {
             "ts": datetime.now(timezone.utc).isoformat(),
@@ -969,7 +1227,9 @@ def _stream_chat_events(
             "input": "text" if stt_ms == 0 else "voice",
             "client_source": "ui_stream",
             "streamed": True,
+            "reply_shape": reply_shape,
         },
+        kind="chat",
     )
 
     yield _sse_pack(
@@ -1007,7 +1267,7 @@ async def turn_stream(
     audio: UploadFile = File(...),
     session_id: str = Form(default=""),
 ) -> StreamingResponse:
-    sid = session_id.strip() or uuid.uuid4().hex
+    sid = _resolve_session(session_id.strip())
     raw = await audio.read()
     if not raw:
         raise HTTPException(status_code=400, detail="Empty audio upload")
@@ -1043,7 +1303,7 @@ async def turn_text_stream(body: TextTurnRequest) -> StreamingResponse:
         raise HTTPException(status_code=400, detail="text is required")
     if len(text) > 500:
         raise HTTPException(status_code=400, detail="text must be ≤ 500 characters")
-    sid = (body.session_id or "").strip() or uuid.uuid4().hex
+    sid = _resolve_session((body.session_id or "").strip())
     return _sse_response(_stream_chat_events(sid, text, stt_ms=0))
 
 
@@ -1092,7 +1352,7 @@ async def _run_chat_turn(
 ) -> dict[str, Any]:
     _require_deepseek_key()
     t0 = time.perf_counter()
-    history = _sessions.setdefault(sid, [])
+    history = session_store.ensure_ram(_sessions, settings.sessions_dir, sid)
     history.append({"role": "user", "content": transcript})
     prefs = load_prefs()
     profile = load_profile()
@@ -1104,10 +1364,10 @@ async def _run_chat_turn(
 
     t1 = time.perf_counter()
     try:
-        reply, model_used = await asyncio.to_thread(
+        gen = await asyncio.to_thread(
             llm.chat,
             settings,
-            history,
+            _llm_messages(history),
             prefs=prefs,
             profile=profile,
             memory=memory,
@@ -1117,13 +1377,20 @@ async def _run_chat_turn(
         history.pop()
         raise HTTPException(status_code=502, detail=f"LLM failed: {exc}") from exc
     llm_ms = int((time.perf_counter() - t1) * 1000)
+    model_used = gen.model
 
-    reply = clean_reply_for_speech(reply)
+    reply = clean_reply_for_speech(gen.reply)
     reply, better_phrase = split_try_phrase(reply)
     if not reply.strip():
         # Model only emitted TRY: — keep a minimal spoken fallback
         reply = better_phrase or "うん。"
     history.append({"role": "assistant", "content": reply})
+    reply_shape = analyze_reply_shape(
+        reply=reply,
+        user_text=transcript,
+        locked=gen.locked,
+        retry=gen.retry,
+    )
 
     audio_b64 = ""
     tts_error = None
@@ -1173,8 +1440,7 @@ async def _run_chat_turn(
         name="kaiwa-chat-sidework",
     ).start()
 
-    append_session_log(
-        settings.sessions_dir,
+    _append_session(
         sid,
         {
             "ts": datetime.now(timezone.utc).isoformat(),
@@ -1195,7 +1461,9 @@ async def _run_chat_turn(
             "timing": timing,
             "input": "text" if stt_ms == 0 else "voice",
             "client_source": client_source or "ui",
+            "reply_shape": reply_shape,
         },
+        kind="chat",
     )
 
     if client_source == "ptt":
@@ -1327,7 +1595,7 @@ async def practice(
     session_id: str = Form(default=""),
     practice_source: str = Form(default=""),
 ) -> dict[str, Any]:
-    sid = session_id.strip() or uuid.uuid4().hex
+    sid = _resolve_session(session_id.strip())
     target = (target_text or "").strip()
     if not target:
         raise HTTPException(status_code=400, detail="target_text is required")
@@ -1386,8 +1654,7 @@ async def practice(
     except Exception as exc:
         tip_error = str(exc)
 
-    append_session_log(
-        settings.sessions_dir,
+    _append_session(
         sid,
         {
             "ts": datetime.now(timezone.utc).isoformat(),
@@ -1405,6 +1672,7 @@ async def practice(
             "speaking_level": profile.speaking_level,
             "comprehension_level": profile.comprehension_level,
         },
+        kind="practice",
     )
 
     return {
@@ -1480,8 +1748,7 @@ def quiz_finish(body: QuizFinishRequest) -> dict[str, Any]:
     save_prefs(prefs)
     session.finished = True
 
-    append_session_log(
-        settings.sessions_dir,
+    _append_session(
         body.session_id.strip(),
         {
             "ts": datetime.now(timezone.utc).isoformat(),
@@ -1492,6 +1759,7 @@ def quiz_finish(body: QuizFinishRequest) -> dict[str, Any]:
             "goal_level": prefs.goal_level,
             "item_ids": [row.id for row in session.items],
         },
+        kind="placement",
     )
     discard_session(session.id)
 

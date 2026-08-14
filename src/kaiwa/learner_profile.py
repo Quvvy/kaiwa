@@ -264,6 +264,23 @@ def apply_manual_override(
     return profile
 
 
+def bump_comprehension_struggle(profile: LearnerProfile) -> LearnerProfile:
+    """Escalate scaffolding as for help_type=comprehension. Does not increment chat_turns."""
+    lock_levels = (not profile.placement_completed) or placement_levels_locked(profile)
+    old_streak = max(0, min(3, int(profile.stats.struggle_streak)))
+    if old_streak < 2:
+        streak = 2
+    else:
+        streak = min(3, old_streak + 1)
+    profile.stats.flow_streak = 0
+    if streak == 3 and old_streak < 3 and not lock_levels:
+        profile.speaking_level = nudge_level(profile.speaking_level, -1)
+        profile.comprehension_level = nudge_level(profile.comprehension_level, -1)
+        profile.confidence = max(0.15, profile.confidence - 0.05)
+    profile.stats.struggle_streak = streak
+    return profile
+
+
 def apply_chat_signals(
     profile: LearnerProfile,
     learner_state: str,
@@ -283,15 +300,8 @@ def apply_chat_signals(
     old_streak = max(0, min(3, int(profile.stats.struggle_streak)))
     streak = old_streak
     if help_type == "comprehension":
-        if streak < 2:
-            streak = 2
-        else:
-            streak = min(3, streak + 1)
-        profile.stats.flow_streak = 0
-        if streak == 3 and old_streak < 3 and not lock_levels:
-            profile.speaking_level = nudge_level(profile.speaking_level, -1)
-            profile.comprehension_level = nudge_level(profile.comprehension_level, -1)
-            profile.confidence = max(0.15, profile.confidence - 0.05)
+        bump_comprehension_struggle(profile)
+        streak = int(profile.stats.struggle_streak)
     elif help_type in {"vocabulary", "expression", "correction"}:
         profile.stats.flow_streak = 0
     elif state == "struggling":

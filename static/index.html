@@ -414,6 +414,25 @@
       border: 1px solid var(--line);
     }
 
+    .bubble-actions {
+      display: none;
+      margin-top: 0.45rem;
+    }
+
+    .bubble.bot.is-last .bubble-actions {
+      display: block;
+    }
+
+    .bubble-simpler {
+      padding: 0.28rem 0.65rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      background: color-mix(in srgb, var(--surface) 70%, var(--line));
+      color: var(--ink);
+      border: 1px solid var(--line);
+    }
+
     .meta {
       font-family: var(--font-ui);
       font-size: 0.7rem;
@@ -1168,6 +1187,7 @@
         <div class="composer-actions">
           <button id="talk" type="button">Hold to talk</button>
           <button id="replayLast" class="secondary" type="button" disabled>Replay</button>
+          <button id="newChat" class="secondary" type="button" title="New chat (keeps memory)">New chat</button>
         </div>
         <div class="chat-text-row">
           <input id="chatText" type="text" maxlength="500" placeholder="Type if Whisper missed you…" autocomplete="off" />
@@ -1602,6 +1622,7 @@
   <script>
     const talkBtn = document.getElementById("talk");
     const replayLastBtn = document.getElementById("replayLast");
+    const newChatBtn = document.getElementById("newChat");
     const chatTextInput = document.getElementById("chatText");
     const chatTextSendBtn = document.getElementById("chatTextSend");
     const practiceTalkBtn = document.getElementById("practiceTalk");
@@ -1918,9 +1939,42 @@
       body.textContent = text || "";
       wrap.appendChild(meta);
       wrap.appendChild(body);
+      if (who !== "you") {
+        const actions = document.createElement("div");
+        actions.className = "bubble-actions";
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "bubble-simpler secondary";
+        btn.textContent = "Simpler";
+        btn.title = "Say that more simply";
+        btn.addEventListener("click", (e) => {
+          e.preventDefault();
+          requestRescue(wrap, body);
+        });
+        actions.appendChild(btn);
+        wrap.appendChild(actions);
+      }
       logEl.appendChild(wrap);
       logEl.scrollTop = logEl.scrollHeight;
+      if (who !== "you") markLastSimpler(wrap);
       return { wrap, body };
+    }
+
+    function markLastSimpler(activeWrap) {
+      logEl.querySelectorAll(".bubble.bot").forEach((el) => {
+        el.classList.toggle("is-last", el === activeWrap);
+      });
+    }
+
+    function lastBotBubble() {
+      const bots = logEl.querySelectorAll(".bubble.bot");
+      return bots.length ? bots[bots.length - 1] : null;
+    }
+
+    function setSimplerBusy(busy) {
+      logEl.querySelectorAll(".bubble-simpler").forEach((btn) => {
+        btn.disabled = !!busy;
+      });
     }
 
     function setBubbleText(bodyEl, text) {
@@ -2832,6 +2886,26 @@
       updateReplayButton();
     }
 
+    async function startNewChat(opts) {
+      const prev = sessionId;
+      const res = await fetch("/api/chat/new", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session_id: prev }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((data && data.detail) || "Could not start a new chat");
+      clearChatSessionLocal();
+      if (data.session_id) {
+        sessionId = data.session_id;
+        localStorage.setItem("kaiwa_session_id", sessionId);
+      }
+      await registerPttSession();
+      const msg =
+        (opts && opts.status) || "New chat (keeps memory).";
+      setStatus(msg);
+    }
+
     function fillProfilesSelect(listing) {
       const profilesList = (listing && listing.profiles) || [];
       const activeId = (listing && listing.active_id) || "";
@@ -3135,6 +3209,11 @@
 
     replayLastBtn.addEventListener("click", () => {
       replayLastReply().catch((err) => {
+        setStatus(String(err.message || err));
+      });
+    });
+    newChatBtn.addEventListener("click", () => {
+      startNewChat().catch((err) => {
         setStatus(String(err.message || err));
       });
     });
@@ -3586,6 +3665,7 @@
 
     async function consumeChatStream(res) {
       let botBody = null;
+      let botWrap = null;
       let gotTranscript = false;
       const turnChunks = [];
       resetAudioQueue();
@@ -3601,14 +3681,18 @@
             registerPttSession();
           }
           addBubble("you", data.transcript || "");
-          botBody = addBubble("bot", "").body;
+          const made = addBubble("bot", "");
+          botBody = made.body;
+          botWrap = made.wrap;
           gotTranscript = true;
           setStatus("Listening…");
           return;
         }
         if (eventName === "delta") {
           if (!gotTranscript) {
-            botBody = addBubble("bot", "").body;
+            const made = addBubble("bot", "");
+            botBody = made.body;
+            botWrap = made.wrap;
             gotTranscript = true;
           }
           appendBubbleText(botBody, data.text || "");
@@ -3632,8 +3716,12 @@
           if (data.reply_text) {
             localStorage.setItem("kaiwa_last_reply", data.reply_text);
             if (botBody) setBubbleText(botBody, data.reply_text);
-            else addBubble("bot", data.reply_text);
+            else {
+              const made = addBubble("bot", data.reply_text);
+              botWrap = made.wrap;
+            }
           }
+          if (botWrap) markLastSimpler(botWrap);
           if (turnChunks.length) {
             cacheLastAudioChunks(turnChunks);
           } else {
@@ -3651,7 +3739,56 @@
       talkBtn.disabled = busy;
       chatTextSendBtn.disabled = busy;
       chatTextInput.disabled = busy;
+      setSimplerBusy(busy);
       if (!busy) updateReplayButton();
+    }
+
+    async function requestRescue(wrap, bodyEl) {
+      if (!guardDeepseekOrExplain()) return;
+      if (!sessionId) {
+        setStatus("Nothing to simplify yet — chat first");
+        return;
+      }
+      const last = lastBotBubble();
+      if (!last || last !== wrap) return;
+      setChatBusy(true);
+      setStatus("Simplifying…");
+      try {
+        const res = await fetch("/api/rescue", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ session_id: sessionId }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error((data && data.detail) || "Could not simplify");
+        if (data.session_id) {
+          sessionId = data.session_id;
+          localStorage.setItem("kaiwa_session_id", sessionId);
+        }
+        if (data.reply_text) {
+          setBubbleText(bodyEl, data.reply_text);
+          localStorage.setItem("kaiwa_last_reply", data.reply_text);
+        }
+        markLastSimpler(wrap);
+        if (data.audio_base64) {
+          cacheLastAudio(data.audio_base64);
+          resetAudioQueue();
+          playWavBase64(data.audio_base64);
+          clearEngineAlert();
+        } else {
+          updateReplayButton();
+        }
+        if (data.tts_error) {
+          showEngineAlert(data.tts_error);
+        }
+        setStatus(formatChatStatus(data));
+      } catch (err) {
+        const msg = String(err.message || err);
+        setStatus(msg);
+        if (looksLikeEngineError(msg)) showEngineAlert(msg);
+      } finally {
+        setChatBusy(false);
+      }
     }
 
     async function sendTurn(blob, ext) {
@@ -4505,6 +4642,20 @@
       .then((res) => res.json().catch(() => ({})))
       .then((data) => {
         if (data && data.version) setAboutVersionLabel(data.version);
+        const rev = data && data.prompt_revision;
+        if (rev == null || rev === "") return;
+        const seen = localStorage.getItem("kaiwa_prompt_revision");
+        if (String(seen) !== String(rev)) {
+          localStorage.setItem("kaiwa_prompt_revision", String(rev));
+          startNewChat({
+            status: data.chat_reset
+              ? "New chat — tutor update (memory kept)."
+              : "New chat (keeps memory).",
+          }).catch((err) => {
+            clearChatSessionLocal();
+            setStatus(String(err.message || err));
+          });
+        }
       })
       .catch(() => {});
 

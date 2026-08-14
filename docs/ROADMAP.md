@@ -182,3 +182,53 @@ Hold a bindable key or mouse button from **any** app/game while Kaiwa is running
 - macOS / Linux global PTT
 - Tray-idle product mode
 - Game audio ducking
+
+## Phase 8 — Keep talking (conversation gym)
+
+Make it almost impossible for a beginner conversation to die. Pre-N5 Chat is a **conversation gym** by default (short yes/no or A/B, survive the turn); Chat stays a conversation, not a drill. Practice stays shadowing. Success = the exchange continues.
+
+**Constraint (all slices):** keep Phase 5.5 — Japanese teaches, English rescues, Practice drills; never name `support_mode` in the UI; no Chat `TRY:`. Rescue is a learner **action**, not a mode label.
+
+| Slice | Status | Goal |
+|-------|--------|------|
+| **8.1** Pre-N5 reply shape | [x] | One idea + reuse learner words; high-load constructions (not grammar bans); one retry; silent `reply_shape` JSONL. Scaffold decays with pitch / support. |
+| **8.2** Rescue | [x] | **Simpler** on the last Kaiwa bubble; `POST /api/rescue` (no fake user line); force comprehension help + bump `struggle_streak`; rewrite last assistant line one step down (shorter → yes/no → A/B); TTS + JSONL `rescue: true` |
+| **8.3** Session records + New chat | [x] | Bind sessions to `profile_id`; meta (started/updated, turn count, title); hydrate RAM from JSONL; **New chat**; `GET/POST /api/sessions`; re-register PTT session id |
+| **8.4** History drawer + resume | [ ] | List/open past chats for the active profile; redraw bubbles; LLM context = last N turns (not the whole file) |
+| **8.5** Replay | [ ] | Same assistant questions again as a child session (`replay_of`); no new teaching; Rescue still allowed. Not Practice shadowing |
+| **8.6** Easy vs Free + survive N | [ ] | Optional UI. Default Easy while pre-N5 (8.1 already *is* the gym). Quiet turn count; no XP. Skip until Easy-as-default is not enough |
+| **8.7** After-chat leftovers | [ ] | On session end: 3–5 chunks from this chat (surface memory extract). Optional post-chat “you could have said” (1–3 lines, no stars). Not SRS |
+
+**Priority** (8.1–8.3 done)
+
+1. ~~8.1 Pre-N5 reply shape~~ **done**
+2. ~~8.2 Rescue~~ **done**
+3. ~~8.3 Session records + New chat~~ **done**
+4. 8.4 History drawer + resume
+5. 8.5 Replay
+6. 8.7 After-chat leftovers (can parallel 8.4–8.6; needs 8.3)
+7. 8.6 Easy vs Free + survive N (optional; last)
+
+**Three-PR cut** (if fewer merges): Survive today = 8.1+8.2 · Chats are durable = 8.3+8.4 · Use it twice = 8.5+8.7. Leave 8.6 out.
+
+**Depends on**
+
+```
+8.1 ──► 8.2
+ │
+ ▼
+8.3 ──► 8.4 ──► 8.5
+ │
+ ▼
+8.7         8.6 (optional; after 8.1)
+```
+
+**Out of Phase 8**
+
+- NPC / konbini / ramen scenes (after ~20 Easy turns + Rescue)
+- Per-turn “did you understand?” (Rescue is that signal)
+- N5 goal ledger / “today’s grammar” (Phase 9+)
+- Full scenario catalog (still a non-goal)
+- Rebuilding Anki / SRS in Settings
+
+**Shipped beside 8.1 (not a Phase 8 slice):** prompt revision stamp + Chat **New chat** (keep memory) + LLM last-16 context — decision #115. 8.3 makes New chat a durable per-profile session object.

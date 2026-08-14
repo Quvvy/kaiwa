@@ -7,6 +7,13 @@ and this project aims to follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- Phase **8.1**: pre-N5 Chat reply shape — one idea, reuse learner words, high-load constructions (not grammar bans), one retry, silent `reply_shape` session log (decision #114).
+- Tutor prompt updates start a **new chat** (memory kept): `PROMPT_REVISION` stamp, last-16 LLM context, Chat **New chat** (decision #115).
+- Phase **8.2**: **Simpler** on the last Kaiwa line — rewrite one step easier, keep memory, no fake “I don’t understand” turn (decision #116).
+- Phase **8.3**: Chat sessions belong to a profile (meta + JSONL hydrate); **New chat** keeps the old file; `GET/POST /api/sessions` (decision #117).
+
 ## [1.0.2] — 2026-08-11
 
 ### Changed

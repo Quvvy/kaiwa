@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+from dataclasses import dataclass
 
 from openai import OpenAI
 
@@ -12,12 +13,36 @@ from kaiwa.learner_profile import (
     needs_pro_routing,
 )
 from kaiwa.persona import (
+    SHAPE_RETRY_BLOCK,
     build_practice_tip_system_prompt,
     build_tutor_system_prompt,
+    compute_support_mode,
+    governor_pitch,
     infer_help_type,
     infer_learner_state,
+    rescue_rewrite_block,
+    shape_lock_active,
 )
 from kaiwa.prefs import UserPrefs, load_prefs
+from kaiwa.reply_shape import reply_too_dense
+
+
+@dataclass(frozen=True)
+class ChatGeneration:
+    """One Chat LLM result. `retry` / `locked` feed silent reply_shape logs."""
+
+    reply: str
+    model: str
+    retry: bool
+    locked: bool
+
+
+@dataclass
+class ChatStreamStart:
+    model: str
+    deltas: Iterator[str]
+    retry: bool
+    locked: bool
 
 
 def make_client(settings: Settings) -> OpenAI:
@@ -62,8 +87,8 @@ def _prepare_chat(
     memory: LearnerMemory | None = None,
     learner_state: str | None = None,
     help_type: str | None = None,
-) -> tuple[UserPrefs, LearnerProfile, LearnerMemory, str, str, str]:
-    """Return prefs, profile, memory, learner_state, system prompt, model id."""
+) -> tuple[UserPrefs, LearnerProfile, LearnerMemory, str, str, str, bool]:
+    """Return prefs, profile, memory, learner_state, system, model, shape_lock."""
     prefs = prefs or load_prefs()
     profile = profile or load_profile()
     memory = memory or load_memory()
@@ -82,6 +107,15 @@ def _prepare_chat(
             break
     state = learner_state or infer_learner_state(last_user)
     ht = help_type if help_type is not None else infer_help_type(last_user)
+    support = compute_support_mode(
+        learner_state=state,
+        help_type=ht,
+        struggle_streak=profile.stats.struggle_streak,
+    )
+    locked = shape_lock_active(
+        governor_pitch(prefs, profile, state, support_mode=support),
+        support,
+    )
     system = build_tutor_system_prompt(
         prefs,
         last_user_text=last_user,
@@ -92,7 +126,29 @@ def _prepare_chat(
     )
     use_pro = needs_pro_routing(prefs, profile, state, help_type=ht)
     model = settings.deepseek_model_pro if use_pro else settings.deepseek_model
-    return prefs, profile, memory, state, system, model
+    return prefs, profile, memory, state, system, model, locked
+
+
+def _complete_with_retry(
+    settings: Settings,
+    system: str,
+    messages: list[dict[str, str]],
+    *,
+    locked: bool,
+    client: OpenAI | None = None,
+    model: str | None = None,
+) -> tuple[str, bool]:
+    reply = _completion(settings, system, messages, client=client, model=model)
+    if not locked or not reply_too_dense(reply):
+        return reply, False
+    retry_system = system.rstrip() + "\n\n" + SHAPE_RETRY_BLOCK.strip()
+    try:
+        reply = _completion(
+            settings, retry_system, messages, client=client, model=model
+        )
+        return reply, True
+    except Exception:
+        return reply, False
 
 
 def chat(
@@ -105,9 +161,9 @@ def chat(
     learner_state: str | None = None,
     help_type: str | None = None,
     client: OpenAI | None = None,
-) -> tuple[str, str]:
-    """Return (reply_text, model_used)."""
-    _prefs, _profile, _memory, _state, system, model = _prepare_chat(
+) -> ChatGeneration:
+    """Return reply text, model id, and shape-lock retry flags."""
+    _prefs, _profile, _memory, _state, system, model, locked = _prepare_chat(
         settings,
         messages,
         prefs=prefs,
@@ -116,8 +172,56 @@ def chat(
         learner_state=learner_state,
         help_type=help_type,
     )
-    reply = _completion(settings, system, messages, client=client, model=model)
-    return reply, model
+    reply, retry = _complete_with_retry(
+        settings, system, messages, locked=locked, client=client, model=model
+    )
+    return ChatGeneration(reply=reply, model=model, retry=retry, locked=locked)
+
+
+def rescue_rewrite(
+    settings: Settings,
+    messages: list[dict[str, str]],
+    *,
+    prefs: UserPrefs | None = None,
+    profile: LearnerProfile | None = None,
+    memory: LearnerMemory | None = None,
+    last_user: str = "",
+    last_assistant: str = "",
+    step: str = "shorter",
+    client: OpenAI | None = None,
+) -> ChatGeneration:
+    """Rewrite the last Kaiwa line. `messages` should still include that assistant turn."""
+    prefs = prefs or load_prefs()
+    profile = profile or load_profile()
+    memory = memory or load_memory()
+    state = "help_request"
+    ht = "comprehension"
+    support = compute_support_mode(
+        learner_state=state,
+        help_type=ht,
+        struggle_streak=profile.stats.struggle_streak,
+    )
+    locked = shape_lock_active(
+        governor_pitch(prefs, profile, state, support_mode=support),
+        support,
+    )
+    system = build_tutor_system_prompt(
+        prefs,
+        last_user_text=last_user,
+        last_assistant_text=last_assistant or None,
+        profile=profile,
+        memory=memory,
+        learner_state=state,
+        help_type=ht,
+    )
+    system = system.rstrip() + "\n\n" + rescue_rewrite_block(last_assistant, step).strip()
+    use_pro = needs_pro_routing(prefs, profile, state, help_type=ht)
+    model = settings.deepseek_model_pro if use_pro else settings.deepseek_model
+    prior = messages[:-1] if messages else []
+    reply, retry = _complete_with_retry(
+        settings, system, prior, locked=locked, client=client, model=model
+    )
+    return ChatGeneration(reply=reply, model=model, retry=retry, locked=locked)
 
 
 def chat_stream(
@@ -130,9 +234,9 @@ def chat_stream(
     learner_state: str | None = None,
     help_type: str | None = None,
     client: OpenAI | None = None,
-) -> tuple[str, Iterator[str]]:
-    """Return (model_used, iterator of text deltas)."""
-    _prefs, _profile, _memory, _state, system, model = _prepare_chat(
+) -> ChatStreamStart:
+    """Stream deltas. When shape-locked, finish (+ retry) before yielding so TTS waits."""
+    _prefs, _profile, _memory, _state, system, model, locked = _prepare_chat(
         settings,
         messages,
         prefs=prefs,
@@ -142,6 +246,19 @@ def chat_stream(
         help_type=help_type,
     )
     client = client or make_client(settings)
+
+    if locked:
+        reply, retry = _complete_with_retry(
+            settings, system, messages, locked=True, client=client, model=model
+        )
+
+        def _one() -> Iterator[str]:
+            yield reply
+
+        return ChatStreamStart(
+            model=model, deltas=_one(), retry=retry, locked=True
+        )
+
     payload: list[dict[str, str]] = [{"role": "system", "content": system}, *messages]
     kwargs: dict = {
         "model": model,
@@ -168,7 +285,9 @@ def chat_stream(
         if not got:
             raise RuntimeError("DeepSeek returned an empty reply")
 
-    return model, _deltas()
+    return ChatStreamStart(
+        model=model, deltas=_deltas(), retry=False, locked=False
+    )
 
 
 def practice_tip(
