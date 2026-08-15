@@ -43,6 +43,7 @@ from kaiwa.learner_profile import (
 from kaiwa.rescue import apply_rescue_signals, next_rescue_step
 from kaiwa.learner_memory import (
     apply_manual_memory,
+    clip_preferred_name,
     load_memory,
     maybe_run_extract,
     next_recycle_target,
@@ -75,6 +76,13 @@ def _refresh_settings() -> None:
     global settings
     settings = reload_settings()
     settings.sessions_dir.mkdir(parents=True, exist_ok=True)
+
+
+def _preferred_name_for_stt() -> str:
+    try:
+        return (load_memory().comfort.preferred_name or "").strip()
+    except Exception:
+        return ""
 
 
 def _require_deepseek_key() -> None:
@@ -592,14 +600,17 @@ def put_memory(body: MemoryUpdate) -> dict[str, Any]:
         memory = reset_memory()
     else:
         memory = load_memory()
-        memory = apply_manual_memory(
-            memory,
-            preferred_name=body.preferred_name,
-            vibe_notes=body.vibe_notes,
-            do=body.do,
-            dont=body.dont,
-            topics=body.topics,
-        )
+        try:
+            memory = apply_manual_memory(
+                memory,
+                preferred_name=body.preferred_name,
+                vibe_notes=body.vibe_notes,
+                do=body.do,
+                dont=body.dont,
+                topics=body.topics,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         save_memory(memory)
     return {"memory": memory.to_dict()}
 
@@ -1110,8 +1121,9 @@ async def turn(
             stt.transcribe_audio_bytes,
             settings,
             raw,
-            suffix=suffix,
+            suffix,
             mode="chat",
+            preferred_name=_preferred_name_for_stt(),
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -1405,8 +1417,9 @@ async def turn_stream(
             stt.transcribe_audio_bytes,
             settings,
             raw,
-            suffix=suffix,
+            suffix,
             mode="chat",
+            preferred_name=_preferred_name_for_stt(),
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -1873,6 +1886,16 @@ def quiz_finish(body: QuizFinishRequest) -> dict[str, Any]:
     profile, prefs, summary = apply_self_assessment(profile, prefs, session.answers())
     save_profile(profile)
     save_prefs(prefs)
+    raw_name = clip_preferred_name(str(session.answers().get("preferred_name") or ""))
+    if raw_name:
+        memory = load_memory()
+        try:
+            memory = apply_manual_memory(memory, preferred_name=raw_name)
+            save_memory(memory)
+        except ValueError:
+            raw_name = ""
+    if raw_name:
+        summary["preferred_name"] = raw_name
     session.finished = True
 
     _append_session(

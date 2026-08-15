@@ -23,6 +23,7 @@ SESSION_TTL_SEC = 30 * 60
 OTHER_VALUE = "__other__"
 MAX_OTHER_TEXT = 120
 MAX_NOTE_TEXT = 300
+MAX_NAME_TEXT = 40
 
 _COMFORT_TO_LEVEL = {
     "barely": "pre_n5",
@@ -127,10 +128,16 @@ def public_items(session: QuizSession) -> list[dict[str, Any]]:
                 if c["value"] == OTHER_VALUE:
                     other_index = i
                     break
+        bank = question_by_id(row.id) or {}
+        max_length = 0
+        try:
+            max_length = int(bank.get("max_length") or 0)
+        except (TypeError, ValueError):
+            max_length = 0
         out.append(
             {
                 "id": row.id,
-                "prompt": row.prompt,
+                "prompt": str(bank.get("prompt") or row.prompt),
                 "choices": [c["label"] for c in row.choices],
                 "multi": row.multi,
                 "max_select": row.max_select,
@@ -138,6 +145,9 @@ def public_items(session: QuizSession) -> list[dict[str, Any]]:
                 "allow_other": row.allow_other,
                 "other_value": OTHER_VALUE if row.allow_other else None,
                 "other_index": other_index,
+                "placeholder": str(bank.get("placeholder") or ""),
+                "hint": str(bank.get("hint") or ""),
+                "max_length": max_length,
             }
         )
     return out
@@ -175,8 +185,9 @@ def answer_item(
 
     if row.free_text:
         note = " ".join((text or "").strip().split())
-        if len(note) > MAX_NOTE_TEXT:
-            note = note[:MAX_NOTE_TEXT].rstrip()
+        cap = MAX_NAME_TEXT if row.id == "preferred_name" else MAX_NOTE_TEXT
+        if len(note) > cap:
+            note = note[:cap].rstrip()
         row.answered = True
         row.chosen_index = None
         row.chosen_indices = []

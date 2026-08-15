@@ -6,8 +6,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
+from kaiwa.learner_memory import (
+    LearnerMemory,
+    admit_preferred_name,
+    merge_extract_result,
+)
 from kaiwa.learner_profile import LearnerProfile
 from kaiwa.persona import (
+    PROMPT_REVISION,
     build_tutor_system_prompt,
     governor_pitch,
     shape_lock_active,
@@ -114,12 +120,59 @@ def main() -> None:
     _check("考えは1つ" in prompt, "locked prompt says one idea")
     _check("負荷の高い型" in prompt, "locked prompt names high-load constructions")
     _check("禁止文法" in prompt, "locked prompt is scaffold not a ban")
+    _check("はい／いいえ" not in prompt, "locked Easy is not a yes/no survey")
+    _check("次の番が続く" in prompt, "locked Easy leaves next-turn affordance")
+    _check("開き質問" in prompt, "locked prompt bans open narrative questions")
 
     free_prefs = UserPrefs(goal_level="pre_n5", chat_pace="free")
     free_prompt = build_tutor_system_prompt(
         free_prefs, last_user_text="猫好きです", profile=pre
     )
     _check("考えは1つ" not in free_prompt, "free prompt is not gym-locked")
+
+    _check(PROMPT_REVISION == 4, "prompt revision is 4")
+    empty_prompt = build_tutor_system_prompt(prefs_pre, profile=pre)
+    _check("名前・身元の固定ルール" in empty_prompt, "identity names block present")
+    _check("自分は「会話（Kaiwa / カイワ）」" in empty_prompt, "self name is Kaiwa")
+    _check("学習者の名前は未設定" in empty_prompt, "empty name uses あなた")
+    _check("身元を推測・交換しない" in empty_prompt, "no identity swap")
+    _check("名前・身元は「会話を続ける」より強い" in empty_prompt, "identity beats keep-chatting")
+
+    named = LearnerMemory()
+    named.comfort.preferred_name = "Eli / イーライ"
+    named_prompt = build_tutor_system_prompt(prefs_pre, profile=pre, memory=named)
+    _check("学習者の名前は「Eli / イーライ」" in named_prompt, "stored name interpolated")
+    _check("Kyla" in named_prompt and "STT誤認識" in named_prompt, "Kyla is STT of Kaiwa")
+
+    kyla_mem = LearnerMemory()
+    kyla_mem.comfort.preferred_name = "Kyla"
+    kyla_prompt = build_tutor_system_prompt(prefs_pre, profile=pre, memory=kyla_mem)
+    _check("学習者の名前は「Kyla」" in kyla_prompt, "Kyla as stored learner name")
+    _check("STT誤認識" not in kyla_prompt, "stored Kyla is not treated as STT error")
+
+    mem = LearnerMemory()
+    admit_preferred_name(
+        mem, "Kyla", "explicit_self_intro", user_turns=["私はKylaです"]
+    )
+    _check(mem.comfort.preferred_name == "", "extract rejects Kyla STT alias")
+    admit_preferred_name(
+        mem, "Eli", "addressed_name", user_turns=["Eliさん元気？"]
+    )
+    _check(mem.comfort.preferred_name == "", "extract rejects addressed name")
+    admit_preferred_name(
+        mem, "Eli", "explicit_self_intro", user_turns=["私はEliです"]
+    )
+    _check(mem.comfort.preferred_name == "Eli", "extract admits explicit self-intro")
+    admit_preferred_name(
+        mem, "Alex", "explicit_call_me", user_turns=["Alexって呼んで"]
+    )
+    _check(mem.comfort.preferred_name == "Alex", "explicit rename overwrites")
+    stale = merge_extract_result(
+        LearnerMemory(),
+        {"comfort": {"preferred_name": "Kyla"}},
+        recent_messages=[{"role": "user", "content": "Kylaさん元気？"}],
+    )
+    _check(stale.comfort.preferred_name == "", "legacy extract preferred_name ignored")
 
     print("smoke_reply_shape ok")
 

@@ -185,7 +185,7 @@ Hold a bindable key or mouse button from **any** app/game while Kaiwa is running
 
 ## Phase 8 — Keep talking (conversation gym)
 
-Make it almost impossible for a beginner conversation to die. Pre-N5 Chat is a **conversation gym** by default (short yes/no or A/B, survive the turn); Chat stays a conversation, not a drill. Practice stays shadowing. Success = the exchange continues.
+Make it almost impossible for a beginner conversation to die. Pre-N5 Chat is a **conversation gym** by default (one short, easy-to-answer idea with a next-turn hook; yes/no is Rescue only); Chat stays a conversation, not a drill. Practice stays shadowing. Success = the exchange continues.
 
 **Constraint (all slices):** keep Phase 5.5 — Japanese teaches, English rescues, Practice drills; never name `support_mode` in the UI; no Chat `TRY:`. Rescue is a learner **action**, not a mode label.
 
@@ -227,8 +227,41 @@ Make it almost impossible for a beginner conversation to die. Pre-N5 Chat is a *
 
 - NPC / konbini / ramen scenes (after ~20 Easy turns + Rescue)
 - Per-turn “did you understand?” (Rescue is that signal)
-- N5 goal ledger / “today’s grammar” (Phase 9+)
+- N5 goal ledger / “today’s grammar” (Phase 10+)
 - Full scenario catalog (still a non-goal)
 - Rebuilding Anki / SRS in Settings
 
 **Shipped beside 8.1 (not a Phase 8 slice):** prompt revision stamp + Chat **New chat** (keep memory) + LLM last-16 context — decision #115. 8.3 makes New chat a durable per-profile session object. 8.4 is the **Chats** drawer + resume (#118). 8.5 is **Again** (child session, not TTS Replay) (#119). 8.7 is after-chat leftovers (#120). 8.6 is Easy/Free + quiet turn count (#121).
+
+The live Practice tab is still Phase 1.5 (intelligibility / shadowing) until **Phase 9** ships.
+
+## Phase 9 — Practice from Chat
+
+Guided sitting from Chat struggles and low-confidence moments — then back to Chat. Spec: [docs/PRACTICE.md](PRACTICE.md). Decision #127. **Not** in 1.0.4.
+
+Chat’s job: talk with me. Practice’s job: get comfortable saying the kinds of things I struggled with (or lacked confidence to say) in Chat. Every activity has a path back to Chat. Cards are immutable snapshots at the Chat moment — not rebuilt from extract `grammar_add`. Home is **Today’s practice / Start**, not category tiles. Sittings are tiny guided conversations around one struggle (3–5 Easy-shaped turns), not LLM roleplay catalogs.
+
+| Slice | Status | Goal |
+|-------|--------|------|
+| **9.1** Snapshot struggle cards | [ ] | Write cards when Chat shows struggle or low confidence (corrections, Simpler, help, freeze, one-word, English switch, abandoned idea). Speakable Japanese + hidden tags. Immutable snapshot. |
+| **9.2** Session shell | [ ] | Today’s practice / about N minutes / **Start** / back to Chat. No phrase-bank toolbox. No intelligibility % as the product. |
+| **9.3** Tiny guided conversations | [ ] | 3–5 Easy-shaped turns around one card, then stop. No new grammar. No konbini catalog. |
+
+**Priority**
+
+1. 9.1 Snapshot struggle cards
+2. 9.2 Session shell
+3. 9.3 Tiny guided conversations
+4. Nothing else until cards have fuel
+
+**Out of Phase 9**
+
+- Conversation / shadow-recent-Kaiwa as a home peer (Again / Replay / history)
+- Grammar-name navigation (Particles, Potential, …)
+- Pronunciation, dictation, SRS/XP
+- N5 goal ledger (Phase 10+)
+- Listening / Review tiles as home navigation (hear-and-answer may happen inside a sitting)
+
+## Phase 10+ (later)
+
+- N5 goal ledger / “today’s grammar”

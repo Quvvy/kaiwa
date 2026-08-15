@@ -469,6 +469,62 @@
       -webkit-font-smoothing: antialiased;
     }
 
+    /* Native + overlay scrollbars follow the active theme (not Windows light chrome) */
+    [data-theme="night"],
+    [data-theme="slate"],
+    [data-theme="graphite"],
+    [data-theme="dusk"],
+    [data-theme="sage"],
+    [data-theme="ink"],
+    [data-theme="indigo"],
+    [data-theme="amber"] {
+      color-scheme: dark;
+    }
+
+    [data-theme="day"],
+    [data-theme="cloud"],
+    [data-theme="frost"],
+    [data-theme="blush"],
+    [data-theme="matcha"],
+    [data-theme="paper"],
+    [data-theme="wisteria"] {
+      color-scheme: light;
+    }
+
+    html {
+      scrollbar-width: thin;
+      scrollbar-color: color-mix(in srgb, var(--ink) 32%, var(--line)) transparent;
+    }
+
+    * {
+      scrollbar-width: thin;
+      scrollbar-color: color-mix(in srgb, var(--ink) 32%, var(--line)) transparent;
+    }
+
+    *::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+
+    *::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    *::-webkit-scrollbar-thumb {
+      background-color: color-mix(in srgb, var(--ink) 28%, var(--line));
+      border-radius: 999px;
+      border: 2px solid transparent;
+      background-clip: padding-box;
+    }
+
+    *::-webkit-scrollbar-thumb:hover {
+      background-color: color-mix(in srgb, var(--ink) 44%, var(--line));
+    }
+
+    *::-webkit-scrollbar-corner {
+      background: transparent;
+    }
+
     .app {
       max-width: 760px;
       margin: 0 auto;
@@ -2019,11 +2075,12 @@
               <h2 class="section-title">Memory</h2>
               <p class="disclaimer settings-searchable" data-settings-search="memory remember name vibe comfort vocab grammar">
                 Kaiwa remembers how you like to chat, topics, vocab, and recurring grammar — updated occasionally after chat turns.
+                Preferred name is also asked at the end of Place me. Add a reading if it helps (Eli / イーライ).
               </p>
               <p class="preset-desc settings-searchable" data-settings-search="memory summary" id="memorySummary">Loading…</p>
               <div class="field settings-searchable" data-settings-search="preferred name call me nickname">
                 <label for="memoryName">Preferred name</label>
-                <input id="memoryName" type="text" maxlength="40" placeholder="What Kaiwa should call you" />
+                <input id="memoryName" type="text" maxlength="40" placeholder="Eli / イーライ" />
               </div>
               <div class="field settings-searchable" data-settings-search="vibe comfort notes tone teasing short replies">
                 <label for="memoryVibe">Vibe / comfort notes</label>
@@ -4453,7 +4510,7 @@
           });
           if (ev.reply_text) {
             localStorage.setItem("kaiwa_last_reply", ev.reply_text);
-            updateReplayButton();
+            clearLastAudioCache();
           }
           setStatus("Ready · push-to-talk");
           bumpSessionTurnCount();
@@ -4573,7 +4630,7 @@
         playWavBase64(data.audio_base64);
         clearEngineAlert();
       } else {
-        updateReplayButton();
+        clearLastAudioCache();
       }
       if (data.tts_error) {
         showEngineAlert(data.tts_error);
@@ -4633,6 +4690,7 @@
       let gotTranscript = false;
       const turnChunks = [];
       resetAudioQueue();
+      clearLastAudioCache();
 
       await readSseChat(res, async (eventName, data) => {
         if (eventName === "error") {
@@ -4689,7 +4747,7 @@
           if (turnChunks.length) {
             cacheLastAudioChunks(turnChunks);
           } else {
-            updateReplayButton();
+            clearLastAudioCache();
           }
           if (data.tts_error) {
             showEngineAlert(data.tts_error);
@@ -5126,13 +5184,15 @@
       quizChoices.innerHTML = "";
 
       if (item.free_text) {
-        quizFeedback.textContent = "Optional — leave blank to skip.";
+        quizFeedback.textContent = item.hint || "Optional — leave blank to skip.";
         quizNextBtn.hidden = false;
         quizNextBtn.disabled = false;
         quizNextBtn.textContent = quizIndex + 1 >= quizItems.length ? "See my levels" : "Continue";
         extra.hidden = false;
         otherIn.hidden = true;
         noteIn.hidden = false;
+        noteIn.placeholder = item.placeholder || "Optional — anything helpful for Kaiwa…";
+        noteIn.maxLength = item.max_length > 0 ? item.max_length : 300;
         noteIn.focus();
         return;
       }
@@ -5331,12 +5391,17 @@
         " · Chat aim: " + levelLabel(goal);
       quizResultNote.textContent =
         "Kaiwa will use these as your starting point — tweak them anytime under Learning.";
+      const callMe = data.summary && data.summary.preferred_name;
+      if (callMe) {
+        quizResultNote.textContent += " Kaiwa will call you " + callMe + ".";
+      }
       quizStatusEl.textContent = "Done";
       quizSessionId = "";
       placementCompleted = true;
       clearPlacementDismiss(activeProfileId);
       quizSoftBanner.hidden = true;
       loadPrefsIntoForm({ skipPlacementOffer: true }).catch(() => {});
+      loadMemoryIntoForm().catch(() => {});
     }
 
     quizStartBtn.addEventListener("click", () => {

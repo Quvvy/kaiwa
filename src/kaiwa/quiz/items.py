@@ -105,6 +105,19 @@ PLACEMENT_QUESTIONS: list[dict[str, Any]] = [
         "field": "note",
         "free_text": True,
         "choices": [],
+        "placeholder": "Optional — anything helpful for Kaiwa…",
+        "hint": "Optional — leave blank to skip.",
+        "max_length": 300,
+    },
+    {
+        "id": "preferred_name",
+        "prompt": "What should Kaiwa call you?",
+        "field": "preferred_name",
+        "free_text": True,
+        "choices": [],
+        "placeholder": "Eli / イーライ",
+        "hint": "Optional — name as you want it said. Add a reading if useful.",
+        "max_length": 40,
     },
 ]
 

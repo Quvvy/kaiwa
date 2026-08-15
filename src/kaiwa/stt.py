@@ -241,6 +241,23 @@ def _join_segments(segments) -> str:
 
 
 _JP_SCRIPT_RE = re.compile(r"[\u3040-\u30ff\u3400-\u9fff]")
+_CHAT_STT_CORE = "会話 会話さん Kaiwa"
+
+
+def chat_stt_hint(preferred_name: str = "") -> str:
+    """Short Whisper prior for Chat. Never rewrite the displayed transcript."""
+    name = " ".join((preferred_name or "").strip().split())
+    if not name:
+        return _CHAT_STT_CORE
+    return f"{_CHAT_STT_CORE} {name}"
+
+
+def _transcribe(model: WhisperModel, path: str | Path, kwargs: dict[str, Any]):
+    try:
+        return model.transcribe(str(path), **kwargs)
+    except TypeError:
+        kwargs.pop("hotwords", None)
+        return model.transcribe(str(path), **kwargs)
 
 
 def _jp_script_count(text: str) -> int:
@@ -252,21 +269,30 @@ def transcribe_file(
     path: str | Path,
     *,
     language: str | None = "ja",
+    initial_prompt: str | None = None,
+    hotwords: str | None = None,
 ) -> str:
     """Transcribe audio. Pass language=None to auto-detect."""
     model = get_model(settings)
-    kwargs: dict = {
+    kwargs: dict[str, Any] = {
         "vad_filter": True,
         "beam_size": 1,
     }
     if language:
         kwargs["language"] = language
-    segments, _info = model.transcribe(str(path), **kwargs)
+    if initial_prompt:
+        kwargs["initial_prompt"] = initial_prompt
+    if hotwords:
+        kwargs["hotwords"] = hotwords
+    segments, _info = _transcribe(model, path, kwargs)
     return _join_segments(segments)
 
 
 def transcribe_chat_file(
-    settings: Settings, path: str | Path
+    settings: Settings,
+    path: str | Path,
+    *,
+    preferred_name: str = "",
 ) -> tuple[str, dict[str, Any]]:
     """Chat STT: keep clear English; accept first-pass JP when confident or script-rich.
 
@@ -275,11 +301,14 @@ def transcribe_chat_file(
     and lacks Japanese script (decision #103).
     """
     model = get_model(settings)
-    segments, info = model.transcribe(
-        str(path),
-        vad_filter=True,
-        beam_size=1,
-    )
+    hint = chat_stt_hint(preferred_name)
+    kwargs: dict[str, Any] = {
+        "vad_filter": True,
+        "beam_size": 1,
+        "initial_prompt": hint,
+        "hotwords": hint,
+    }
+    segments, info = _transcribe(model, path, kwargs)
     auto_text = _join_segments(segments)
     detected = (getattr(info, "language", None) or "").lower()
     prob = float(getattr(info, "language_probability", 0.0) or 0.0)
@@ -298,7 +327,13 @@ def transcribe_chat_file(
     if auto_text and _jp_script_count(auto_text) >= 2:
         return auto_text, {**base_meta, "passes": 1, "accepted": "jp_script"}
 
-    forced = transcribe_file(settings, path, language="ja")
+    forced = transcribe_file(
+        settings,
+        path,
+        language="ja",
+        initial_prompt=hint,
+        hotwords=hint,
+    )
     return forced, {**base_meta, "passes": 2, "accepted": "forced_ja"}
 
 
@@ -308,6 +343,7 @@ def transcribe_audio_bytes(
     suffix: str = ".webm",
     *,
     mode: str = "ja",
+    preferred_name: str = "",
 ) -> tuple[str, dict[str, Any]]:
     """Write upload bytes to a temp file and transcribe.
 
@@ -328,7 +364,9 @@ def transcribe_audio_bytes(
         tmp_path = Path(tmp.name)
     try:
         if mode == "chat":
-            return transcribe_chat_file(settings, tmp_path)
+            return transcribe_chat_file(
+                settings, tmp_path, preferred_name=preferred_name
+            )
         text = transcribe_file(settings, tmp_path, language="ja")
         return text, {"passes": 1, "detected": "ja", "accepted": "forced_ja"}
     except Exception as exc:

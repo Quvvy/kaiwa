@@ -9,7 +9,7 @@
 | Realtime barge-in voice | 1–3 weeks | Closer to Pingo feel |
 | Pingo-like product | weeks–months | Scenarios, memory, pronunciation scoring — **out of scope for v0** |
 
-v0 = turn-based speaking practice + optional **Practice** intelligibility / shadowing mode.
+v0 = turn-based speaking practice + optional **Practice** intelligibility / shadowing mode (**legacy until Phase 9**).
 Skip app-store polish, accounts, 200 scenarios, and dictionary-grade pitch-accent grading.
 
 ## Pipeline (chosen)
@@ -18,17 +18,20 @@ Skip app-store polish, accounts, 200 scenarios, and dictionary-grade pitch-accen
 Mic → local faster-whisper (ja) → DeepSeek V4 API → local JP TTS → speakers
 ```
 
-Practice mode (separate):
+Practice mode (separate; **current / Phase 1.5**, until Phase 9):
 
 ```
 Target text → VOICEVOX preview
 User audio → Whisper → kana-normalized similarity vs target → optional DeepSeek tip
 ```
 
+**Phase 9 (planned, #127):** Practice becomes one **Start** sitting from immutable Chat struggle/confidence snapshots, then back to Chat. Tiny guided conversations around one struggle — not a phrasebook, not intelligibility %, not LLM roleplay. Spec: [PRACTICE.md](PRACTICE.md). Live API (`GET /api/practice/next` bank | last_reply | vocab | recycle) stays until 9.1–9.3 ship.
+
 Self-assessment placement (onboarding):
 
 ```
 Fixed questions → user self-ratings → speaking_level / comprehension_level / goal_level
+Optional last question: preferred name (memory.comfort.preferred_name)
 ```
 
 ### Phase 1 concrete defaults
@@ -36,7 +39,7 @@ Fixed questions → user self-ratings → speaking_level / comprehension_level /
 | Piece | Default |
 |-------|---------|
 | App | FastAPI + Chat / Practice / Settings tabs on port **8787** (Place me is a Settings section) |
-| STT | `faster-whisper` / `large-v3-turbo` / `cuda` / `float16` |
+| STT | `faster-whisper` / `large-v3-turbo` / `cuda` / `float16`. Chat only: short `initial_prompt` / `hotwords` (`会話 会話さん Kaiwa` plus stored preferred name). Displayed transcript is never rewritten. Practice stays forced-`ja` with no name hints. |
 | LLM | `deepseek-v4-flash` with `thinking: disabled` |
 | TTS | **AivisSpeech** HTTP API at `http://127.0.0.1:10101` (default); VOICEVOX at `:50021` as fallback |
 | Practice score | Intelligibility (`score_kind: intelligibility`) via pykakasi + Levenshtein — not pitch accent / native pronunciation |
@@ -68,11 +71,11 @@ Settings tab edits server-side prefs used to assemble the chat system prompt eac
 
 Learner profile (per active user profile) tracks estimated `speaking_level` / `comprehension_level`, confidence, notes, and topic tags. Updated from chat struggle signals, practice scores, occasional Flash JSON assess, and the **self-assessment Place me** flow. Injected into the tutor prompt each turn. `GET/PUT /api/profile`.
 
-Long-term memory (per active user profile) stores comfort/personality prefs (name, vibe, do/dont), observed topics, vocab phrases, recurring grammar notes, and soft `recycle_items` for optional “say again” Practice. Occasional Flash extract after chat turns (post-TTS). Injected into the tutor prompt on top of the selected personality. `GET/PUT /api/memory`.
+Long-term memory (per active user profile) stores comfort/personality prefs (name, vibe, do/dont), observed topics, vocab phrases, recurring grammar notes, and soft `recycle_items` for optional “say again” Practice. Occasional Flash extract after chat turns (post-TTS). **`preferred_name` is gated:** Settings `PUT /api/memory` and Place me write it; extract returns `name.candidate` + `evidence` and app code admits only `explicit_self_intro` / `explicit_call_me` with a first-person user turn. Product self-name (会話 / Kaiwa) is rejected as a learner name. The tutor prompt has hard identity slots (self = 会話 / Kaiwa; learner = stored name or あなた; other names are third parties). `PROMPT_REVISION` 4. Injected into the tutor prompt on top of the selected personality. `GET/PUT /api/memory`.
 
-Practice (`GET /api/practice/next`) sources: `bank` | `last_reply` | `vocab` (from memory) | `recycle` (soft retries; falls through to vocab → last reply). Chat is the main loop; Practice is an optional warm-up — not a quiz gate. Chat UI **Replay** re-plays the last TTS reply from a client cache (falls back to `POST /api/practice/speak` if audio was lost after refresh). Chat **Again** is a different control: it starts a child session that re-asks the same Kaiwa questions (`replay_of`).
+Practice (`GET /api/practice/next`) sources: `bank` | `last_reply` | `vocab` (from memory) | `recycle` (soft retries; falls through to vocab → last reply). Chat is the main loop; this Practice is an optional intelligibility warm-up — not a quiz gate — **until Phase 9** replaces it ([PRACTICE.md](PRACTICE.md), #127). Chat UI **Replay** re-plays the last TTS reply from a client cache (falls back to `POST /api/practice/speak` if audio was lost after refresh). Chat **Again** is a different control: it starts a child session that re-asks the same Kaiwa questions (`replay_of`).
 
-Placement APIs: `POST /api/quiz/start`, `/api/quiz/answer`, `/api/quiz/finish` (self-assessment; no `/speak`).
+Placement APIs: `POST /api/quiz/start`, `/api/quiz/answer`, `/api/quiz/finish` (self-assessment; no `/speak`). Last Place me item is optional preferred name (reading allowed, e.g. `Eli / イーライ`); blank does not clear an existing Settings name.
 
 User-named presets live in the active profile’s `user_personalities.json` with CRUD:
 
@@ -110,13 +113,13 @@ Chat turns log `timing: {stt_ms, llm_ms, tts_ms, total_ms}` in session JSONL and
 
 See `docs/ROADMAP.md`.
 
-- **8.1 shipped:** pre-N5 reply shape — one idea (not one `。`); high-load constructions; one retry; JSONL `reply_shape`. Lock decays with pitch / support (`flow_streak`). Shape-locked Chat finishes LLM before sentence TTS.
+- **8.1 shipped:** pre-N5 reply shape — one idea (not one `。`); high-load constructions; one retry; JSONL `reply_shape`. Easy is easy-to-answer conversation with a next-turn hook, not a yes/no survey (#126). Lock decays with pitch / support (`flow_streak`). Shape-locked Chat finishes LLM before sentence TTS.
 - **8.2 shipped:** **Simpler** on the last Kaiwa bubble (`POST /api/rescue`). No fake user line. Comprehension scaffolding bump; rewrite last assistant one step down; TTS; JSONL `rescue: true`. PTT has no Rescue hotkey.
 - **8.3 shipped:** sessions bound to `profile_id` via `<id>.meta.json`; hydrate RAM from JSONL (rescue replaces last assistant); `GET/POST /api/sessions` + durable **New chat** (keeps old JSONL). Prompt-revision starts a new session per profile (New chat / `chat_reset`).
 - **8.4 shipped:** **Chats** drawer lists the active profile; open or refresh redraws You/Kaiwa bubbles from `GET /api/sessions/{id}`. Stale `prompt_revision` no longer mints on a turn — opening an old chat continues that id with the current prompt + last-16 (#118).
 - **8.5 shipped:** **Again** forks a child session (`replay_of`) that re-asks the parent’s Kaiwa questions (no new teaching; Simpler still allowed). Distinct from TTS **Replay** and Practice shadowing (#119). Does not bump `PROMPT_REVISION`.
 - **8.7 shipped:** after **New chat**, **From this chat** shows 3–5 unique recent learner lines from the ended thread. Optional Flash **You could have said** (1–3, no stars, no `TRY:`) is a follow-up GET and soft-fails empty. Never live in Chat bubbles. Not SRS (#120). Does not bump `PROMPT_REVISION`.
-- **8.6 shipped:** Chat **Easy** / **Free** chip (`prefs.chat_pace`, default Easy). Free turns off `shape_lock_active` (no gym retry); **Simpler** and internal support still run. Quiet session `turn_count` by the composer. No XP. Does not bump `PROMPT_REVISION` (#121).
+- **8.6 shipped:** Chat **Easy** / **Free** chip (`prefs.chat_pace`, default Easy). Easy keeps the 8.1 shape lock (conversation, not yes/no gym; #126). Free turns off `shape_lock_active` (no gym retry); **Simpler** and internal support still run. Quiet session `turn_count` by the composer. No XP. Does not bump `PROMPT_REVISION` (#121).
 - **Prompt revision (#115):** `PROMPT_REVISION` + AppData stamp; new empty chat on bump (memory kept). LLM sees last 16 turns.
 
 Silent freeze can raise `struggle_streak` via Simpler. A following `rescue: true` JSONL line is the live assistant text when hydrating.

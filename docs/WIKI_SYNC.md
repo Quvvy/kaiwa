@@ -22,9 +22,10 @@ Follow the vault `AGENTS.md` for ingest conventions. Tag with `kaiwa`.
 | `docs/ROADMAP.md` | `raw/kaiwa/ROADMAP.md` |
 | `docs/WIKI_SYNC.md` | `raw/kaiwa/WIKI_SYNC.md` |
 | `docs/TUTOR_EXCHANGE_CRITIQUE.md` | `raw/kaiwa/tutor-exchange-critique-2026-08-07.md` |
+| `docs/PRACTICE.md` | `raw/kaiwa/PRACTICE.md` |
 
 ## Related wiki pages
 
 - Entity: `wiki/entities/kaiwa.md`
-- Concepts: hybrid speech pipeline, local Japanese TTS, Japanese AI conversation partner
+- Concepts: hybrid speech pipeline, local Japanese TTS, Japanese AI conversation partner, Practice sessions (`kaiwa-practice-sessions`)
 - Sources: `wiki/sources/kaiwa-*.md`

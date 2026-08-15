@@ -23,6 +23,28 @@ MAX_RECYCLE_TEXT = 80
 CLEARS_TO_EASE = 1
 EXTRACT_EVERY_N = 6
 
+NAME_EVIDENCE_ADMIT = frozenset({"explicit_self_intro", "explicit_call_me"})
+NAME_EVIDENCE_ALL = frozenset(
+    {
+        "explicit_self_intro",
+        "explicit_call_me",
+        "addressed_name",
+        "third_party",
+        "self_reference",
+        "assistant_line",
+        "unknown",
+    }
+)
+_SELF_NAME_KEYS = frozenset({"会話", "kaiwa", "かいわ", "カイワ"})
+_STT_SELF_ALIAS_KEYS = frozenset({"kyla", "kayla", "kaila", "カイラ", "かいら"})
+_HONORIFIC_RE = re.compile(r"(さん|くん|君|ちゃん|様|さま)$")
+_NAME_EVIDENCE_RE = re.compile(
+    r"(私は|わたしは|僕は|ぼくは|俺は|おれは|"
+    r"名前は|なまえは|って呼んで|と呼んで|ってよんで|"
+    r"my name is|call me|i'?m |i am )",
+    re.IGNORECASE,
+)
+
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -304,6 +326,80 @@ def reset_memory(path: Path | None = None) -> LearnerMemory:
     return save_memory(default_memory(), path)
 
 
+def normalize_name_key(text: str) -> str:
+    s = (text or "").strip()
+    s = _HONORIFIC_RE.sub("", s).strip()
+    s = s.replace(" ", "").replace("　", "").replace("/", "")
+    return s.casefold()
+
+
+def is_reserved_self_name(name: str) -> bool:
+    key = normalize_name_key(name)
+    return bool(key) and key in _SELF_NAME_KEYS
+
+
+def name_matches_stt_alias(name: str, stored: str = "") -> bool:
+    """True if `name` looks like a Whisper stand-in for 会話さん."""
+    key = normalize_name_key(name)
+    if not key or key not in _STT_SELF_ALIAS_KEYS:
+        return False
+    stored_key = normalize_name_key(stored)
+    if stored_key and stored_key == key:
+        return False
+    return True
+
+
+def clip_preferred_name(text: str) -> str:
+    """Clip for Place me. Empty or reserved self-name → empty (do not store)."""
+    name = _clip(text, MAX_NAME)
+    if not name or is_reserved_self_name(name):
+        return ""
+    return name
+
+
+def validate_manual_preferred_name(text: str) -> str:
+    """Settings PUT: empty clears; product self-name is rejected."""
+    name = _clip(text, MAX_NAME)
+    if not name:
+        return ""
+    if is_reserved_self_name(name):
+        raise ValueError("preferred name cannot be Kaiwa's own name")
+    return name
+
+
+def user_turns_have_name_evidence(user_turns: list[str] | None) -> bool:
+    for turn in user_turns or []:
+        if _NAME_EVIDENCE_RE.search(turn or ""):
+            return True
+    return False
+
+
+def admit_preferred_name(
+    memory: LearnerMemory,
+    candidate: str | None,
+    evidence: str | None,
+    *,
+    user_turns: list[str] | None = None,
+) -> LearnerMemory:
+    """Commit a learner name only when extract evidence is high-confidence.
+
+    Settings / Place me write via apply_manual_memory, not this path.
+    """
+    name = _clip(str(candidate or ""), MAX_NAME)
+    ev = str(evidence or "").strip().lower()
+    if not name or ev not in NAME_EVIDENCE_ADMIT:
+        return memory
+    if is_reserved_self_name(name):
+        return memory
+    stored = memory.comfort.preferred_name or ""
+    if name_matches_stt_alias(name, stored=stored):
+        return memory
+    if not user_turns_have_name_evidence(user_turns):
+        return memory
+    memory.comfort.preferred_name = name
+    return memory
+
+
 def apply_manual_memory(
     memory: LearnerMemory,
     *,
@@ -314,7 +410,7 @@ def apply_manual_memory(
     topics: list[str] | None = None,
 ) -> LearnerMemory:
     if preferred_name is not None:
-        memory.comfort.preferred_name = _clip(preferred_name, MAX_NAME)
+        memory.comfort.preferred_name = validate_manual_preferred_name(preferred_name)
     if vibe_notes is not None:
         memory.comfort.vibe_notes = _clip(vibe_notes, MAX_VIBE)
     if do is not None:
@@ -362,13 +458,28 @@ def _merge_list_unique(existing: list[str], additions: list[str], cap: int) -> l
     return out[:cap]
 
 
-def merge_extract_result(memory: LearnerMemory, data: dict[str, Any]) -> LearnerMemory:
+def merge_extract_result(
+    memory: LearnerMemory,
+    data: dict[str, Any],
+    *,
+    recent_messages: list[dict[str, str]] | None = None,
+) -> LearnerMemory:
     now = _now_iso()
     comfort = data.get("comfort") if isinstance(data.get("comfort"), dict) else {}
+    # Ignore legacy comfort.preferred_name — names go through admit_preferred_name.
 
-    name = comfort.get("preferred_name")
-    if isinstance(name, str) and name.strip():
-        memory.comfort.preferred_name = _clip(name, MAX_NAME)
+    name_blob = data.get("name") if isinstance(data.get("name"), dict) else {}
+    user_turns = [
+        str(m.get("content") or "")
+        for m in (recent_messages or [])
+        if str(m.get("role") or "") == "user"
+    ]
+    admit_preferred_name(
+        memory,
+        name_blob.get("candidate") if isinstance(name_blob.get("candidate"), str) else None,
+        name_blob.get("evidence") if isinstance(name_blob.get("evidence"), str) else None,
+        user_turns=user_turns,
+    )
 
     vibe = comfort.get("vibe_notes")
     if isinstance(vibe, str) and vibe.strip():
@@ -457,8 +568,8 @@ EXTRACT_SYSTEM = """\
 You extract durable learner-memory facts for a Japanese conversation tutor.
 Reply with JSON only (no markdown):
 {
+  "name": {"candidate": null, "evidence": null},
   "comfort": {
-    "preferred_name": null,
     "vibe_notes": null,
     "do_add": [],
     "dont_add": []
@@ -469,7 +580,15 @@ Reply with JSON only (no markdown):
 }
 Rules:
 - Only durable, reusable facts. Skip one-off typos and fluff.
-- comfort = how Kaiwa should be with this learner (name, vibe, do/dont). Soft personality prefs on top of the selected preset.
+- name.candidate is the LEARNER's own name only. evidence must be one of:
+  explicit_self_intro, explicit_call_me, addressed_name, third_party,
+  self_reference, assistant_line, unknown.
+- Admit-worthy evidence is only explicit_self_intro (私はX / 名前はX) or
+  explicit_call_me (Xって呼んで). Otherwise leave candidate null.
+- Do not treat 会話 / Kaiwa / Kyla / カイラ / vocatives like「Xさん元気?」/
+  assistant lines / third parties as the learner name.
+- comfort = vibe/do/dont only. Do not put a preferred_name field on comfort
+  (it is ignored). Soft personality prefs on top of the selected preset.
 - vocab_add: useful JP phrases/words to recycle later (surface in Japanese).
 - grammar_add: recurring issues (short English pattern + hint).
 - Keep notes short. Empty arrays/null when nothing new.
@@ -519,7 +638,9 @@ def run_extract(
         )
         data = _extract_json(raw_text)
         if data:
-            memory = merge_extract_result(memory, data)
+            memory = merge_extract_result(
+                memory, data, recent_messages=recent
+            )
         else:
             memory.stats.chat_turns_since_extract = 0
             memory.stats.last_extract_turn = memory.stats.chat_turns

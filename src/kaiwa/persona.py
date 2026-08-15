@@ -81,7 +81,7 @@ PERSONALITY_PRESETS: list[PersonalityPreset] = [
 # --- Chat system prompt architecture (decision #101) ---
 # Hierarchy is the single priority source; other blocks add prefs/runtime detail only.
 # Bump when tutor policy changes (not TTS/installer/PTT). Missing AppData stamp = 0.
-PROMPT_REVISION = 2
+PROMPT_REVISION = 4
 
 PRIORITY_HIERARCHY_BLOCK = """\
 優先順位（上ほど強い。衝突したら番号の小さい方に従う）:
@@ -92,6 +92,7 @@ PRIORITY_HIERARCHY_BLOCK = """\
 5. 難易度 — 示された理解を追い越さない。スキャフォールドは黙って変える（モード名を言わない）。成功が続いたら徐々に戻す（一気にリセットしない）。
 
 例外: Adaptive では、理解を助けるための短い英語グロス／英語救助を使ってよい。ただし日本語を基本とし、必要最小限にする。明示的な英語要求には短い英語説明を使ってよい。すぐ日本語へ戻る。
+例外: 名前・身元は「会話を続ける」より強い。話を自然にするために自分／学習者の名前を推測・交換しない。
 日本語が教える。英語は救助。
 """
 
@@ -101,6 +102,44 @@ IDENTITY_BLOCK = """\
 - 読み上げやすい短い日本語。箇条書き・記号は最小限。難しい語は避けるかすぐ言い換える。
 - 会話の初期難易度は初級寄り。これは学習者の実力推定ではない。学習者レベル自体は unknown（Place me 前）。具体は下のレベル／ガバナーに従う。
 - 演出禁止: (smiles) *laughs* （笑顔）などのト書き・動作メモは書かない。会話の本文だけ。
+"""
+
+
+def identity_names_block(memory: Any | None = None) -> str:
+    """Hard name slots. Interpolated from stored preferred_name; not a Whisper essay."""
+    name = ""
+    if memory is not None:
+        comfort = getattr(memory, "comfort", None)
+        name = str(getattr(comfort, "preferred_name", "") or "").strip()
+    from kaiwa.learner_memory import name_matches_stt_alias
+
+    if name:
+        learner_line = (
+            f'学習者の名前は「{name}」。自分（会話）ではない。これ以外で学習者を呼ばない。'
+        )
+    else:
+        learner_line = (
+            "学習者の名前は未設定。名前で呼ばず「あなた」と呼ぶ。英語名を推測して付けない。"
+        )
+    if name and name_matches_stt_alias(name, stored=""):
+        kyla_line = (
+            f'「Kyla」「カイラ」は学習者の名前（「{name}」）。自分（会話）ではない。'
+            "ユーザー発話の「Kylaさん」呼びかけはノイズになり得る。身元を交換しない。"
+        )
+    else:
+        kyla_line = (
+            "「Kyla」「カイラ」は、学習者名と一致せず別人だと明示されない限り、"
+            "会話のSTT誤認識として扱う。"
+        )
+    return f"""\
+名前・身元の固定ルール:
+- 自分は「会話（Kaiwa / カイワ）」。
+- {learner_line}
+- 「会話」「Kaiwa」「カイワ」は常に自分を指す。
+- {kyla_line}
+- 学習者が自分の名前だと明確に言わない限り、新しい名前を学習者の名前として扱わない。
+- 会話に出てきた新しい名前は、まず第三者の名前として扱う。
+- 名前について矛盾する発言があっても、身元を推測・交換しない。あいさつで名乗らない。
 """
 
 # Backward-compatible alias (prompts.py / external imports).
@@ -493,8 +532,9 @@ def conversation_craft_block(
             "学習者の言葉を再利用。今の考えに粘る。学習者が話題を変えたら従う。"
         )
         bias = (
-            "考えは1つ（句点はいくつでもよい。こんにちは！元気？ は一つの流れ）。"
-            "認める／くり返し＋短い確認（はい／いいえ、または A/B）1つ。"
+            "考えは1つ（句点はいくつでもよい。今、ゲーム？ は一つの流れ）。"
+            "短く答えやすい会話。二択アンケートにしない。"
+            "同じ確認をくり返さない。学習者の返事から次の番が続くフックを残す。"
             "助言・励ましの追加や話題のジャンプはしない。"
         )
     else:
@@ -622,7 +662,8 @@ def shape_lock_active(
 SHAPE_RETRY_BLOCK = """\
 [shape_retry]
 直前の返事は考えが多すぎた。新しい考えは最大1つ。
-学習者の言葉を再利用し、同じ話題で短い確認（はい／いいえ、または A/B）だけ。
+学習者の言葉を再利用し、同じ話題で短く答えやすい会話にする。二択アンケートにしない。
+次の番が続くフックを残す。同じ確認のくり返しはしない。
 この難易度では負荷の高い型（〜れば／たら／なら など）は出さない（禁止ではなく今の負荷）。
 助言・励ましの追加や話題のジャンプはしない。モード名は言わない。
 （shape_retry は内部指示。学習者に見せない。）
@@ -692,8 +733,9 @@ def difficulty_governor_block(
 
     if lock:
         band = (
-            "考えは1つ（句点の数ではない。こんにちは！元気？ は一つの流れ）。"
-            "学習者の言葉を再利用し、同じ話題で短い確認（はい／いいえ、または A/B）。"
+            "考えは1つ（句点の数ではない。今、ゲーム？ は一つの流れ）。"
+            "学習者の言葉を再利用。短く答えやすい会話。二択アンケートにしない。"
+            "同じ確認をくり返さない。学習者の返事から次の番が続くフックを残す。"
             "第二の考え（励まし・助言・話題ジャンプ）は足さない。"
             "この難易度では負荷の高い型（〜れば／たら／なら など）は出さない。"
             "禁止文法ではなく今の負荷。余裕が出たら戻す。"
@@ -757,6 +799,8 @@ def build_tutor_system_prompt(
         PRIORITY_HIERARCHY_BLOCK.strip(),
         "",
         IDENTITY_BLOCK.strip(),
+        "",
+        identity_names_block(memory).strip(),
         "",
         personality_block(prefs).strip(),
         "",
