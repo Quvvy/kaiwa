@@ -373,6 +373,13 @@ class PttController:
                 )
                 return
             payload = res.json()
+            if payload.get("type_retry"):
+                self._log("ptt: no speech — type in Chat")
+                self._post_status(
+                    str(payload.get("detail") or "Couldn't catch that — type it in Chat."),
+                    level="warn",
+                )
+                return
             self._log("ptt turn ok")
             self._post_status("Ready · push-to-talk")
             if play and payload.get("audio_base64"):

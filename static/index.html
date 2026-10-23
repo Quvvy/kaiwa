@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ja" data-theme="night">
+<html lang="en" data-theme="night">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -661,6 +661,7 @@
     /* Modes fill the viewport — one desk sheet on the dark room */
     #modeChat,
     #modePractice,
+    #modeLearn,
     #modeSettings {
       background: var(--surface);
       border: 1px solid var(--line);
@@ -670,6 +671,7 @@
 
     #modeChat.mode.active,
     #modePractice.mode.active,
+    #modeLearn.mode.active,
     #modeSettings.mode.active {
       display: flex;
       flex-direction: column;
@@ -877,13 +879,13 @@
     }
 
     .bubble-simpler {
-      padding: 0.28rem 0.65rem;
-      font-size: 0.75rem;
-      font-weight: 600;
+      padding: 0.38rem 0.8rem;
+      font-size: 0.9rem;
+      font-weight: 650;
       letter-spacing: 0.02em;
-      background: color-mix(in srgb, var(--surface) 70%, var(--line));
+      background: color-mix(in srgb, var(--accent) 16%, var(--surface));
       color: var(--ink);
-      border: 1px solid var(--line);
+      border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line));
     }
 
     .meta {
@@ -955,6 +957,20 @@
     .chat-pace-seg button {
       padding: 0.28rem 0.65rem;
       font-size: 0.78rem;
+    }
+
+    .pace-caption,
+    .composer-hint {
+      margin: 0.15rem 0 0.2rem;
+      font-family: var(--font-ui);
+      font-size: 0.75rem;
+      line-height: 1.35;
+      color: var(--muted);
+    }
+
+    .composer-hint[hidden],
+    .pace-caption[hidden] {
+      display: none;
     }
 
     .composer-talk {
@@ -1098,6 +1114,11 @@
     .chat-text-row input:focus {
       outline: none;
       border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+    }
+
+    .chat-text-row.type-retry input {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px var(--accent-soft);
     }
 
     .chat-text-row button {
@@ -1252,6 +1273,27 @@
       flex-shrink: 0;
     }
 
+    .recast-notice {
+      margin: 0.4rem 0 0;
+      padding: 0.15rem 0 0.15rem 0.55rem;
+      border-left: 2px solid color-mix(in srgb, var(--accent) 55%, var(--line));
+      font-size: 0.95rem;
+      line-height: 1.45;
+      color: var(--ink);
+      opacity: 0.88;
+      font-weight: 500;
+    }
+    .recast-notice .recast-label {
+      display: block;
+      font-family: var(--font-ui);
+      font-size: 0.7rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 0.12rem;
+    }
+
     .try-saying {
       margin-top: 0.5rem;
       padding-top: 0.45rem;
@@ -1284,12 +1326,172 @@
       border: 0;
       border-radius: 0;
       padding: 1.15rem 1.15rem 1.25rem;
+      display: flex;
+      flex-direction: column;
     }
 
     .practice-stage .target {
       margin: 0.35rem 0 0.85rem;
       font-size: 1.4rem;
       line-height: 1.65;
+    }
+
+    .practice-home {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0.55rem;
+      max-width: 28rem;
+      padding: 0.35rem 0.15rem;
+    }
+
+    .practice-home-title {
+      margin: 0;
+      font-family: var(--font-ui);
+      font-size: 1.45rem;
+      font-weight: 650;
+      line-height: 1.25;
+    }
+
+    .practice-home-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-top: 0.45rem;
+    }
+
+    .practice-lines {
+      margin-top: 1.1rem;
+      width: 100%;
+    }
+
+    .practice-lines .meta {
+      margin-bottom: 0.45rem;
+    }
+
+    .practice-line {
+      margin: 0 0 0.4rem;
+      font-size: 1.02rem;
+      line-height: 1.5;
+      color: var(--muted);
+      cursor: default;
+    }
+
+    .practice-lines-note {
+      margin: 0.35rem 0 0;
+      font-size: 0.78rem;
+      color: var(--muted);
+    }
+
+    .learn-lines {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 0.15rem;
+      width: 100%;
+      margin-top: 0.35rem;
+    }
+
+    .learn-line {
+      display: block;
+      width: 100%;
+      margin: 0;
+      padding: 0.45rem 0.65rem 0.45rem 0.75rem;
+      text-align: left;
+      background: transparent;
+      border: 0;
+      border-left: 2px solid color-mix(in srgb, var(--accent) 55%, var(--line));
+      border-radius: 0;
+      color: var(--ink);
+      font-family: var(--font-body);
+      font-size: 1.05rem;
+      line-height: 1.5;
+      font-weight: 500;
+      cursor: pointer;
+    }
+
+    .learn-line:hover:not(:disabled) {
+      color: var(--accent);
+    }
+
+    .learn-line:disabled {
+      cursor: default;
+      opacity: 0.7;
+    }
+
+    .practice-sitting {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      flex: 1;
+      gap: 0;
+    }
+
+    .practice-sitting-bar {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 0.65rem;
+      flex-shrink: 0;
+      padding: 0 0.15rem 0.55rem;
+    }
+
+    .practice-sitting-bar button {
+      padding: 0.35rem 0.75rem;
+      font-size: 0.78rem;
+      flex-shrink: 0;
+    }
+
+    .practice-speakable {
+      margin: 0.2rem 0 0;
+      font-size: 1.12rem;
+      line-height: 1.45;
+      font-weight: 550;
+    }
+
+    .practice-why-btn {
+      margin-top: 0.35rem;
+      padding: 0.2rem 0.55rem;
+      font-size: 0.78rem;
+      font-weight: 600;
+    }
+
+    .practice-why {
+      margin: 0.35rem 0 0;
+      font-size: 0.88rem;
+      line-height: 1.4;
+      color: var(--muted);
+      max-width: 22rem;
+    }
+
+    .practice-home[hidden],
+    .practice-sitting[hidden],
+    #practiceComposer[hidden] {
+      display: none !important;
+    }
+
+    .practice-speakable[hidden] {
+      display: none;
+    }
+
+    #practiceLog {
+      flex: 1;
+      min-height: 0;
+      overflow: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 0.85rem;
+      padding: 0.15rem 0.05rem 0.4rem;
+    }
+
+    #modePractice .you {
+      background: color-mix(in srgb, var(--you-bg) 55%, var(--surface-raised));
+      border-color: var(--line);
+    }
+
+    #modePractice .bot {
+      background: var(--surface-raised);
+      border-color: var(--line);
     }
 
     .practice-actions {
@@ -1711,6 +1913,7 @@
       <nav class="tabs" role="tablist" aria-label="Modes">
         <button class="tab active" type="button" data-mode="chat">Chat</button>
         <button class="tab" type="button" data-mode="practice">Practice</button>
+        <button class="tab" type="button" data-mode="learn">Learn</button>
         <button class="tab" type="button" data-mode="settings">Settings</button>
       </nav>
     </header>
@@ -1732,8 +1935,8 @@
       <div class="chat-stage">
         <div id="log" aria-live="polite">
           <p class="chat-disclaimer" role="note">
-            The first reply after launch can take longer while models warm up.
-            Kaiwa can misunderstand you or give wrong information — treat it as practice help, not a reliable source.
+            Hold to talk — say anything. Kaiwa will start in Japanese.
+            The first reply after launch can take a little longer.
           </p>
         </div>
         <aside id="chatsDrawer" class="chats-drawer" hidden>
@@ -1757,55 +1960,80 @@
             <div class="composer-status" id="status">Ready</div>
             <span id="turnCount" class="turn-count" hidden></span>
           </div>
-          <div class="seg chat-pace-seg" id="chatPaceSeg" title="Easy keeps short questions; Free talks more freely">
+          <div class="seg chat-pace-seg" id="chatPaceSeg" title="Easy: short and slow. Free: longer turns.">
             <button type="button" data-pace="easy" class="on">Easy</button>
             <button type="button" data-pace="free">Free</button>
           </div>
         </div>
+        <p class="pace-caption" id="chatPaceCaption">Easy: short and slow. Free: longer turns.</p>
+        <p class="composer-hint" id="placeMeHint" hidden>Chat stays extra simple until you finish Place me (Settings).</p>
+        <p class="composer-hint" id="chatHelpHint">Didn’t catch that? Tap Simpler on Kaiwa’s last line.</p>
         <div class="composer-talk">
           <button id="talk" type="button">Hold to talk</button>
         </div>
-        <div class="chat-text-row">
-          <input id="chatText" type="text" maxlength="500" placeholder="Type if Whisper missed you…" autocomplete="off" />
+        <div class="chat-text-row" id="chatTextRow">
+          <input id="chatText" type="text" maxlength="500" placeholder="Or type what you meant" autocomplete="off" />
           <button id="chatTextSend" class="secondary" type="button">Send</button>
         </div>
         <div class="composer-session">
-          <button id="replayLast" type="button" hidden disabled>Replay</button>
-          <button id="againBtn" type="button" title="Try those questions again" hidden disabled>Again</button>
+          <button id="replayLast" type="button" hidden disabled>Hear that again</button>
+          <button id="composerSimpler" type="button" title="I didn’t catch that — say it more simply" hidden disabled>Simpler</button>
+          <button id="againBtn" type="button" title="Start a new chat with the same questions Kaiwa just asked" hidden disabled>Same questions</button>
         </div>
       </div>
     </section>
 
     <section class="mode" id="modePractice">
       <div class="practice-stage">
-        <div class="meta">Say it again</div>
-        <p class="target" id="targetText">…</p>
-        <p class="preset-desc" id="targetNote" hidden></p>
-        <div class="practice-actions">
-          <button id="playModel" class="secondary" type="button">Play model</button>
-          <button id="nextPhrase" class="secondary" type="button">Light phrase</button>
-          <button id="practiceLast" class="secondary" type="button">Last reply</button>
-          <button id="practiceVocab" class="secondary" type="button">From our chats</button>
-          <button id="practiceRecycle" class="secondary" type="button">Say again</button>
-        </div>
-        <p class="disclaimer">
-          Optional warm-up — chat is the main thing. Play the model, then hold to repeat.
-          The score is intelligibility (what the app heard vs the target), not native accent.
-        </p>
-        <div class="practice-result" id="practiceResult" hidden>
-          <div class="meta">Intelligibility · what the app heard</div>
-          <div class="score-wrap">
-            <strong id="scoreLabel">—</strong>
-            <div class="score-bar"><div class="score-fill" id="scoreFill"></div></div>
+        <div class="practice-home" id="practiceHome">
+          <div class="meta">Practice</div>
+          <p class="practice-home-title" id="practiceHomeTitle">Say it out loud</p>
+          <p class="disclaimer" id="practiceHomeCopy">Two minutes: say a line from chat, then go back to talking.</p>
+          <div class="practice-home-actions">
+            <button id="practiceStart" type="button">Start</button>
+            <button id="practiceGoChat" class="secondary" type="button">Back to chat</button>
           </div>
-          <div class="heard"><span class="meta">Heard</span><div id="heardText"></div></div>
-          <div class="tip"><span class="meta">Tip</span><div id="tipText"></div></div>
+          <div class="practice-lines" id="practiceLines" hidden>
+            <div class="meta">You’ve said</div>
+            <div id="practiceLinesList"></div>
+            <p class="practice-lines-note">Not tappable — pick a line on Learn to practice it again.</p>
+          </div>
+        </div>
+        <div class="practice-sitting" id="practiceSitting" hidden>
+          <div class="practice-sitting-bar">
+            <div>
+              <div class="meta">Say this</div>
+              <p class="practice-speakable" id="practiceSpeakable" hidden></p>
+              <button id="practiceWhyBtn" class="secondary practice-why-btn" type="button" hidden>Why?</button>
+              <p class="practice-why" id="practiceWhy" hidden></p>
+            </div>
+            <button id="practiceBackChat" class="secondary" type="button">Back to Chat</button>
+          </div>
+          <div id="practiceLog" aria-live="polite"></div>
         </div>
       </div>
-      <div class="composer">
-        <div class="composer-status" id="practiceStatus">Ready</div>
+      <div class="composer" id="practiceComposer" hidden>
+        <div class="composer-status" id="practiceStatus">Your turn — hold and say the line</div>
         <div class="composer-actions">
-          <button id="practiceTalk" type="button">Hold to repeat</button>
+          <button id="practiceTalk" type="button">Hold to talk</button>
+        </div>
+        <div class="chat-text-row" id="practiceTextRow">
+          <input id="practiceText" type="text" maxlength="500" placeholder="Or type the line if it missed you" autocomplete="off" />
+          <button id="practiceTextSend" class="secondary" type="button">Send</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="mode" id="modeLearn">
+      <div class="practice-stage">
+        <div class="practice-home" id="learnHome">
+          <div class="meta">Learn</div>
+          <p class="practice-home-title">Pick something to say</p>
+          <p class="disclaimer" id="learnHomeCopy">Tap a line. You’ll say it in Practice, then go back to talking.</p>
+          <div class="practice-home-actions">
+            <button id="learnGoChat" class="secondary" type="button">Back to chat</button>
+          </div>
+          <div class="learn-lines" id="learnLinesList"></div>
         </div>
       </div>
     </section>
@@ -2033,15 +2261,14 @@
                 <div id="quizIntro" class="settings-searchable" data-settings-search="place me placement quiz self-assessment level start skip where you're at">
                   <div class="meta">Where you’re at</div>
                   <p class="disclaimer" id="quizIntroCopy">
-                    Tell Kaiwa where you’re at — no test, just a few self-ratings.
-                    This sets how hard chat aims (you can change speaking, listening, and goal anytime under Learning).
+                    A few questions about where you’re at — not a test. This is how Kaiwa decides how simple to keep chat.
                   </p>
                   <p class="disclaimer quiz-soft-banner" id="quizSoftBanner" hidden>
-                    Quick setup for this profile — Skip anytime. Chat still works; Kaiwa won’t assume your level until you finish.
+                    You can skip and still talk. Until you finish, Kaiwa keeps chat extra simple.
                   </p>
                   <div class="controls" style="margin-top:1rem">
                     <button id="quizStart" type="button">Start</button>
-                    <button id="quizSkip" class="secondary" type="button">Skip for now</button>
+                    <button id="quizSkip" class="secondary" type="button">Skip — keep chat simple</button>
                     <span id="quizStatus">Ready when you are</span>
                   </div>
                 </div>
@@ -2216,6 +2443,7 @@
     const chatPaceSeg = document.getElementById("chatPaceSeg");
     const turnCountEl = document.getElementById("turnCount");
     const chatTextInput = document.getElementById("chatText");
+    const chatTextRow = document.getElementById("chatTextRow");
     const chatTextSendBtn = document.getElementById("chatTextSend");
     const practiceTalkBtn = document.getElementById("practiceTalk");
     const statusEl = document.getElementById("status");
@@ -2226,12 +2454,25 @@
     const profileActiveBadge = document.getElementById("profileActiveBadge");
     const importProfileFile = document.getElementById("importProfileFile");
     const logEl = document.getElementById("log");
-    const targetTextEl = document.getElementById("targetText");
-    const practiceResultEl = document.getElementById("practiceResult");
-    const scoreLabelEl = document.getElementById("scoreLabel");
-    const scoreFillEl = document.getElementById("scoreFill");
-    const heardTextEl = document.getElementById("heardText");
-    const tipTextEl = document.getElementById("tipText");
+    const practiceHomeEl = document.getElementById("practiceHome");
+    const practiceSittingEl = document.getElementById("practiceSitting");
+    const practiceComposerEl = document.getElementById("practiceComposer");
+    const practiceLogEl = document.getElementById("practiceLog");
+    const practiceHomeTitleEl = document.getElementById("practiceHomeTitle");
+    const practiceHomeCopyEl = document.getElementById("practiceHomeCopy");
+    const practiceStartBtn = document.getElementById("practiceStart");
+    const practiceLinesEl = document.getElementById("practiceLines");
+    const practiceLinesListEl = document.getElementById("practiceLinesList");
+    const practiceSpeakableEl = document.getElementById("practiceSpeakable");
+    const practiceWhyBtn = document.getElementById("practiceWhyBtn");
+    const practiceWhyEl = document.getElementById("practiceWhy");
+    const practiceTextInput = document.getElementById("practiceText");
+    const practiceTextSendBtn = document.getElementById("practiceTextSend");
+    const composerSimplerBtn = document.getElementById("composerSimpler");
+    const chatHelpHintEl = document.getElementById("chatHelpHint");
+    const placeMeHintEl = document.getElementById("placeMeHint");
+    const learnHomeCopyEl = document.getElementById("learnHomeCopy");
+    const learnLinesListEl = document.getElementById("learnLinesList");
     const personalitySelect = document.getElementById("personalitySelect");
     const personalityDesc = document.getElementById("personalityDesc");
     const personalityCustom = document.getElementById("personalityCustom");
@@ -2270,10 +2511,7 @@
     let recordStartMs = 0;
     let recordWantsStop = false;
     let recordStarting = false;
-    let currentPhraseId = "";
-    let currentTarget = "";
-    let currentPracticeSource = "bank";
-    const targetNoteEl = document.getElementById("targetNote");
+    let practiceSittingActive = false;
     let activeTalkBtn = talkBtn;
     let activeStatusEl = statusEl;
     let correctionStyle = "gentle";
@@ -2384,6 +2622,21 @@
       return detail || fallback || "Request failed";
     }
 
+    function offerTypeRetry(detail) {
+      const msg = String(detail || "Couldn't catch that — type it below.");
+      setStatus(msg);
+      if (chatTextRow) chatTextRow.classList.add("type-retry");
+      if (chatTextInput) {
+        chatTextInput.placeholder = "Type what you meant";
+        chatTextInput.focus();
+      }
+    }
+
+    function clearTypeRetry() {
+      if (chatTextRow) chatTextRow.classList.remove("type-retry");
+      if (chatTextInput) chatTextInput.placeholder = "Or type what you meant";
+    }
+
     function looksLikeEngineError(msg) {
       const s = String(msg || "").toLowerCase();
       return (
@@ -2411,17 +2664,19 @@
 
     document.getElementById("engineAlertDismiss").addEventListener("click", clearEngineAlert);
 
-    function setMode(next) {
+    function setMode(next, opts) {
       if (next === "quiz") {
         openPlaceMe();
         return;
       }
+      const skipLoad = !!(opts && opts.skipLoad);
       mode = next;
       document.querySelectorAll(".tab").forEach((t) => {
         t.classList.toggle("active", t.dataset.mode === next);
       });
       document.getElementById("modeChat").classList.toggle("active", next === "chat");
       document.getElementById("modePractice").classList.toggle("active", next === "practice");
+      document.getElementById("modeLearn").classList.toggle("active", next === "learn");
       document.getElementById("modeSettings").classList.toggle("active", next === "settings");
       if (next === "chat") {
         activeTalkBtn = talkBtn;
@@ -2429,7 +2684,15 @@
       } else if (next === "practice") {
         activeTalkBtn = practiceTalkBtn;
         activeStatusEl = practiceStatusEl;
-        if (!currentTarget) loadNextPhrase().catch(() => {});
+        if (!skipLoad) {
+          loadPracticeToday().catch((err) => {
+            practiceStatusEl.textContent = String(err.message || err);
+          });
+        }
+      } else if (next === "learn") {
+        loadLearnToday().catch((err) => {
+          if (learnHomeCopyEl) learnHomeCopyEl.textContent = String(err.message || err);
+        });
       }
       if (next === "settings") {
         loadPrefsIntoForm({ skipPlacementOffer: true }).catch((err) => {
@@ -2589,13 +2852,14 @@
       wrap.appendChild(meta);
       wrap.appendChild(body);
       if (who !== "you") {
+        setRecastNotice(wrap, opts && opts.recastPhrase);
         const actions = document.createElement("div");
         actions.className = "bubble-actions";
         const btn = document.createElement("button");
         btn.type = "button";
         btn.className = "bubble-simpler secondary";
         btn.textContent = "Simpler";
-        btn.title = "Say that more simply";
+        btn.title = "I didn’t catch that — say it more simply";
         btn.addEventListener("click", (e) => {
           e.preventDefault();
           requestRescue(wrap, body);
@@ -2607,6 +2871,7 @@
       logEl.scrollTop = logEl.scrollHeight;
       if (who !== "you") markLastSimpler(wrap);
       updateAgainButton();
+      updateComposerSimpler();
       return { wrap, body };
     }
 
@@ -2627,6 +2892,31 @@
       });
     }
 
+    function setRecastNotice(wrap, phrase) {
+      if (!wrap) return;
+      const text = String(phrase || "").trim();
+      let el = wrap.querySelector(".recast-notice");
+      if (!text) {
+        if (el) el.remove();
+        return;
+      }
+      if (!el) {
+        el = document.createElement("div");
+        el.className = "recast-notice";
+        const actions = wrap.querySelector(".bubble-actions");
+        if (actions) wrap.insertBefore(el, actions);
+        else wrap.appendChild(el);
+      }
+      el.replaceChildren();
+      const label = document.createElement("span");
+      label.className = "recast-label";
+      label.textContent = "Notice this";
+      const phraseEl = document.createElement("span");
+      phraseEl.textContent = text;
+      el.appendChild(label);
+      el.appendChild(phraseEl);
+    }
+
     function setBubbleText(bodyEl, text) {
       if (!bodyEl) return;
       bodyEl.textContent = text || "";
@@ -2643,6 +2933,27 @@
       if (!b64) return;
       const audio = new Audio("data:audio/wav;base64," + b64);
       audio.play().catch(() => setStatus("Audio ready (allow sound if blocked)"));
+    }
+
+    function playWavBase64AndWait(b64) {
+      return new Promise((resolve) => {
+        if (!b64) {
+          resolve();
+          return;
+        }
+        const audio = new Audio("data:audio/wav;base64," + b64);
+        let settled = false;
+        const done = () => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          resolve();
+        };
+        const timer = setTimeout(done, 12000);
+        audio.addEventListener("ended", done, { once: true });
+        audio.addEventListener("error", done, { once: true });
+        audio.play().catch(done);
+      });
     }
 
     function enqueueWavBase64(b64) {
@@ -2805,7 +3116,7 @@
           }
           const ext = blobType.includes("mp4") ? "m4a" : "webm";
           if (mode === "chat") await sendTurn(blob, ext);
-          else if (mode === "practice") await sendPractice(blob, ext);
+          else if (mode === "practice") await sendSittingTurn(blob, ext);
         };
         // Timeslice so we get chunks even on short holds (helps WebView2/Edge)
         mediaRecorder.start(250);
@@ -3574,8 +3885,8 @@
       note.className = "chat-disclaimer";
       note.setAttribute("role", "note");
       note.textContent =
-        "The first reply after launch can take longer while models warm up. " +
-        "Kaiwa can misunderstand you or give wrong information — treat it as practice help, not a reliable source.";
+        "Hold to talk — say anything. Kaiwa will start in Japanese. " +
+        "The first reply after launch can take a little longer.";
       logEl.prepend(note);
     }
 
@@ -3680,7 +3991,7 @@
         const content = (m && m.content) || "";
         if (role === "user") addBubble("you", content);
         else if (role === "assistant") {
-          addBubble("bot", content);
+          addBubble("bot", content, { recastPhrase: m.recast_phrase || "" });
           lastAssistant = content;
         }
       });
@@ -3823,11 +4134,38 @@
       } catch (_) {}
     }
 
+    function updateComposerSimpler() {
+      if (!composerSimplerBtn) return;
+      const ready = Boolean(lastBotBubble());
+      composerSimplerBtn.disabled = !ready;
+      composerSimplerBtn.hidden = !ready;
+    }
+
+    function hideChatHelpHint() {
+      try {
+        sessionStorage.setItem("kaiwa_simpler_seen", "1");
+      } catch (_) {}
+      if (chatHelpHintEl) chatHelpHintEl.hidden = true;
+    }
+
+    function syncChatHelpHint() {
+      let seen = false;
+      try {
+        seen = sessionStorage.getItem("kaiwa_simpler_seen") === "1";
+      } catch (_) {}
+      if (chatHelpHintEl) chatHelpHintEl.hidden = seen;
+    }
+
+    function syncPlaceMeHint() {
+      if (placeMeHintEl) placeMeHintEl.hidden = !!placementCompleted;
+    }
+
     function updateAgainButton() {
       if (!againBtn) return;
       const ready = Boolean(lastBotBubble());
       againBtn.disabled = !ready;
       againBtn.hidden = !ready;
+      updateComposerSimpler();
     }
 
     async function startAgainChat() {
@@ -4195,6 +4533,17 @@
         setStatus(String(err.message || err));
       });
     });
+    if (composerSimplerBtn) {
+      composerSimplerBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        const wrap = lastBotBubble();
+        if (!wrap) return;
+        const body = wrap.querySelector("div:not(.meta):not(.bubble-actions):not(.recast-notice)");
+        requestRescue(wrap, body || wrap).catch((err) => {
+          setStatus(String(err.message || err));
+        });
+      });
+    }
     newChatBtn.addEventListener("click", () => {
       setMode("chat");
       startNewChat().catch((err) => {
@@ -4506,7 +4855,7 @@
           }
           addBubble("you", ev.user_text || "");
           addBubble("bot", ev.reply_text || "", {
-            betterPhrase: ev.better_phrase || null,
+            recastPhrase: ev.recast_phrase || "",
           });
           if (ev.reply_text) {
             localStorage.setItem("kaiwa_last_reply", ev.reply_text);
@@ -4592,24 +4941,17 @@
     });
 
     function formatChatStatus(data) {
-      let status = data.tts_error ? ("TTS issue — see alert above") : "Ready";
-      if (data.model_used) {
-        const modelLabel = String(data.model_used).replace(/^deepseek-v4-/, "");
-        status += " · " + modelLabel;
-      }
+      if (data.tts_error) return "Couldn’t play audio — see the note above";
+      const status = "Ready — hold to talk";
       if (data.timing && data.timing.total_ms != null) {
-        let sttLabel = String(data.timing.stt_ms);
-        if (data.timing.stt_passes != null && Number(data.timing.stt_passes) > 1) {
-          sttLabel += "×" + data.timing.stt_passes;
+        const st = document.getElementById("status");
+        if (st) {
+          st.title =
+            String(data.model_used || "") +
+            " · " +
+            data.timing.total_ms +
+            "ms";
         }
-        status += " · " + data.timing.total_ms + "ms"
-          + " (stt " + sttLabel
-          + " / llm " + data.timing.llm_ms
-          + " / tts " + data.timing.tts_ms;
-        if (data.timing.ttfa_ms != null) {
-          status += " / ttfa " + data.timing.ttfa_ms;
-        }
-        status += ")";
       }
       return status;
     }
@@ -4623,7 +4965,7 @@
       }
       addBubble("you", data.transcript);
       addBubble("bot", data.reply_text, {
-        betterPhrase: data.better_phrase || null,
+        recastPhrase: data.recast_phrase || "",
       });
       if (data.audio_base64) {
         cacheLastAudio(data.audio_base64);
@@ -4685,6 +5027,15 @@
     }
 
     async function consumeChatStream(res) {
+      const contentType = (res.headers.get("content-type") || "").toLowerCase();
+      if (contentType.includes("application/json")) {
+        const data = await res.json().catch(() => ({}));
+        if (data && data.type_retry) {
+          offerTypeRetry(data.detail);
+          return;
+        }
+        if (!res.ok) throw new Error(errorMessage(data, "Request failed"));
+      }
       let botBody = null;
       let botWrap = null;
       let gotTranscript = false;
@@ -4739,11 +5090,16 @@
             localStorage.setItem("kaiwa_last_reply", data.reply_text);
             if (botBody) setBubbleText(botBody, data.reply_text);
             else {
-              const made = addBubble("bot", data.reply_text);
+              const made = addBubble("bot", data.reply_text, {
+                recastPhrase: data.recast_phrase || "",
+              });
               botWrap = made.wrap;
             }
           }
-          if (botWrap) markLastSimpler(botWrap);
+          if (botWrap) {
+            setRecastNotice(botWrap, data.recast_phrase || "");
+            markLastSimpler(botWrap);
+          }
           if (turnChunks.length) {
             cacheLastAudioChunks(turnChunks);
           } else {
@@ -4782,7 +5138,8 @@
       const last = lastBotBubble();
       if (!last || last !== wrap) return;
       setChatBusy(true);
-      setStatus("Simplifying…");
+      setStatus("Saying that more simply…");
+      hideChatHelpHint();
       try {
         const res = await fetch("/api/rescue", {
           method: "POST",
@@ -4797,6 +5154,7 @@
         }
         if (data.reply_text) {
           setBubbleText(bodyEl, data.reply_text);
+          setRecastNotice(wrap, "");
           localStorage.setItem("kaiwa_last_reply", data.reply_text);
         }
         markLastSimpler(wrap);
@@ -4826,6 +5184,7 @@
       if (!guardDeepseekOrExplain()) return;
       setChatBusy(true);
       setStatus("Hearing…");
+      clearTypeRetry();
       const form = new FormData();
       const filename = "utterance." + (ext || "webm");
       form.append("audio", blob, filename);
@@ -4862,6 +5221,7 @@
       }
       setChatBusy(true);
       setStatus("Thinking…");
+      clearTypeRetry();
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 120000);
       try {
@@ -4898,153 +5258,336 @@
       }
     });
 
-    function setPracticeTarget(data, fallbackSource) {
-      currentPhraseId = data.phrase_id || "";
-      currentTarget = data.text || "";
-      currentPracticeSource = data.source || fallbackSource || "bank";
-      targetTextEl.textContent = currentTarget || "…";
-      const note = (data.note || "").trim();
-      if (note) {
-        targetNoteEl.hidden = false;
-        targetNoteEl.textContent = note;
+    function showPracticeHome() {
+      practiceSittingActive = false;
+      practiceHomeEl.hidden = false;
+      practiceSittingEl.hidden = true;
+      practiceComposerEl.hidden = true;
+      setPracticeSpeakable("");
+    }
+
+    function showPracticeSitting() {
+      practiceSittingActive = true;
+      practiceHomeEl.hidden = true;
+      practiceSittingEl.hidden = false;
+      practiceComposerEl.hidden = false;
+    }
+
+    function renderPracticeLines(lines) {
+      if (!practiceLinesEl || !practiceLinesListEl) return;
+      const speakables = (Array.isArray(lines) ? lines : [])
+        .map((row) => (row && row.speakable ? String(row.speakable).trim() : ""))
+        .filter(Boolean);
+      practiceLinesListEl.replaceChildren();
+      if (!speakables.length) {
+        practiceLinesEl.hidden = true;
+        return;
+      }
+      for (const line of speakables) {
+        const p = document.createElement("p");
+        p.className = "practice-line";
+        p.textContent = line;
+        practiceLinesListEl.appendChild(p);
+      }
+      practiceLinesEl.hidden = false;
+    }
+
+    function setPracticeSpeakable(text, why) {
+      if (!practiceSpeakableEl) return;
+      const line = String(text || "").trim();
+      practiceSpeakableEl.textContent = line;
+      practiceSpeakableEl.hidden = !line;
+      const reason = String(why || "").trim();
+      if (practiceWhyEl) {
+        practiceWhyEl.textContent = reason;
+        practiceWhyEl.hidden = true;
+      }
+      if (practiceWhyBtn) {
+        practiceWhyBtn.hidden = !(line && reason);
+        practiceWhyBtn.textContent = "Why?";
+      }
+    }
+
+    function addPracticeBubble(who, text) {
+      const wrap = document.createElement("div");
+      wrap.className = "bubble " + (who === "you" ? "you" : "bot");
+      const meta = document.createElement("div");
+      meta.className = "meta";
+      meta.textContent = who === "you" ? "You" : "Kaiwa";
+      const body = document.createElement("div");
+      body.textContent = text || "";
+      wrap.appendChild(meta);
+      wrap.appendChild(body);
+      practiceLogEl.appendChild(wrap);
+      practiceLogEl.scrollTop = practiceLogEl.scrollHeight;
+      return body;
+    }
+
+    function renderPracticeMessages(messages) {
+      practiceLogEl.innerHTML = "";
+      (messages || []).forEach((message) => {
+        const role = message && message.role;
+        const content = (message && message.content) || "";
+        if (!content) return;
+        addPracticeBubble(role === "user" ? "you" : "bot", content);
+      });
+    }
+
+    function applySittingDone(done) {
+      practiceTalkBtn.disabled = !!done;
+      if (practiceTextInput) practiceTextInput.disabled = !!done;
+      if (practiceTextSendBtn) practiceTextSendBtn.disabled = !!done;
+      if (done) {
+        practiceStatusEl.textContent = "Nice — back to chat";
       } else {
-        targetNoteEl.hidden = true;
-        targetNoteEl.textContent = "";
+        practiceStatusEl.textContent = "Your turn — hold and say the line";
       }
-      practiceResultEl.hidden = true;
-      practiceStatusEl.textContent = "Ready — play the model, then hold to repeat";
     }
 
-    function softBandStatus(band, score) {
-      if (band === "clear") return "Nice — that came through clearly";
-      if (band === "close") return "Close — play the model and try once more if you want";
-      if (band === "unclear") return "Tricky this time — play the model and try again whenever you like";
-      return "Ready";
-    }
-
-    async function loadPracticeSource(source) {
-      const params = new URLSearchParams({
-        source: source,
-        session_id: sessionId,
-        after_id: currentPracticeSource === source ? currentPhraseId : "",
-      });
-      const res = await fetch("/api/practice/next?" + params.toString());
-      const data = await res.json();
+    async function loadPracticeToday() {
+      const res = await fetch("/api/practice/today");
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const detail = data.detail || "Could not load a line";
-        throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+        throw new Error(errorMessage(data, "Could not load practice"));
       }
-      setPracticeTarget(data, source);
+      const minutes = data.minutes || 2;
+      practiceHomeTitleEl.textContent = "About " + minutes + " minutes";
+      const sitting = data.sitting;
+      if (sitting && sitting.done) {
+        await finishPracticeSitting();
+        return;
+      }
+      if (sitting && sitting.messages && sitting.messages.length) {
+        showPracticeSitting();
+        renderPracticeMessages(sitting.messages);
+        setPracticeSpeakable(sitting.speakable, sitting.why);
+        applySittingDone(false);
+        return;
+      }
+      showPracticeHome();
+      renderPracticeLines(data.lines);
+      practiceStartBtn.hidden = false;
+      practiceStartBtn.disabled = false;
+      if (data.fallback) {
+        practiceHomeCopyEl.textContent =
+          "Nothing from chat yet. We’ll start with a line you’ll actually use, then back to talking.";
+      } else {
+        practiceHomeCopyEl.textContent =
+          "Two minutes: say a line from chat, then go back to talking.";
+      }
     }
 
-    async function loadNextPhrase() {
-      await loadPracticeSource("bank");
-    }
-
-    async function loadLastReply() {
-      const params = new URLSearchParams({
-        source: "last_reply",
-        session_id: sessionId,
-      });
-      const res = await fetch("/api/practice/next?" + params.toString());
-      const data = await res.json();
-      if (!res.ok) {
-        const local = localStorage.getItem("kaiwa_last_reply");
-        if (local) {
-          setPracticeTarget(
-            {
-              phrase_id: "last_reply",
-              text: local.split("。")[0].trim() + (local.includes("。") ? "。" : ""),
-              source: "last_reply",
-              note: "",
-            },
-            "last_reply"
-          );
-          return;
+    async function startPracticeSitting(cardId, fromLearn) {
+      practiceStartBtn.disabled = true;
+      practiceStatusEl.textContent = "Starting…";
+      try {
+        const opts = { method: "POST", headers: {} };
+        if (cardId) {
+          opts.headers["Content-Type"] = "application/json";
+          opts.body = JSON.stringify({ card_id: String(cardId) });
         }
-        throw new Error(data.detail || "Chat a little first");
+        const res = await fetch("/api/practice/sitting/start", opts);
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(errorMessage(data, "Could not start practice"));
+        }
+        if (fromLearn) {
+          setMode("practice", { skipLoad: true });
+        }
+        showPracticeSitting();
+        setPracticeSpeakable(data.speakable, data.why);
+        if (data.messages && data.messages.length) {
+          renderPracticeMessages(data.messages);
+        } else {
+          practiceLogEl.innerHTML = "";
+          if (data.reply_text) addPracticeBubble("bot", data.reply_text);
+        }
+        if (data.audio_base64) playWavBase64(data.audio_base64);
+        if (data.tts_error && looksLikeEngineError(data.tts_error)) {
+          showEngineAlert(data.tts_error);
+        } else if (data.audio_base64) {
+          clearEngineAlert();
+        }
+        applySittingDone(!!data.done);
+      } catch (err) {
+        if (fromLearn) {
+          if (learnHomeCopyEl) learnHomeCopyEl.textContent = String(err.message || err);
+        } else {
+          showPracticeHome();
+          practiceHomeCopyEl.textContent = String(err.message || err);
+          practiceStartBtn.hidden = false;
+        }
+        throw err;
+      } finally {
+        practiceStartBtn.disabled = false;
       }
-      setPracticeTarget(data, "last_reply");
     }
 
-    async function playModel() {
-      if (!currentTarget) return;
-      practiceStatusEl.textContent = "Playing…";
-      const res = await fetch("/api/practice/speak", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: currentTarget }),
-      });
-      const data = await res.json();
+    function renderLearnLines(lines) {
+      if (!learnLinesListEl) return;
+      const rows = Array.isArray(lines) ? lines : [];
+      learnLinesListEl.replaceChildren();
+      for (const row of rows) {
+        const speakable = row && row.speakable ? String(row.speakable).trim() : "";
+        const cardId = row && row.card_id ? String(row.card_id) : "";
+        if (!speakable || !cardId) continue;
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "learn-line";
+        btn.textContent = speakable;
+        btn.addEventListener("click", () => {
+          startPracticeSitting(cardId, true).catch((err) => {
+            if (learnHomeCopyEl) learnHomeCopyEl.textContent = String(err.message || err);
+          });
+        });
+        learnLinesListEl.appendChild(btn);
+      }
+    }
+
+    async function loadLearnToday() {
+      const res = await fetch("/api/learn/today");
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const msg = errorMessage(data, "TTS failed");
-        if (looksLikeEngineError(msg)) showEngineAlert(msg);
-        throw new Error(msg);
+        throw new Error(errorMessage(data, "Could not load Learn"));
       }
-      playWavBase64(data.audio_base64);
-      clearEngineAlert();
-      practiceStatusEl.textContent = "Ready — hold to repeat";
+      if (learnHomeCopyEl) {
+        if (data.source === "starter") {
+          learnHomeCopyEl.textContent =
+            "Nothing from chat yet. Start with one of these, then go talk.";
+        } else {
+          learnHomeCopyEl.textContent =
+            "Tap a line. You’ll say it in Practice, then go back to talking.";
+        }
+      }
+      renderLearnLines(data.lines);
     }
 
-    async function sendPractice(blob, ext) {
-      if (!currentTarget) {
-        practiceStatusEl.textContent = "Pick a line first (Last reply / From our chats / Light phrase)";
+    async function finishPracticeSitting() {
+      let speakable = "";
+      try {
+        const res = await fetch("/api/practice/sitting/finish", { method: "POST" });
+        const data = await res.json().catch(() => ({}));
+        speakable = String((data && data.speakable) || "").trim();
+      } catch (_) {}
+      showPracticeHome();
+      setMode("chat");
+      if (speakable) {
+        setStatus("You just practiced 「" + speakable + "」");
+      }
+    }
+
+    async function sendSittingTurn(blob, ext) {
+      if (!practiceSittingActive || practiceTalkBtn.disabled) return;
+      practiceTalkBtn.disabled = true;
+      practiceStatusEl.textContent = "Thinking…";
+      const form = new FormData();
+      form.append("audio", blob, "utterance." + (ext || "webm"));
+      try {
+        const res = await fetch("/api/practice/sitting/turn", { method: "POST", body: form });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(errorMessage(data, "Practice failed"));
+        if (data.transcript) addPracticeBubble("you", data.transcript);
+        if (data.reply_text) addPracticeBubble("bot", data.reply_text);
+        if (data.tts_error && looksLikeEngineError(data.tts_error)) {
+          showEngineAlert(data.tts_error);
+        } else if (data.audio_base64) {
+          clearEngineAlert();
+        }
+        applySittingDone(!!data.done);
+        if (data.done) {
+          await playWavBase64AndWait(data.audio_base64);
+          await finishPracticeSitting();
+        } else if (data.audio_base64) {
+          playWavBase64(data.audio_base64);
+        }
+      } catch (err) {
+        practiceStatusEl.textContent = String(err.message || err);
+        practiceTalkBtn.disabled = false;
+        if (practiceTextSendBtn) practiceTextSendBtn.disabled = false;
+        if (practiceTextInput) practiceTextInput.disabled = false;
+      }
+    }
+
+    async function sendSittingText() {
+      if (!practiceSittingActive || practiceTalkBtn.disabled) return;
+      const text = (practiceTextInput && practiceTextInput.value || "").trim();
+      if (!text) {
+        practiceStatusEl.textContent = "Type the line, or hold and say it.";
         return;
       }
       practiceTalkBtn.disabled = true;
-      const form = new FormData();
-      form.append("audio", blob, "utterance." + (ext || "webm"));
-      form.append("target_text", currentTarget);
-      form.append("session_id", sessionId);
-      form.append("practice_source", currentPracticeSource || "bank");
+      if (practiceTextSendBtn) practiceTextSendBtn.disabled = true;
+      practiceStatusEl.textContent = "Thinking…";
       try {
-        const res = await fetch("/api/practice", { method: "POST", body: form });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.detail || "Practice failed");
-        sessionId = data.session_id;
-        localStorage.setItem("kaiwa_session_id", sessionId);
-        practiceResultEl.hidden = false;
-        const band = data.band || "";
-        const bandLabel =
-          band === "clear" ? "clear" : band === "close" ? "close" : band === "unclear" ? "a bit unclear" : band;
-        scoreLabelEl.textContent = (data.score != null ? data.score + " / 100" : "—") + (bandLabel ? " · " + bandLabel : "");
-        scoreFillEl.style.width = (data.score || 0) + "%";
-        scoreFillEl.className = "score-fill " + band;
-        heardTextEl.textContent = data.heard_text || "";
-        tipTextEl.textContent = data.tip || (data.tip_error ? "(tip unavailable)" : "");
-        practiceStatusEl.textContent = softBandStatus(band, data.score);
+        const res = await fetch("/api/practice/sitting/turn/text", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(errorMessage(data, "Practice failed"));
+        if (practiceTextInput) practiceTextInput.value = "";
+        if (data.transcript) addPracticeBubble("you", data.transcript);
+        if (data.reply_text) addPracticeBubble("bot", data.reply_text);
+        if (data.tts_error && looksLikeEngineError(data.tts_error)) {
+          showEngineAlert(data.tts_error);
+        } else if (data.audio_base64) {
+          clearEngineAlert();
+        }
+        applySittingDone(!!data.done);
+        if (data.done) {
+          await playWavBase64AndWait(data.audio_base64);
+          await finishPracticeSitting();
+        } else if (data.audio_base64) {
+          playWavBase64(data.audio_base64);
+        }
       } catch (err) {
         practiceStatusEl.textContent = String(err.message || err);
-      } finally {
         practiceTalkBtn.disabled = false;
+        if (practiceTextSendBtn) practiceTextSendBtn.disabled = false;
+        if (practiceTextInput) practiceTextInput.disabled = false;
       }
     }
 
-    document.getElementById("nextPhrase").addEventListener("click", () => {
-      loadNextPhrase().catch((err) => {
-        practiceStatusEl.textContent = String(err.message || err);
+    practiceStartBtn.addEventListener("click", () => {
+      startPracticeSitting().catch((err) => {
+        practiceHomeCopyEl.textContent = String(err.message || err);
       });
     });
-    document.getElementById("practiceLast").addEventListener("click", () => {
-      loadLastReply().catch((err) => {
-        practiceStatusEl.textContent = String(err.message || err);
-      });
+    document.getElementById("practiceGoChat").addEventListener("click", () => {
+      setMode("chat");
     });
-    document.getElementById("practiceVocab").addEventListener("click", () => {
-      loadPracticeSource("vocab").catch((err) => {
-        practiceStatusEl.textContent = String(err.message || err);
-      });
+    document.getElementById("learnGoChat").addEventListener("click", () => {
+      setMode("chat");
     });
-    document.getElementById("practiceRecycle").addEventListener("click", () => {
-      loadPracticeSource("recycle").catch((err) => {
-        practiceStatusEl.textContent = String(err.message || err);
-      });
+    document.getElementById("practiceBackChat").addEventListener("click", () => {
+      finishPracticeSitting().catch(() => setMode("chat"));
     });
-    document.getElementById("playModel").addEventListener("click", () => {
-      playModel().catch((err) => {
-        practiceStatusEl.textContent = String(err.message || err);
+    if (practiceWhyBtn) {
+      practiceWhyBtn.addEventListener("click", () => {
+        if (!practiceWhyEl) return;
+        const open = practiceWhyEl.hidden;
+        practiceWhyEl.hidden = !open;
+        practiceWhyBtn.textContent = open ? "Hide" : "Why?";
       });
-    });
+    }
+    if (practiceTextSendBtn) {
+      practiceTextSendBtn.addEventListener("click", () => {
+        sendSittingText().catch((err) => {
+          practiceStatusEl.textContent = String(err.message || err);
+        });
+      });
+    }
+    if (practiceTextInput) {
+      practiceTextInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          sendSittingText().catch((err) => {
+            practiceStatusEl.textContent = String(err.message || err);
+          });
+        }
+      });
+    }
 
     const quizStartBtn = document.getElementById("quizStart");
     const quizSkipBtn = document.getElementById("quizSkip");
@@ -5099,6 +5642,7 @@
         "";
       if (pid) activeProfileId = pid;
       quizSoftBanner.hidden = placementCompleted;
+      syncPlaceMeHint();
       if (placementCompleted) return;
       if (!forceOpen && isPlacementDismissed(activeProfileId)) return;
       openPlaceMe();
@@ -5106,7 +5650,7 @@
 
     function skipPlacement() {
       dismissPlacement(activeProfileId);
-      quizStatusEl.textContent = "Skipped — you can finish Place me anytime";
+      quizStatusEl.textContent = "Skipped. Chat stays extra simple until you finish Place me (Settings).";
       resetQuizUi();
       setMode("chat");
     }

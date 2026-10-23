@@ -59,6 +59,7 @@ def push_event(
     user_text: str,
     reply_text: str,
     better_phrase: str | None = None,
+    recast_phrase: str | None = None,
     session_id: str = "",
 ) -> int:
     with _lock:
@@ -71,6 +72,7 @@ def push_event(
                 "user_text": user_text,
                 "reply_text": reply_text,
                 "better_phrase": better_phrase or "",
+                "recast_phrase": recast_phrase or "",
             }
         )
         if len(_events) > _MAX:

@@ -227,41 +227,65 @@ Make it almost impossible for a beginner conversation to die. Pre-N5 Chat is a *
 
 - NPC / konbini / ramen scenes (after ~20 Easy turns + Rescue)
 - Per-turn “did you understand?” (Rescue is that signal)
-- N5 goal ledger / “today’s grammar” (Phase 10+)
+- Learn / N5 can-do overlay (10.6), not a Phase 8 grammar ledger
 - Full scenario catalog (still a non-goal)
 - Rebuilding Anki / SRS in Settings
 
 **Shipped beside 8.1 (not a Phase 8 slice):** prompt revision stamp + Chat **New chat** (keep memory) + LLM last-16 context — decision #115. 8.3 makes New chat a durable per-profile session object. 8.4 is the **Chats** drawer + resume (#118). 8.5 is **Again** (child session, not TTS Replay) (#119). 8.7 is after-chat leftovers (#120). 8.6 is Easy/Free + quiet turn count (#121).
 
-The live Practice tab is still Phase 1.5 (intelligibility / shadowing) until **Phase 9** ships.
+The live Practice tab is **Phase 9** (Today’s practice / Start sitting from Chat snapshots). Leftover Phase 1.5 score routes are unused by the UI.
 
 ## Phase 9 — Practice from Chat
 
-Guided sitting from Chat struggles and low-confidence moments — then back to Chat. Spec: [docs/PRACTICE.md](PRACTICE.md). Decision #127. **Not** in 1.0.4.
+Guided sitting from Chat struggles and low-confidence moments — then back to Chat. Spec: [docs/PRACTICE.md](PRACTICE.md). Decisions #127–#134. **Not** in 1.0.4. **Phase 9 complete.**
 
-Chat’s job: talk with me. Practice’s job: get comfortable saying the kinds of things I struggled with (or lacked confidence to say) in Chat. Every activity has a path back to Chat. Cards are immutable snapshots at the Chat moment — not rebuilt from extract `grammar_add`. Home is **Today’s practice / Start**, not category tiles. Sittings are tiny guided conversations around one struggle (3–5 Easy-shaped turns), not LLM roleplay catalogs.
+Chat’s job: talk with me. Practice’s job: get comfortable saying the kinds of things I struggled with (or lacked confidence to say) in Chat. Practice reinforces existing knowledge; it does not introduce new material. Every activity has a path back to Chat. Cards are immutable snapshots at the Chat moment. Home is **Today’s practice / Start**, not category tiles. Live sittings (10.3) are say-this plus one tiny exchange around one struggle, not a second Easy Chat, not LLM roleplay catalogs. Content originates from Chat; generic curriculum is fallback only (9.8), never the primary source.
 
 | Slice | Status | Goal |
 |-------|--------|------|
-| **9.1** Snapshot struggle cards | [ ] | Write cards when Chat shows struggle or low confidence (corrections, Simpler, help, freeze, one-word, English switch, abandoned idea). Speakable Japanese + hidden tags. Immutable snapshot. |
-| **9.2** Session shell | [ ] | Today’s practice / about N minutes / **Start** / back to Chat. No phrase-bank toolbox. No intelligibility % as the product. |
-| **9.3** Tiny guided conversations | [ ] | 3–5 Easy-shaped turns around one card, then stop. No new grammar. No konbini catalog. |
+| **9.1** Snapshot struggle cards | [x] | Write cards from Simpler, help requests, and struggling turns. Immutable snapshot. |
+| **9.2** Session shell | [x] | Today’s practice / about N minutes / **Start** / back to Chat. No phrase-bank toolbox. No intelligibility % as the product. |
+| **9.3** Tiny guided conversations | [x] | 3–5 Easy-shaped turns around one card, then stop. No new grammar. No konbini catalog. |
+| **9.4** Speakable Japanese | [x] | User sees the line (`コーヒーが飲めます。`). Why? deferred. Tags stay hidden. |
+| **9.5** Conservative low-confidence cards | [x] | Repeated minimal answers that look like lack of confidence (not natural `はい。` / `パスタ。`); abandoned or rephrased after an unsuccessful attempt; English without asking. |
+| **9.6** Freeze / empty | [x] | Freeze, empty, I don’t know how to say… Survival lines as cards when they froze — not a home tile. |
+| **9.7** Meaningful corrections | [x] | を好き → が好き from Chat, not speech-recognition typos, not tutor-memory extract. |
+| **9.8** Empty-state fallback | [x] | Canned survival/Easy sitting only when there is no unused Chat card; never the primary source. Not JSONL. Recycle fallbacks only. |
 
-**Priority**
-
-1. 9.1 Snapshot struggle cards
-2. 9.2 Session shell
-3. 9.3 Tiny guided conversations
-4. Nothing else until cards have fuel
+Hesitation wall-clock stays out of Phase 9.
 
 **Out of Phase 9**
 
 - Conversation / shadow-recent-Kaiwa as a home peer (Again / Replay / history)
 - Grammar-name navigation (Particles, Potential, …)
 - Pronunciation, dictation, SRS/XP
-- N5 goal ledger (Phase 10+)
+- N5 can-do overlay / Learn (10.6), not Practice tiles
 - Listening / Review tiles as home navigation (hear-and-answer may happen inside a sitting)
+- Treating natural short answers as struggle
 
-## Phase 10+ (later)
+## Phase 10 — Acquisition loop
 
-- N5 goal ledger / “today’s grammar”
+Kaiwa teaches the smallest useful thing that helps the learner communicate, then returns them to communication. Spec: [docs/LEARNING_LOOP.md](LEARNING_LOOP.md). Decision #136. **Not** in 1.0.4.
+
+Comprehensibility-first does not mean skip the recast. Reactive path: Chat → recast → notice → Practice → Chat. Proactive path (10.6 only): Learn → Practice → Chat. Learn is not a prerequisite for Practice. **Do 10.1–10.4 before any Learn tab.**
+
+| Slice | Status | Proves |
+|-------|--------|--------|
+| **10.1** Chat recasts | [x] | Kaiwa models useful corrections in the spoken reply (splice if retry misses; を→が + 眠り/眠い). Unblocks 9.7 cards. `PROMPT_REVISION` **10**. No grammar names. |
+| **10.2** Recast notice | [x] | The user can notice the model (**Notice this** caption of the same phrase — not live `TRY:`, not 助詞). |
+| **10.3** Practice as rehearsal | [x] | Say-this + one tiny exchange, then Chat. Cap 2. Same home (Today’s practice / Start). Not a Chat clone. |
+| **10.4** Loop integrity | [x] | Recast → snapshot → sitting → Chat after wrap TTS; next Chat turn can elicit the line once. Fallback 9.8 stays secondary. |
+| **10.5** Your lines | [x] | Practice home **Things you can say** from used sittings. Cap 5. No tap. Not N5 %. |
+| **10.6** Learn | [x] | Learn tab queues existing Practice sittings from clustered Chat lines, or canned starters if none. Then Practice → Chat. Not Genki tiles. |
+
+**Priority:** 10.1 → 10.2 → 10.3 → 10.4 → 10.5 → 10.6.
+
+**Out of Phase 10**
+
+- Practice as the main menu
+- Genki / Bunpro / category tiles
+- Live Chat `TRY:`
+- XP / SRS
+- Rebuilding from extract `grammar_add`
+- Predetermined lesson catalog as the primary source
+- Treating a line list as N5 progress

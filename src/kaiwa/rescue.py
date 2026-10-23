@@ -14,6 +14,7 @@ RescueStep = str  # "shorter" | "yes_no" | "ab"
 
 _AB_RE = re.compile(r"それとも|どっち")
 _Q_RE = re.compile(r"[？?]")
+_WH_RE = re.compile(r"(何|なに|どれ|誰|だれ|どこ|いつ)")
 
 _STEP_GUIDE = {
     "shorter": "同じ話題で、考えは1つ。短く言い直す。新しい考えは足さない。",
@@ -32,10 +33,12 @@ def looks_like_ab(text: str) -> bool:
 
 
 def looks_like_yes_no(text: str) -> bool:
-    """Short single question that is not already A/B or packed."""
+    """Short single yes/no question that is not already A/B or packed."""
     if looks_like_ab(text):
         return False
     if reply_too_dense(text):
+        return False
+    if _WH_RE.search(text or ""):
         return False
     if not _Q_RE.search(text or ""):
         return False
@@ -45,12 +48,12 @@ def looks_like_yes_no(text: str) -> bool:
 
 
 def next_rescue_step(reply: str) -> RescueStep:
-    """Target form for this rewrite: packed → shorter → yes/no → A/B."""
+    """Target form: packed → shorter; already yes/no stays shorter; open → yes/no; A/B last."""
     if looks_like_ab(reply):
         return "ab"
-    if looks_like_yes_no(reply):
-        return "ab"
     if reply_too_dense(reply):
+        return "shorter"
+    if looks_like_yes_no(reply):
         return "shorter"
     return "yes_no"
 

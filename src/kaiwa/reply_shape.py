@@ -15,9 +15,12 @@ from typing import Any
 _SENTENCE_END_RE = re.compile(r"[。！？!?\n]")
 # 話せば / すれば / 行けば / 食べれば / なければ — not bare ば (こんばんは).
 _HIGH_LOAD_BA_RE = re.compile(r"[れけせえべ]ば")
-_TARA_RE = re.compile(r"たら")
+# 来たら — not あたらしい / あたらない.
+_TARA_RE = re.compile(r"(?<!あ)たら")
 _NARA_RE = re.compile(r"なら(?!ない)")
-_OPEN_PIVOT_RE = re.compile(r"どうした|何をしました|予定")
+_SAYONARA_RE = re.compile(r"さようなら|さよなら")
+_OPEN_NARRATIVE_RE = re.compile(r"どうした|何をしました|何した")
+_YOTEI_QUESTION_RE = re.compile(r"予定[^。．.！!]*[？?]")
 _CONNECTIVE_RE = re.compile(r"(でも|だけど|それから|そして)")
 _JP_CHAR_RE = re.compile(r"[\u3040-\u30ff\u3400-\u9fff]")
 # Function bigrams that would make "reuse" always true.
@@ -75,7 +78,7 @@ def sentence_count(text: str) -> int:
 
 def has_high_load(text: str) -> bool:
     """True if a high-load construction is present (log field: conditional)."""
-    raw = text or ""
+    raw = _SAYONARA_RE.sub("", text or "")
     if _HIGH_LOAD_BA_RE.search(raw):
         return True
     if _TARA_RE.search(raw):
@@ -86,7 +89,10 @@ def has_high_load(text: str) -> bool:
 
 
 def has_open_question(text: str) -> bool:
-    return bool(_OPEN_PIVOT_RE.search(text or ""))
+    raw = text or ""
+    if _OPEN_NARRATIVE_RE.search(raw):
+        return True
+    return bool(_YOTEI_QUESTION_RE.search(raw))
 
 
 def has_extra_idea(text: str) -> bool:

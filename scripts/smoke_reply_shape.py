@@ -15,7 +15,12 @@ from kaiwa.learner_profile import LearnerProfile
 from kaiwa.persona import (
     PROMPT_REVISION,
     build_tutor_system_prompt,
+    elicit_hint_block,
     governor_pitch,
+    infer_help_type,
+    infer_learner_state,
+    this_turn_keep_form_block,
+    recast_hint_block,
     shape_lock_active,
 )
 from kaiwa.prefs import UserPrefs, validate_prefs_dict
@@ -50,10 +55,18 @@ def main() -> None:
     _check(has_high_load("ゆっくり話せばだいじょうぶですよ"), "hanaseba is high-load")
     _check(not has_high_load("ならない"), "naranai is not high-load")
     _check(not has_high_load("こんばんは"), "konbanwa is not high-load")
+    _check(not has_high_load("あたらしい"), "atarashii is not たら")
+    _check(not has_high_load("さようなら"), "sayounara is not なら")
+    _check(not has_high_load("さよなら"), "sayonara is not なら")
+    _check(has_high_load("来たら"), "kitara is high-load")
+    _check(not reply_too_dense("映画の予定だね。"), "yotei statement is not an open pivot")
+    _check(not reply_too_dense("予定ないよ。"), "yotei nai statement is not an open pivot")
+    _check(reply_too_dense("今日の予定は？"), "yotei question is an open pivot")
 
     _check(not reply_too_dense("こんにちは！元気？"), "konnichiwa genki is one idea")
     _check(not reply_too_dense("そうなんだ。猫好き？"), "sou-nanda neko-suki is one idea")
     _check(not reply_too_dense("元気だよ!あなたは?"), "genki da yo anata wa is not dense")
+    _check(reply_too_dense("今日は何したの？"), "nani-shita-no is an open pivot")
 
     _check(
         reused_user_vocab("猫好きです", "そうなんだ。猫好き？"),
@@ -123,6 +136,83 @@ def main() -> None:
     _check("はい／いいえ" not in prompt, "locked Easy is not a yes/no survey")
     _check("次の番が続く" in prompt, "locked Easy leaves next-turn affordance")
     _check("開き質問" in prompt, "locked prompt bans open narrative questions")
+    _check("何したの" in prompt, "locked prompt bans casual 何したの")
+    _check("今、ひま？" in prompt, "locked prompt models an easy greeting hook")
+    _check("コーヒーが好きなんだね" in prompt, "hierarchy requires recast-in-speech")
+    _check("認めるだけで直さない" in prompt, "forgiving without a model is the miss")
+    _check("性格は声の味" in prompt, "personality does not outrank learning")
+    _check("話し相手が先" not in prompt, "partner-first does not veto recasts")
+    _check("[recast]" not in prompt, "plain neko-suki does not inject recast hint")
+
+    recast_prompt = build_tutor_system_prompt(
+        prefs_pre, last_user_text="コーヒーを好きです", profile=pre
+    )
+    _check("[recast]" in recast_prompt, "wo-suki injects recast hint")
+    _check("を好き" in recast_prompt, "recast hint names the miss")
+    _check("が好き" in recast_prompt, "recast hint names the model form")
+    _check("[this_turn]" in recast_prompt and "が好き" in recast_prompt, "recast turn keeps が好き")
+    _check("今ターンはからかわない" in recast_prompt, "recast turn forbids roast")
+    _check("[recast]" in recast_hint_block("コーヒーを好きです"), "hint helper for wo-suki")
+    _check(recast_hint_block("猫好きです") == "", "hint helper empty without を")
+    sleepy_hint = recast_hint_block("今日は眠りです", "眠い？")
+    _check("[recast]" in sleepy_hint, "nemuri injects recast hint")
+    _check("眠い" in sleepy_hint, "nemuri hint names 眠い")
+    _check("[elicit]" in elicit_hint_block("コーヒーが好きです。"), "elicit helper after practice")
+    _check(elicit_hint_block("") == "", "empty elicit is silent")
+    elicit_hint = elicit_hint_block("コーヒーが好きです。")
+    _check("その全文を先に口に出さない" in elicit_hint, "elicit forbids speaking the rehearsed line")
+    _check("口頭で先にその形を短く使ってよい" not in elicit_hint, "elicit does not pre-say the form")
+    _check("今ターンはからかわない" in elicit_hint, "elicit turn forbids roast")
+    _check("何が好き？" in elicit_hint, "elicit models a hook not 好き？")
+    _check(
+        this_turn_keep_form_block("", elicit_line="コーヒーが好きです。") == "",
+        "elicit does not force the rehearsed line into this_turn",
+    )
+    elicit_prompt = build_tutor_system_prompt(
+        prefs_pre, last_user_text="はい。", elicit_line="コーヒーが好きです。", profile=pre
+    )
+    _check("[elicit]" in elicit_prompt, "Chat prompt injects elicit")
+    _check("その全文を先に口に出さない" in elicit_prompt, "Chat elicit is ask-not-say")
+    _check("今ターンはからかわない" in elicit_prompt, "Chat elicit forbids roast")
+
+    _check(
+        infer_learner_state("はい", "コーヒー、好き？") == "flowing",
+        "hai to a question is flowing",
+    )
+    _check(
+        infer_learner_state("はい。", "今日は何したの？") == "struggling",
+        "hai to a WH question is not a fake success",
+    )
+    _check(
+        infer_learner_state("好き", "コーヒー、好き？") == "flowing",
+        "suki to suki-question is flowing",
+    )
+    _check(
+        infer_learner_state("パスタ", "何が好き？") == "flowing",
+        "noun answer to WH is flowing",
+    )
+    _check(
+        infer_help_type("すみません眠りわからない") == "vocabulary",
+        "nemuri-wakaranai is vocabulary not collapse",
+    )
+    _check(infer_help_type("わかりません") == "comprehension", "polite wakaremasen is help")
+    _check(infer_help_type("どういう意味") == "vocabulary", "bare douiu-imi is vocabulary")
+    _check(
+        infer_help_type("日本語でわからない") == "comprehension",
+        "nihongo-de-wakaranai is collapse not vocab",
+    )
+    _check(infer_help_type("わからない") == "comprehension", "bare wakaranai is collapse")
+    _check(
+        infer_help_type("全然わからない") == "comprehension",
+        "zenzen wakaranai stays collapse",
+    )
+
+    critique_prefs = UserPrefs(goal_level="pre_n5", correction_style="critique")
+    critique_prompt = build_tutor_system_prompt(
+        critique_prefs, last_user_text="猫好きです", profile=pre
+    )
+    _check("ごく短い理由" not in critique_prompt, "critique is not a 3-step lecture")
+    _check("三段講義" in critique_prompt, "critique forbids lecture form")
 
     free_prefs = UserPrefs(goal_level="pre_n5", chat_pace="free")
     free_prompt = build_tutor_system_prompt(
@@ -130,7 +220,7 @@ def main() -> None:
     )
     _check("考えは1つ" not in free_prompt, "free prompt is not gym-locked")
 
-    _check(PROMPT_REVISION == 4, "prompt revision is 4")
+    _check(PROMPT_REVISION == 10, "prompt revision is 10")
     empty_prompt = build_tutor_system_prompt(prefs_pre, profile=pre)
     _check("名前・身元の固定ルール" in empty_prompt, "identity names block present")
     _check("自分は「会話（Kaiwa / カイワ）」" in empty_prompt, "self name is Kaiwa")

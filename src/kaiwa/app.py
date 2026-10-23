@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -27,6 +27,10 @@ from kaiwa.personalities_store import (
     update_user_preset,
 )
 from kaiwa.practice import next_phrase, score_intelligibility
+from kaiwa.practice.cards import last_assistant_line, maybe_write_card
+from kaiwa.wo_ga import recast_phrase, with_recast_notices
+from kaiwa.practice import sitting as practice_sitting
+from kaiwa.practice import learn as practice_learn
 from kaiwa.prefs import load_prefs, save_prefs, validate_prefs_dict
 from kaiwa.reply_shape import analyze_reply_shape
 from kaiwa import ptt_events
@@ -78,13 +82,6 @@ def _refresh_settings() -> None:
     settings.sessions_dir.mkdir(parents=True, exist_ok=True)
 
 
-def _preferred_name_for_stt() -> str:
-    try:
-        return (load_memory().comfort.preferred_name or "").strip()
-    except Exception:
-        return ""
-
-
 def _require_deepseek_key() -> None:
     if not get_settings().deepseek_api_key.strip():
         raise HTTPException(
@@ -105,9 +102,17 @@ CHAT_LLM_HISTORY = 16
 
 
 def _llm_messages(history: list[dict[str, str]]) -> list[dict[str, str]]:
-    if len(history) <= CHAT_LLM_HISTORY:
-        return history
-    return history[-CHAT_LLM_HISTORY:]
+    """Role + content only — never send hydrate flags (rescue) to the LLM."""
+    slim = [
+        {
+            "role": str(message.get("role") or ""),
+            "content": str(message.get("content") or ""),
+        }
+        for message in history
+    ]
+    if len(slim) <= CHAT_LLM_HISTORY:
+        return slim
+    return slim[-CHAT_LLM_HISTORY:]
 
 
 def _known_profile_ids() -> set[str]:
@@ -171,6 +176,56 @@ def _append_session(sid: str, record: dict[str, Any], *, kind: str) -> None:
         bump_turns=(kind == "chat"),
         title_hint=title,
     )
+
+
+def _snapshot_struggle_card(
+    sid: str,
+    history: list[dict[str, str]],
+    *,
+    learner_state: str,
+    transcript: str,
+    reply: str,
+    better_phrase: str | None,
+    rescue: bool = False,
+) -> None:
+    maybe_write_card(
+        session_id=sid,
+        history=history,
+        learner_state=learner_state,
+        transcript=transcript,
+        reply=reply,
+        better_phrase=better_phrase,
+        rescue=rescue,
+    )
+
+
+def _snapshot_empty_stt_freeze(sid: str) -> None:
+    """Card a real-length empty Whisper clip. Does not append a fake user line."""
+    history = session_store.ensure_ram(_sessions, settings.sessions_dir, sid)
+    last = last_assistant_line(history)
+    if not last:
+        return
+    maybe_write_card(
+        session_id=sid,
+        history=history,
+        learner_state="flowing",
+        transcript="",
+        reply=last,
+        better_phrase="えっと…",
+    )
+
+
+def _unheard_chat_response(
+    sid: str,
+    stt_meta: dict[str, Any] | None,
+    *,
+    snapshot_freeze: bool = True,
+    detail: str | None = None,
+) -> JSONResponse:
+    """Empty Chat clip: optional freeze card, then type-retry JSON. No fake tutor turn."""
+    if snapshot_freeze and stt.empty_transcript_is_freeze(stt_meta):
+        _snapshot_empty_stt_freeze(sid)
+    return JSONResponse(stt.unheard_chat_payload(stt_meta, detail=detail))
 
 
 @app.on_event("startup")
@@ -819,6 +874,10 @@ class RescueBody(BaseModel):
     session_id: str = ""
 
 
+class SittingTurnBody(BaseModel):
+    text: str = ""
+
+
 @app.post("/api/chat/new")
 def chat_new(body: ChatNewBody) -> dict[str, Any]:
     """Start a new durable chat. Keeps profile memory and the old JSONL."""
@@ -857,7 +916,8 @@ def get_chat_session(session_id: str) -> dict[str, Any]:
         raise HTTPException(
             status_code=409, detail="session belongs to another profile"
         )
-    return {**meta.to_dict(), "messages": session_store.hydrate(settings.sessions_dir, sid)}
+    messages = session_store.hydrate(settings.sessions_dir, sid, mark_rescue=True)
+    return {**meta.to_dict(), "messages": with_recast_notices(messages)}
 
 
 @app.get("/api/sessions/{session_id}/leftovers")
@@ -1083,6 +1143,15 @@ async def rescue_turn(body: RescueBody) -> dict[str, Any]:
         },
         kind="rescue",
     )
+    _snapshot_struggle_card(
+        sid,
+        history,
+        learner_state="help_request",
+        transcript="",
+        reply=reply,
+        better_phrase=better_phrase,
+        rescue=True,
+    )
 
     return {
         "session_id": sid,
@@ -1112,7 +1181,7 @@ async def turn(
     sid = _resolve_session(session_id.strip())
     raw = await audio.read()
     if not raw:
-        raise HTTPException(status_code=400, detail="Empty audio upload")
+        return _unheard_chat_response(sid, None, snapshot_freeze=False)
 
     suffix = Path(audio.filename or "utterance.webm").suffix or ".webm"
     t0 = time.perf_counter()
@@ -1123,16 +1192,17 @@ async def turn(
             raw,
             suffix,
             mode="chat",
-            preferred_name=_preferred_name_for_stt(),
         )
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return _unheard_chat_response(
+            sid, None, snapshot_freeze=False, detail=str(exc)
+        )
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"STT failed: {exc}") from exc
     stt_ms = int((time.perf_counter() - t0) * 1000)
 
     if not transcript:
-        raise HTTPException(status_code=400, detail="Could not hear any speech")
+        return _unheard_chat_response(sid, stt_meta)
 
     return await _run_chat_turn(
         sid,
@@ -1197,7 +1267,7 @@ def _stream_chat_events(
     prefs = load_prefs()
     profile = load_profile()
     memory = load_memory()
-    learner_state = infer_learner_state(transcript)
+    learner_state = infer_learner_state(transcript, last_assistant_line(history))
     profile = apply_chat_signals(profile, learner_state, transcript)
     save_profile(profile)
 
@@ -1313,6 +1383,7 @@ def _stream_chat_events(
     reply, better_phrase = split_try_phrase(reply)
     if not reply.strip():
         reply = better_phrase or "うん。"
+    prompt_line = last_assistant_line(history)
     history.append({"role": "assistant", "content": reply})
     reply_shape = analyze_reply_shape(
         reply=reply,
@@ -1369,6 +1440,15 @@ def _stream_chat_events(
         },
         kind="chat",
     )
+    _snapshot_struggle_card(
+        sid,
+        history,
+        learner_state=learner_state,
+        transcript=transcript,
+        reply=reply,
+        better_phrase=better_phrase,
+    )
+    practice_sitting.consume_pending_elicit()
 
     yield _sse_pack(
         "final",
@@ -1377,6 +1457,9 @@ def _stream_chat_events(
             "transcript": transcript,
             "reply_text": reply,
             "better_phrase": better_phrase,
+            "recast_phrase": recast_phrase(
+                transcript, reply, last_assistant=prompt_line
+            ),
             "tts_error": tts_error,
             "learner_state": learner_state,
             "speaking_level": profile.speaking_level,
@@ -1404,11 +1487,11 @@ def _sse_response(events: Iterator[str]) -> StreamingResponse:
 async def turn_stream(
     audio: UploadFile = File(...),
     session_id: str = Form(default=""),
-) -> StreamingResponse:
+) -> Response:
     sid = _resolve_session(session_id.strip())
     raw = await audio.read()
     if not raw:
-        raise HTTPException(status_code=400, detail="Empty audio upload")
+        return _unheard_chat_response(sid, None, snapshot_freeze=False)
 
     suffix = Path(audio.filename or "utterance.webm").suffix or ".webm"
     t0 = time.perf_counter()
@@ -1419,16 +1502,17 @@ async def turn_stream(
             raw,
             suffix,
             mode="chat",
-            preferred_name=_preferred_name_for_stt(),
         )
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return _unheard_chat_response(
+            sid, None, snapshot_freeze=False, detail=str(exc)
+        )
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"STT failed: {exc}") from exc
     stt_ms = int((time.perf_counter() - t0) * 1000)
 
     if not transcript:
-        raise HTTPException(status_code=400, detail="Could not hear any speech")
+        return _unheard_chat_response(sid, stt_meta)
 
     return _sse_response(
         _stream_chat_events(sid, transcript, stt_ms=stt_ms, stt_meta=stt_meta)
@@ -1496,7 +1580,7 @@ async def _run_chat_turn(
     prefs = load_prefs()
     profile = load_profile()
     memory = load_memory()
-    learner_state = infer_learner_state(transcript)
+    learner_state = infer_learner_state(transcript, last_assistant_line(history))
     # Persist streak/signals before LLM; defer assess off the critical path.
     profile = apply_chat_signals(profile, learner_state, transcript)
     save_profile(profile)
@@ -1524,6 +1608,7 @@ async def _run_chat_turn(
     if not reply.strip():
         # Model only emitted TRY: — keep a minimal spoken fallback
         reply = better_phrase or "うん。"
+    prompt_line = last_assistant_line(history)
     history.append({"role": "assistant", "content": reply})
     reply_shape = analyze_reply_shape(
         reply=reply,
@@ -1605,12 +1690,23 @@ async def _run_chat_turn(
         },
         kind="chat",
     )
+    _snapshot_struggle_card(
+        sid,
+        history,
+        learner_state=learner_state,
+        transcript=transcript,
+        reply=reply,
+        better_phrase=better_phrase,
+    )
 
+    notice = recast_phrase(transcript, reply, last_assistant=prompt_line)
+    practice_sitting.consume_pending_elicit()
     if client_source == "ptt":
         ptt_events.push_event(
             user_text=transcript,
             reply_text=reply,
             better_phrase=better_phrase,
+            recast_phrase=notice,
             session_id=sid,
         )
 
@@ -1619,6 +1715,7 @@ async def _run_chat_turn(
         "transcript": transcript,
         "reply_text": reply,
         "better_phrase": better_phrase,
+        "recast_phrase": notice,
         "audio_base64": audio_b64,
         "audio_mime": "audio/wav",
         "tts_error": tts_error,
@@ -1629,6 +1726,189 @@ async def _run_chat_turn(
         "memory_updated": False,
         "timing": timing,
     }
+
+
+async def _sitting_tts(reply: str) -> tuple[str, str | None]:
+    prefs = load_prefs()
+    try:
+        wav = await asyncio.to_thread(
+            tts.synthesize,
+            settings,
+            reply,
+            speaker_id=prefs.voicevox_speaker_id,
+            engine=prefs.tts_engine,
+        )
+        return base64.b64encode(wav).decode("ascii"), None
+    except Exception as exc:
+        return "", str(exc)
+
+
+async def _sitting_generate(sitting: dict[str, Any], *, opening: bool) -> dict[str, Any]:
+    card = sitting.get("card") or {}
+    remaining = practice_sitting.remaining_learner_turns(sitting)
+    wrap = bool(sitting.get("done")) or remaining <= 0
+    try:
+        gen = await asyncio.to_thread(
+            llm.practice_sitting,
+            settings,
+            list(sitting.get("messages") or []),
+            card,
+            remaining_turns=remaining,
+            opening=opening,
+            wrap=wrap,
+            prefs=load_prefs(),
+            memory=load_memory(),
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"LLM failed: {exc}") from exc
+    reply = clean_reply_for_speech(gen.reply)
+    if not reply.strip():
+        reply = "うん。"
+    practice_sitting.append_tutor_turn(sitting, reply)
+    if wrap:
+        sitting["done"] = True
+    practice_sitting.persist_sitting(sitting)
+    audio_b64, tts_error = await _sitting_tts(reply)
+    return {
+        "sitting_id": sitting.get("id"),
+        "card_id": sitting.get("card_id"),
+        "reply_text": reply,
+        "audio_base64": audio_b64,
+        "audio_mime": "audio/wav",
+        "tts_error": tts_error,
+        "learner_turns": int(sitting.get("learner_turns") or 0),
+        "max_turns": practice_sitting.MAX_LEARNER_TURNS,
+        "remaining_turns": practice_sitting.remaining_learner_turns(sitting),
+        "done": bool(sitting.get("done")),
+        "messages": list(sitting.get("messages") or []),
+        "speakable": practice_sitting.sitting_speakable(sitting),
+        "why": (practice_sitting.public_sitting(sitting) or {}).get("why") or "",
+        "model_used": gen.model,
+    }
+
+
+@app.get("/api/practice/today")
+def practice_today() -> dict[str, Any]:
+    return practice_sitting.today_payload()
+
+
+@app.get("/api/learn/today")
+def learn_today() -> dict[str, Any]:
+    return practice_learn.today_payload()
+
+
+@app.post("/api/practice/sitting/start")
+async def practice_sitting_start(request: Request) -> dict[str, Any]:
+    _require_deepseek_key()
+    card_id = ""
+    try:
+        raw = await request.json()
+    except Exception:
+        raw = None
+    if isinstance(raw, dict):
+        cid = raw.get("card_id")
+        if isinstance(cid, str):
+            card_id = cid.strip()
+    try:
+        sitting = practice_sitting.start_sitting(card_id=card_id or None)
+    except LookupError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail="That line is not available.",
+        ) from exc
+    if sitting.get("messages"):
+        audio_b64 = ""
+        tts_error = None
+        last = ""
+        for message in reversed(list(sitting.get("messages") or [])):
+            if message.get("role") == "assistant":
+                last = str(message.get("content") or "").strip()
+                break
+        if last:
+            audio_b64, tts_error = await _sitting_tts(last)
+        return {
+            "sitting_id": sitting.get("id"),
+            "card_id": sitting.get("card_id"),
+            "reply_text": last,
+            "audio_base64": audio_b64,
+            "audio_mime": "audio/wav",
+            "tts_error": tts_error,
+            "transcript": "",
+            "learner_turns": int(sitting.get("learner_turns") or 0),
+            "max_turns": practice_sitting.MAX_LEARNER_TURNS,
+            "remaining_turns": practice_sitting.remaining_learner_turns(sitting),
+            "done": bool(sitting.get("done")),
+            "messages": list(sitting.get("messages") or []),
+            "speakable": practice_sitting.sitting_speakable(sitting),
+            "why": (practice_sitting.public_sitting(sitting) or {}).get("why") or "",
+            "resumed": True,
+        }
+    payload = await _sitting_generate(sitting, opening=True)
+    payload["transcript"] = ""
+    payload["resumed"] = False
+    return payload
+
+
+async def _practice_sitting_turn_text(transcript: str) -> dict[str, Any]:
+    _require_deepseek_key()
+    text = (transcript or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Could not hear any speech")
+    try:
+        sitting = practice_sitting.require_active()
+    except LookupError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail="Start today's practice first.",
+        ) from exc
+    practice_sitting.append_learner_turn(sitting, text)
+    try:
+        payload = await _sitting_generate(sitting, opening=False)
+    except HTTPException:
+        messages = sitting.get("messages") or []
+        if messages and messages[-1].get("role") == "user":
+            messages.pop()
+        sitting["learner_turns"] = max(0, int(sitting.get("learner_turns") or 1) - 1)
+        sitting["done"] = False
+        raise
+    payload["transcript"] = text
+    return payload
+
+
+@app.post("/api/practice/sitting/turn")
+async def practice_sitting_turn(
+    audio: UploadFile = File(...),
+) -> dict[str, Any]:
+    raw = await audio.read()
+    if not raw:
+        raise HTTPException(status_code=400, detail="Empty audio upload")
+    suffix = Path(audio.filename or "utterance.webm").suffix or ".webm"
+    try:
+        spoken, _stt_meta = await asyncio.to_thread(
+            stt.transcribe_audio_bytes,
+            settings,
+            raw,
+            suffix,
+            mode="ja",
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"STT failed: {exc}") from exc
+    spoken = (spoken or "").strip()
+    if not spoken:
+        raise HTTPException(status_code=400, detail="Could not hear any speech")
+    return await _practice_sitting_turn_text(spoken)
+
+
+@app.post("/api/practice/sitting/turn/text")
+async def practice_sitting_turn_text(body: SittingTurnBody) -> dict[str, Any]:
+    return await _practice_sitting_turn_text(body.text)
+
+
+@app.post("/api/practice/sitting/finish")
+def practice_sitting_finish() -> dict[str, Any]:
+    return practice_sitting.finish_sitting()
 
 
 @app.get("/api/practice/next")

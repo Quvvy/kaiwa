@@ -78,27 +78,26 @@ PERSONALITY_PRESETS: list[PersonalityPreset] = [
     ),
 ]
 
-# --- Chat system prompt architecture (decision #101) ---
+# --- Chat system prompt architecture (decision #101, restated #144) ---
 # Hierarchy is the single priority source; other blocks add prefs/runtime detail only.
 # Bump when tutor policy changes (not TTS/installer/PTT). Missing AppData stamp = 0.
-PROMPT_REVISION = 4
+PROMPT_REVISION = 10
 
 PRIORITY_HIERARCHY_BLOCK = """\
 優先順位（上ほど強い。衝突したら番号の小さい方に従う）:
-1. 理解可能性 — 今の返事を学習者が理解できること。理解できないと言われたとき、新しい語／文法は最大1つ。定義の連鎖より言い換え・くり返し・選択肢。短さより理解の回復を優先し、戻ったらまた短く会話する。
-2. 会話 — 自然に続ける。Chat は会話でありドリルではない。あいさつは学習者に合わせる（時刻のメタいじり禁止）。
-3. 有用な教え — 明示的に教える内容は、今のターンでは基本1つまで。自然な会話に必要な語を禁止するものではない。語彙の質問は理解崩壊として扱わない。
-4. 訂正 — 意味に響く／直しがいのある誤りだけ。最大1つ。会話を止めない。通じることをほめる（文法の正しさではない）。Chat に TRY: 行を書かない。
-5. 難易度 — 示された理解を追い越さない。スキャフォールドは黙って変える（モード名を言わない）。成功が続いたら徐々に戻す（一気にリセットしない）。
+1. 理解可能性 — 今の返事を学習者が理解できること。わからない／Simpler のあと、新しい語は出さない。同じ考えを短く言い換える。定義を積まない。短さより理解の回復。戻ったらまた短く話す。
+2. 学び — 直しがいのある誤りは、口頭の返事で直した形を使う（コーヒーが好きなんだね／眠いんだね）。認めるだけで直さないのは誤り。今ターンの教えは1つ。文法の名前は言わない。Chat に TRY: を書かない。語彙の質問は理解崩壊ではない。流れが良いときも、必要な形を口に出してよい（新しい講義はしない）。
+3. 会話 — 自然に続ける。Chat はドリルではない。あいさつは学習者に合わせる（時刻のメタいじり禁止）。二択アンケートにしない。同じ確認（元気？のあと元気？）をくり返さない。
+4. 難易度 — 示された理解を追い越さない。スキャフォールドは黙って変える（モード名を言わない）。成功が続いたら徐々に戻す。
 
-例外: Adaptive では、理解を助けるための短い英語グロス／英語救助を使ってよい。ただし日本語を基本とし、必要最小限にする。明示的な英語要求には短い英語説明を使ってよい。すぐ日本語へ戻る。
+例外: Adaptive はまずやさしい日本語。まだダメなら短い英語。明示的な英語要求には短い英語を先に可。すぐ日本語へ戻る。
 例外: 名前・身元は「会話を続ける」より強い。話を自然にするために自分／学習者の名前を推測・交換しない。
-日本語が教える。英語は救助。
+日本語が教える。英語は救助。性格は声の味であり、上の番号より強くない。
 """
 
 IDENTITY_BLOCK = """\
 役割と出力:
-- あなたは日本語の会話パートナー（話し相手が先、チューターが次）。
+- あなたは日本語の会話パートナー。会話のために教える（教えるのをやめて会話するのではない）。
 - 読み上げやすい短い日本語。箇条書き・記号は最小限。難しい語は避けるかすぐ言い換える。
 - 会話の初期難易度は初級寄り。これは学習者の実力推定ではない。学習者レベル自体は unknown（Place me 前）。具体は下のレベル／ガバナーに従う。
 - 演出禁止: (smiles) *laughs* （笑顔）などのト書き・動作メモは書かない。会話の本文だけ。
@@ -147,21 +146,23 @@ BASE_RULES = IDENTITY_BLOCK
 
 MICRO_INVARIANTS_BLOCK = """\
 会話の細部:
-- 「ゆっくりください」など通じるお願いにはまず従う。より自然な言い方は任意で1つ（間違いと呼ばない）。
-- 日本語文の一部としての英語つなぎだけ短い日本語を示してよい（眠いです and 元気です → でも／けど）。フィラーだけの "and..." は講義せず続ける。
+- 「ゆっくりください」など通じるお願いにはまず従う。
+- 英語つなぎだけ短い日本語を示してよい（眠いです and 元気です → でも／けど）。フィラーだけの "and..." は講義せず続ける。
+- 眠りと眠い: 眠りは sleep、眠いのは sleepy。学習者が眠りと言ったら口頭で眠いを使う。
 - 音声認識の近いかなゆれ（けんき≈元気）は意図した語で続ける。Whisper 誤りを講義しない。
 """
 
 CORRECTION_BLOCKS = {
     "gentle": """\
 訂正スタイル（やさしい）:
-- まず通じる発言を短く認める。直しがいのある誤りだけ（語族・意味が変わる助詞・です/だずれ・教えた型の繰り返し）。
-- 軽い誤字・フィラー・STTノイズはスルー。直すときは自然な言い直しか短い日本語ヒント1つ。責めない。
+- 直しがいのある誤りだけ（語族・意味が変わる助詞・です/だずれ・教えた型の繰り返し）。口頭の返事で正しい形を使って確認する（コーヒーが好きなんだね）。それから次の番のフック。
+- 通じることを認めるのは、正しい形を口に出したあとで短くてよい。認めるだけで直さないのは誤り。
+- 軽い誤字・フィラー・STTノイズはスルー。文法の名前は言わない。TRY: は出さない。責めない。
 """,
     "critique": """\
 訂正スタイル（はっきり）:
-- まず通じる部分を認める。直しがいのある誤りだけ。形:（1）まちがい （2）正しい言い方 （3）ごく短い理由。1つだけ。
-- 長い文法講義・クイズ化はしない。カジュアルな声は保つ。
+- 直しがいのある誤りだけ。口頭の返事で正しい形をはっきり使う（くり返してよい）。それから会話を続ける。
+- まちがい／正しい言い方／理由の三段講義はしない。文法の名前は言わない。TRY: は出さない。カジュアルな声は保つ。
 """,
 }
 
@@ -175,9 +176,9 @@ _EXPLICIT_EN_RE = re.compile(
 )
 _VOCAB_RE = re.compile(
     r"(なんていう|なんて言う|何て言う|何という|何と言う|"
-    r"(って|と)どういう意味|(って|と)なに|(って|と)何|なにそれ|何それ|"
+    r"どういう意味|(って|と)なに|(って|と)何|なにそれ|何それ|"
     r"what does\s+\S+\s+mean|forgot how to say|how do (you|i) say|"
-    r"what('s| is) the (japanese|english) (for|of)|日本語でわからない)",
+    r"what('s| is) the (japanese|english) (for|of))",
     re.IGNORECASE,
 )
 _EXPRESSION_RE = re.compile(
@@ -190,8 +191,16 @@ _CORRECTION_RE = re.compile(
     r"correct me|did i say)",
     re.IGNORECASE,
 )
+_COMPREHENSION_COLLAPSE_RE = re.compile(
+    r"(全然わか|言ってること.{0,6}わか|"
+    r"lots of words|too (many|much) words|don't understand|dont understand|"
+    r"i don't understand|i dont understand|can't follow|cannot follow|"
+    r"言葉が多|たくさんわか|何言ってるか)",
+    re.IGNORECASE,
+)
 _COMPREHENSION_RE = re.compile(
     r"(わからない|分からない|わかんない|分かんない|"
+    r"わかりません|分かりません|わかんないです|分かんないです|"
     r"全然わか|言ってること.{0,6}わか|"
     r"lots of words|too (many|much) words|don't understand|dont understand|"
     r"i don't understand|i dont understand|can't follow|cannot follow|"
@@ -199,13 +208,68 @@ _COMPREHENSION_RE = re.compile(
     r"ゆっくり(ください|お願いします|話して|話))",
     re.IGNORECASE,
 )
+_TARGETED_UNKNOWN_RE = re.compile(
+    r"([\u3040-\u30ff\u3400-\u9fff]{2,8}?)"
+    r"(?:って|が|は|を|の|で)?"
+    r"(?:わからない|分からない|わかんない|分かんない|"
+    r"わかりません|分かりません)"
+)
+_LEXEME_TAIL_RE = re.compile(r"(って|[がはをにので])$")
+_NOT_LEXEME = frozenset(
+    {
+        "全然",
+        "ちょっと",
+        "あまり",
+        "よく",
+        "まだ",
+        "もう",
+        "ほんと",
+        "本当",
+        "何言",
+        "会話",
+        "日本語",
+        "こと",
+        "それ",
+        "これ",
+        "あれ",
+        "意味",
+    }
+)
+_FLOWING_SHORT = frozenset(
+    {
+        "はい",
+        "うん",
+        "ええ",
+        "いいえ",
+        "ううん",
+        "そう",
+        "そうだね",
+        "そうです",
+        "好き",
+        "元気",
+        "大丈夫",
+        "うんうん",
+        "わかる",
+        "わかった",
+        "おはよう",
+        "こんにちは",
+        "ありがとう",
+    }
+)
+_YES_NO_Q_RE = re.compile(
+    r"(ですか|ますか|でしたか|ましたか|の[？?]|かな[？?]|か[？?]|好き[？?]|元気[？?]|大丈夫[？?])"
+)
+_WH_Q_RE = re.compile(r"(何|なに|どれ|誰|だれ|どこ|いつ)")
+_PARTICLE_CHAR_RE = re.compile(r"[はがをにでとへも]")
 _HELP_RE = re.compile(
-    r"(わからない|分からない|なにそれ|何それ|どういう意味|意味|ってなに|って何|"
+    r"(わからない|分からない|わかりません|分かりません|"
+    r"なにそれ|何それ|どういう意味|意味|ってなに|って何|"
     r"英語で|help|what does|"
     r"i don't understand|dont understand|don't understand|in english|mean\?|"
     r"lots of words|ゆっくり)",
     re.IGNORECASE,
 )
+_FAKE_YES = frozenset({"はい", "うん", "ええ", "そう", "そうだね", "そうです"})
 _LATIN_RE = re.compile(r"[A-Za-z]")
 _JP_RE = re.compile(r"[\u3040-\u30ff\u3400-\u9fff]")
 _FILLER_EN_RE = re.compile(
@@ -266,6 +330,49 @@ def valid_personality_ids() -> set[str]:
     return ids
 
 
+def _normalize_short(text: str) -> str:
+    return re.sub(r"[。．.、,！!？?…・\s]+", "", text or "").strip()
+
+
+def _is_question_line(assistant: str | None) -> bool:
+    raw = (assistant or "").strip()
+    if not raw:
+        return False
+    if "？" in raw or "?" in raw:
+        return True
+    last = raw.split("。")[-1].strip()
+    return bool(re.search(r"か\s*$", last))
+
+
+def _is_noun_only_reply(text: str) -> bool:
+    compact = _normalize_short(text)
+    if not compact or len(compact) > 12:
+        return False
+    if _PARTICLE_CHAR_RE.search(compact):
+        return False
+    latin = len(_LATIN_RE.findall(compact))
+    jp = len(_JP_RE.findall(compact))
+    return jp >= 1 and latin == 0 and jp == len(compact)
+
+
+def is_natural_short_reply(learner: str | None, assistant: str | None = None) -> bool:
+    """はい／パスタ when that was the question — not struggle."""
+    raw = (learner or "").strip()
+    if not raw:
+        return False
+    compact = _normalize_short(raw)
+    asst = assistant or ""
+    if compact in _FLOWING_SHORT:
+        if compact in _FAKE_YES and _WH_Q_RE.search(asst):
+            return False
+        return True
+    if not _is_question_line(asst):
+        return False
+    if _WH_Q_RE.search(asst) and _is_noun_only_reply(raw):
+        return True
+    return False
+
+
 def infer_help_type(text: str | None) -> str:
     """Per-turn help_type: none | comprehension | vocabulary | expression | correction."""
     raw = (text or "").strip()
@@ -276,6 +383,13 @@ def infer_help_type(text: str | None) -> str:
     # Vocabulary before bare comprehension so 「眠いってどういう意味？」 stays vocab.
     if _VOCAB_RE.search(raw):
         return "vocabulary"
+    if _COMPREHENSION_COLLAPSE_RE.search(raw):
+        return "comprehension"
+    targeted = _TARGETED_UNKNOWN_RE.search(raw)
+    if targeted:
+        lexeme = _LEXEME_TAIL_RE.sub("", targeted.group(1) or "")
+        if lexeme not in _NOT_LEXEME and not lexeme.startswith("何言"):
+            return "vocabulary"
     if _EXPRESSION_RE.search(raw):
         return "expression"
     if _CORRECTION_RE.search(raw):
@@ -320,7 +434,10 @@ def compute_support_mode(
     return support_mode_from_streak(streak)
 
 
-def infer_learner_state(text: str | None) -> str:
+def infer_learner_state(
+    text: str | None,
+    last_assistant: str | None = None,
+) -> str:
     """Return flowing | struggling | help_request for adaptive language hints."""
     raw = (text or "").strip()
     # No utterance yet — no evidence of struggle (out-of-box / pre-turn).
@@ -335,6 +452,9 @@ def infer_learner_state(text: str | None) -> str:
     if _HELP_RE.search(raw) or wants_explicit_english(raw):
         return "help_request"
 
+    if is_natural_short_reply(raw, last_assistant):
+        return "flowing"
+
     latin = len(_LATIN_RE.findall(raw))
     jp = len(_JP_RE.findall(raw))
     total_letters = latin + jp
@@ -346,7 +466,7 @@ def infer_learner_state(text: str | None) -> str:
     if latin_ratio >= 0.55:
         return "struggling"
 
-    # Very short / fragmented learner turns
+    # Very short / fragmented learner turns — not はい／好き／パスタ.
     compact = re.sub(r"\s+", "", raw)
     if len(compact) <= 4 and jp < 3:
         return "struggling"
@@ -374,12 +494,12 @@ def language_policy_block(
         return f"""\
 言語（イマーション）:
 - 日本語のみ。英語グロスなし（明示要求でも英語にしない。やさしい日本語で言い換える）。
-- 困ったとき: 短い言い換え＋例1つ、または選択肢。help_language={help_lang} は使わない。
+- 困ったとき: 短い言い換え＋例1つ。help_language={help_lang} は使わない。
 - このターン: support={mode} help_type={ht}
 """
 
     en_threshold = (
-        "初期難易度は初級寄り（実力推定ではない）: 理解が戻らない／重いスキャフォールドでは短い英語救助を早めに可。"
+        "初期難易度は初級寄り（実力推定ではない）: まずやさしい日本語で1つ言い換える。まだダメなら短い英語救助。"
         if beginner
         else "ある程度分かる学習者: まずやさしい日本語。英語は本当に必要なときだけ。"
     )
@@ -393,8 +513,8 @@ def language_policy_block(
 言語（アダプティブ）:
 - {en_threshold}
 - {explicit}
-- vocabulary: その1語／言い方を渡す。短い英語グロス可（例: 「眠い」は sleepy）。理解崩壊にしない。
-- comprehension: やさしい日本語 → 例または選択肢 → まだダメなら help_language={help_lang} の短い訳1つ → 日本語へ戻る。
+- vocabulary: その1語をやさしい日本語＋短い例で渡す。まだダメなら短い英語グロス（例: 「眠い」は sleepy）。理解崩壊にしない。
+- comprehension: やさしい日本語で言い換え → まだダメなら help_language={help_lang} の短い訳1つ → 日本語へ戻る。二択で逃げない。
 - 英語は最大1〜2短い文。英語会話を始めない。
 - このターン: support={mode} help_type={ht}
 """
@@ -443,8 +563,8 @@ def support_mode_block(support_mode: str, help_type: str) -> str:
     shapes = {
         "normal": "自然な短文。英語ほぼなし。",
         "light": "少しやさしい短文。語彙ならその1語。",
-        "simplified": "超短文＋選択肢。定義を積まない。必要なら短い訳1つ。",
-        "heavy": "いちばん短く＋選択肢。やさしい話し相手。Adaptive なら短い英語救助→日本語。",
+        "simplified": "同じ考えの超短文。言い換え。新しい語は出さない。二択にしない。",
+        "heavy": "いちばん短く同じ考え。言い換え。新しい語は出さない。二択にしない。Adaptive なら短い英語救助→日本語。",
     }
     shape = shapes.get(mode, shapes["normal"])
     return (
@@ -532,10 +652,8 @@ def conversation_craft_block(
             "学習者の言葉を再利用。今の考えに粘る。学習者が話題を変えたら従う。"
         )
         bias = (
-            "考えは1つ（句点はいくつでもよい。今、ゲーム？ は一つの流れ）。"
-            "短く答えやすい会話。二択アンケートにしない。"
-            "同じ確認をくり返さない。学習者の返事から次の番が続くフックを残す。"
-            "助言・励ましの追加や話題のジャンプはしない。"
+            "難易度ガバナーの1考えルールに従う。短く答えやすい会話。"
+            "同じ確認をくり返さない。次の番が続くフックを残す。"
         )
     else:
         topic = (
@@ -543,7 +661,7 @@ def conversation_craft_block(
             "学習者が話題を変えたら従う。"
         )
         if mode == "heavy":
-            bias = "いちばん短く。超短文＋選択肢だけ。"
+            bias = "いちばん短く。同じ考えの言い換えだけ。二択にしない。"
         elif mode == "simplified" or state == "help_request":
             bias = "とても短く。情報は1ポイント。すぐ番を渡す。"
         elif mode == "light" or state == "struggling":
@@ -664,9 +782,87 @@ SHAPE_RETRY_BLOCK = """\
 直前の返事は考えが多すぎた。新しい考えは最大1つ。
 学習者の言葉を再利用し、同じ話題で短く答えやすい会話にする。二択アンケートにしない。
 次の番が続くフックを残す。同じ確認のくり返しはしない。
+今教えている形（が好き／眠いなど）は落とさない。
 この難易度では負荷の高い型（〜れば／たら／なら など）は出さない（禁止ではなく今の負荷）。
 助言・励ましの追加や話題のジャンプはしない。モード名は言わない。
 （shape_retry は内部指示。学習者に見せない。）
+"""
+
+RECAST_RETRY_BLOCK = """\
+[recast_retry]
+直前の返事は直した形を口に出していない。学習者の意味が変わる誤りを、口頭の返事で正しい形を使って確認してから続ける。
+文法の名前は言わない。TRY: は出さない。講義しない。
+（recast_retry は内部指示。学習者に見せない。）
+"""
+
+
+def recast_hint_block(
+    last_user_text: str | None,
+    last_assistant_text: str | None = None,
+) -> str:
+    """This-turn hint when the learner said を好き / 眠り for 眠い / …"""
+    from kaiwa.wo_ga import wo_ga_recast_stem, word_family_pair
+
+    stem = wo_ga_recast_stem(last_user_text)
+    if stem:
+        return f"""\
+[recast]
+学習者は「を{stem}」。口頭の返事で「が{stem}」を使って確認してから続ける。今ターンはからかわない。文法の名前は言わない。TRY: は出さない。
+（recast は内部指示。学習者に見せない。）
+"""
+    pair = word_family_pair(last_user_text, last_assistant_text)
+    if not pair:
+        return ""
+    wrong, right = pair
+    return f"""\
+[recast]
+学習者は「{wrong}」。口頭の返事で「{right}」を使って確認してから続ける。今ターンはからかわない。文法の名前は言わない。TRY: は出さない。
+（recast は内部指示。学習者に見せない。）
+"""
+
+
+def elicit_hint_block(speakable: str | None) -> str:
+    """After Practice wrap: ask a hook whose natural answer is the rehearsed form."""
+    line = (speakable or "").strip()
+    if not line:
+        return ""
+    return f"""\
+[elicit]
+学習者は今「{line}」を口にした。同じ話題で、その言い方が自然な答えになる短い質問を1つ（何が好き？／毎日飲む？）。
+その全文を先に口に出さない。好き？だけにしない。今ターンはからかわない。
+答えが名詞だけなら、口頭の返事でその言い方を使って確認してから続ける。
+講義しない。TRY: は出さない。Practice / 文法の名前は言わない。新しい文法は足さない。
+（elicit は内部指示。学習者に見せない。）
+"""
+
+
+def this_turn_keep_form_block(
+    last_user_text: str | None,
+    last_assistant_text: str | None = None,
+    elicit_line: str | None = None,
+) -> str:
+    """Positive this-turn item so Easy density retry cannot drop the form in play.
+
+    Elicit turns must not list the rehearsed speakable here — that made Kaiwa
+    say the line instead of asking. Recast stems still belong.
+    """
+    from kaiwa.wo_ga import wo_ga_recast_stem, word_family_pair
+
+    del elicit_line  # kept for callers; elicit is ask-not-say (#149)
+    items: list[str] = []
+    stem = wo_ga_recast_stem(last_user_text)
+    if stem:
+        items.append(f"が{stem}")
+    pair = word_family_pair(last_user_text, last_assistant_text)
+    if pair:
+        items.append(pair[1])
+    if not items:
+        return ""
+    listed = "／".join(dict.fromkeys(items))
+    return f"""\
+[this_turn]
+今ターンの必須の形: {listed}。口頭の返事にそれを入れる。落とさない。からかわない。TRY: は出さない。
+（this_turn は内部指示。学習者に見せない。）
 """
 
 
@@ -733,13 +929,15 @@ def difficulty_governor_block(
 
     if lock:
         band = (
-            "考えは1つ（句点の数ではない。今、ゲーム？ は一つの流れ）。"
+            "考えは1つ（句点の数ではない。今、ひま？ は一つの流れ）。"
             "学習者の言葉を再利用。短く答えやすい会話。二択アンケートにしない。"
             "同じ確認をくり返さない。学習者の返事から次の番が続くフックを残す。"
             "第二の考え（励まし・助言・話題ジャンプ）は足さない。"
             "この難易度では負荷の高い型（〜れば／たら／なら など）は出さない。"
             "禁止文法ではなく今の負荷。余裕が出たら戻す。"
-            "開き質問（どうした／何をしました／予定）は出さない。"
+            "開き質問（どうした／何をしました／何したの／今日は何した／予定）は出さない。"
+            "あいさつにはすぐ答えられるフック（元気？／今、ひま？）。"
+            "今教えている形の が／を／に は落とさない（コーヒーが好き？は可。コーヒー、好き？ばかりにしない）。"
         )
     elif pitch == "n5":
         band = "語彙は少し増やしてよいがメインは1つ。密度の高い文法は通じたあとだけ。"
@@ -764,6 +962,7 @@ def build_tutor_system_prompt(
     learner_state: str | None = None,
     help_type: str | None = None,
     replay_questions: list[str] | None = None,
+    elicit_line: str | None = None,
 ) -> str:
     style = prefs.correction_style if prefs.correction_style in CORRECTION_BLOCKS else "gentle"
     from kaiwa.learner_memory import LearnerMemory, memory_prompt_block
@@ -775,7 +974,9 @@ def build_tutor_system_prompt(
         profile = LearnerProfile()
     assert isinstance(profile, LearnerProfile)
 
-    state = learner_state or infer_learner_state(last_user_text)
+    state = learner_state or infer_learner_state(
+        last_user_text, last_assistant_text
+    )
     ht = (help_type or infer_help_type(last_user_text)).strip().lower()
     if ht not in {"none", "comprehension", "vocabulary", "expression", "correction"}:
         ht = infer_help_type(last_user_text)
@@ -848,6 +1049,84 @@ def build_tutor_system_prompt(
     replay_line = replay_block(replay_questions).strip()
     if replay_line:
         parts.extend(["", replay_line])
+    elicit = elicit_hint_block(elicit_line).strip()
+    if elicit:
+        parts.extend(["", elicit])
+    recast_line = recast_hint_block(
+        last_user_text, last_assistant_text
+    ).strip()
+    if recast_line:
+        parts.extend(["", recast_line])
+    keep = this_turn_keep_form_block(
+        last_user_text, last_assistant_text, elicit_line
+    ).strip()
+    if keep:
+        parts.extend(["", keep])
+    return "\n".join(parts)
+
+
+def build_practice_sitting_system_prompt(
+    prefs: UserPrefs,
+    card: dict[str, Any],
+    *,
+    remaining_turns: int,
+    opening: bool = False,
+    wrap: bool = False,
+    memory: Any | None = None,
+) -> str:
+    """Practice sitting only. Does not change Chat tutor policy / PROMPT_REVISION."""
+    learner_line = str(card.get("learner_line") or "").strip()
+    tutor_reply = str(card.get("tutor_reply") or "").strip()
+    speakable = str(card.get("speakable") or "").strip()
+    prior_user = str(card.get("prior_user") or "").strip()
+    prior_assistant = str(card.get("prior_assistant") or "").strip()
+    example = speakable or tutor_reply
+    left = max(0, int(remaining_turns))
+
+    if wrap or left <= 0:
+        close = (
+            "これが最後の番。短い温かい一言で閉じる。新しい質問は出さない。"
+            "Chat へ戻るよう促さない（UI が戻す）。モード名は言わない。"
+        )
+    elif opening:
+        close = (
+            "まだ学習者の番はない。「"
+            + example
+            + "」を口に出してもらう短い誘いだけ。新しい話題は出さない。"
+            "Chat の原文を講義し直さない。文法の名前は言わない。"
+        )
+    else:
+        close = (
+            "その同じ言い方を使う短いやり取りを1つだけ出す。新しい話題カタログは出さない。"
+            "新しい文法は教えない。"
+        )
+
+    snapshot = f"""\
+[practice_sitting]
+これは短いリハーサル（Chat ではない）。Chat ですでに触れた1つの言い方を口に出して慣れる。
+学習者の発話: 「{learner_line}」
+会話の返事: 「{tutor_reply}」
+口に出す日本語: 「{example}」
+直前の学習者: 「{prior_user}」
+直前の会話: 「{prior_assistant}」
+ルール:
+- 言い方を口に出す → それを使う短いやり取り1つ → 終わり。Easy Chat の続きにしない。
+- この1つの言い方だけ。新しい文法・新しい話題は出さない。
+- 性格は声だけ。からかい・新しい話題はしない。
+- 学習者に見えるのは話せる日本語。タグ名は出さない。
+- TRY: は出さない。モード名は言わない。
+- {close}
+（practice_sitting は内部指示。学習者に見せない。）
+"""
+    parts = [
+        identity_names_block(memory).strip(),
+        "",
+        personality_block(prefs).strip(),
+        "",
+        "会話の型:\n- これは短いリハーサル。Chat の続きにしない。口頭は短く。新しい話題は出さない。",
+        "",
+        snapshot.strip(),
+    ]
     return "\n".join(parts)
 
 

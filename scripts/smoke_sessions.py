@@ -93,6 +93,9 @@ def main() -> None:
             messages[1]["content"] == "猫、好き？それとも犬？",
             "rescue replaces last assistant",
         )
+        _check("rescue" in messages[1], "RAM hydrate tags rescue")
+        tagged = hydrate(root, meta.id, mark_rescue=True)
+        _check(tagged[1].get("rescue") is True, "GET hydrate tags rescue")
         _check(all(m["role"] != "user" or m["content"] != "わかりません" for m in messages), "no fake user line")
 
         stored = load_meta(root, meta.id)

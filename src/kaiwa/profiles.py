@@ -16,6 +16,8 @@ PREFS_FILE = "user_prefs.json"
 PROFILE_FILE = "learner_profile.json"
 MEMORY_FILE = "learner_memory.json"
 PERSONALITIES_FILE = "user_personalities.json"
+STRUGGLE_CARDS_FILE = "struggle_cards.jsonl"
+PRACTICE_STATE_FILE = "practice_state.json"
 
 BUNDLE_FORMAT = "kaiwa-profile"
 BUNDLE_VERSION = 1
@@ -289,6 +291,14 @@ def memory_path() -> Path:
 
 def personalities_path() -> Path:
     return active_profile_dir() / PERSONALITIES_FILE
+
+
+def struggle_cards_path() -> Path:
+    return active_profile_dir() / STRUGGLE_CARDS_FILE
+
+
+def practice_state_path() -> Path:
+    return active_profile_dir() / PRACTICE_STATE_FILE
 
 
 def profile_dir(profile_id: str) -> Path:

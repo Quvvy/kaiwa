@@ -181,9 +181,19 @@ def iter_jsonl(sessions_dir: Path, session_id: str) -> list[dict[str, Any]]:
     return rows
 
 
-def hydrate(sessions_dir: Path, session_id: str) -> list[dict[str, str]]:
-    """Rebuild Chat messages. Skip practice/placement. Rescue replaces last assistant."""
-    messages: list[dict[str, str]] = []
+def hydrate(
+    sessions_dir: Path,
+    session_id: str,
+    *,
+    mark_rescue: bool = True,
+) -> list[dict[str, Any]]:
+    """Rebuild Chat messages. Skip practice/placement. Rescue replaces last assistant.
+
+    Rescue rows are always tagged so read-time recast captions skip Simpler
+    even when the shorter line still contains が+stem.
+    """
+    del mark_rescue  # always tag; callers used False to hide flags from the LLM
+    messages: list[dict[str, Any]] = []
     for record in iter_jsonl(sessions_dir, session_id):
         mode = str(record.get("mode") or "chat").strip().lower()
         if mode in {"practice", "placement"}:
@@ -192,10 +202,15 @@ def hydrate(sessions_dir: Path, session_id: str) -> list[dict[str, str]]:
             reply = str(record.get("reply") or "").strip()
             if not reply:
                 continue
+            row: dict[str, Any] = {
+                "role": "assistant",
+                "content": reply,
+                "rescue": True,
+            }
             if messages and messages[-1].get("role") == "assistant":
-                messages[-1] = {"role": "assistant", "content": reply}
+                messages[-1] = row
             else:
-                messages.append({"role": "assistant", "content": reply})
+                messages.append(row)
             continue
         transcript = str(record.get("transcript") or "").strip()
         reply = str(record.get("reply") or "").strip()

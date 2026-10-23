@@ -18,8 +18,8 @@ If Kaiwa fails to start, details are in `%LocalAppData%\Kaiwa\Kaiwa.desktop.log`
 ## Stack
 
 ```
-Chat:     Mic → faster-whisper (ja, CUDA) → DeepSeek V4 Flash → AivisSpeech (or VOICEVOX)
-Practice: Target → TTS preview → Mic → Whisper → intelligibility score → tip
+Chat:     Mic → faster-whisper → DeepSeek V4 Flash → AivisSpeech (or VOICEVOX)
+Practice: Today’s practice / Start → say the snapshot line, one tiny exchange → Chat
 Quiz:     Self-assessment placement (stage / listening / speaking / pace) → profile + goal
 ```
 
@@ -28,7 +28,7 @@ Quiz:     Self-assessment placement (stage / listening / speaking / pace) → pr
 | STT | Local `faster-whisper` `large-v3-turbo` (CUDA when available, else CPU) |
 | LLM | `deepseek-v4-flash` (thinking disabled by default) |
 | TTS | **AivisSpeech** default (`:10101`); **VOICEVOX** fallback (`:50021`) |
-| Practice score | Kana-normalized similarity (not pitch accent) |
+| Practice | Chat struggle snapshots → say-this + one exchange (not pitch accent) |
 | Tutor prefs | Goals, Immersion/Adaptive, Formal/Casual, naturalness, personalities, TTS engine/voice, Flash/Pro routing |
 | Learner profile | Live speaking/comprehension estimates (auto-updating) |
 | Long-term memory | Comfort prefs, topics, vocab, grammar (auto-updating) |
@@ -116,7 +116,8 @@ Extra AivisSpeech voices (from AivisHub):
 Open **http://127.0.0.1:8787**
 
 - **Chat** — hold to talk, free conversation; type a short line if Whisper misses you; **Replay** re-plays Kaiwa’s last line; **Simpler** on Kaiwa’s last bubble says it more easily; **Easy** / **Free** picks the gym lock (Easy is the default); a quiet turn count sits by the status; **New chat** starts a fresh thread (keeps memory; past chats stay on disk) and may show **From this chat** leftovers; **Chats** lists and reopens this profile’s threads; **Again** re-asks this thread’s questions as a new chat
-- **Practice** — optional warm-up: last reply / from our chats / say again; play model, hold to repeat (not a quiz)
+- **Practice** — **Today’s practice / Start**: a short sitting from something you struggled with in Chat, then back. **Why?** is a one-liner. **Things you can say** lists recently practiced lines (not tappable).
+- **Learn** — pick a line from your Chat struggles (or a starter if none), then the same Practice sitting, then Chat
 - **Place me** — Settings section; per-profile soft first-run (auto-open when new/reset; Skip anytime); expanded English self-ratings that shape how Kaiwa talks
 - **Settings** — Profiles, Appearance, Tutor, Learning, Place me, Memory, Speech (searchable); themes, goals, corrections, TTS/PTT, learner profile, long-term memory
 
@@ -124,6 +125,7 @@ Default port is **8787** (8765 often used by Anki on this machine).
 
 ## Docs
 
+- [docs/PRACTICE.md](docs/PRACTICE.md)
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 - [docs/DECISIONS.md](docs/DECISIONS.md)
 - [docs/ROADMAP.md](docs/ROADMAP.md)
@@ -140,6 +142,6 @@ Kaiwa is **MIT** — see [LICENSE](LICENSE). Third-party speech engines, models,
 - Never commit `.env` or AppData `secrets.json` / profile data.
 - Whisper weights download on first launch into `%LocalAppData%\Kaiwa\models\whisper\` (splash progress).
 - **NVIDIA GPU recommended** for faster speech recognition. Kaiwa defaults to `WHISPER_DEVICE=auto` (CUDA when a GPU and `.[cuda]` wheels are available, otherwise CPU). Owners: `pip install -e ".[desktop,cuda]"`. The portable runtime is **CPU-only** unless CUDA wheels are added.
-- Practice scores measure **what the app heard**, not native pitch accent.
+- Practice sittings come from **Chat struggles**, not a phrase bank or intelligibility %.
 - Phase 3 stays **turn-based** (no OpenAI Realtime); pitch-accent grading remains deferred.
-- **Version:** `1.0.3`. **Phase 4–5** done (incl. 5.5 comprehensibility-first Chat). **Phase 6:** 6.1–6.9 done (Windows GitHub release + in-app update checker). **Phase 7:** global push-to-talk shipped. **Phase 8.1–8.7** shipped (reply shape, Simpler, durable sessions, Chats drawer, Again, leftovers, Easy/Free). Chat / Practice / Settings share one desk; Place me is a Settings section; fifteen themes — see [docs/ROADMAP.md](docs/ROADMAP.md).
+- **Version:** `1.0.3` (GitHub friends build). Local checkout is still 1.0.3 and already includes Phase 9–10 plus beginner-comprehension polish (`PROMPT_REVISION` **10**: recast splice, 眠り/眠い, Practice elicit as ask-not-say, speakable quality gate for Today/Learn, collapse paraphrase without 選択肢, keep-が this turn, type-retry on empty Chat STT). Not a 1.0.4 release. **Phase 4–5** done (incl. 5.5 comprehensibility-first Chat). **Phase 6:** 6.1–6.9 done (Windows GitHub release + in-app update checker). **Phase 7:** global push-to-talk shipped. **Phase 8.1–8.7** shipped (reply shape, Simpler, durable sessions, Chats drawer, Again, leftovers, Easy/Free). **Phase 9** Practice-from-Chat is complete in tree. **Phase 10** acquisition loop — **10.1–10.6** recasts, notice, rehearsal, return to Chat, Practice-home lines, and Learn picker shipped — see [docs/ROADMAP.md](docs/ROADMAP.md) and [docs/LEARNING_LOOP.md](docs/LEARNING_LOOP.md). Chat / Practice / Learn / Settings share one desk; Place me is a Settings section; fifteen themes.

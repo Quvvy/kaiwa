@@ -9,34 +9,30 @@ sys.path.insert(0, str(ROOT / "src"))
 from kaiwa.practice.scoring import score_intelligibility
 
 
+def _out(line: str) -> None:
+    try:
+        print(line)
+    except UnicodeEncodeError:
+        sys.stdout.buffer.write((line + "\n").encode("utf-8", errors="replace"))
+        sys.stdout.buffer.flush()
+
+
 def main() -> None:
     same = score_intelligibility("こんにちは。", "こんにちは")
-    print(f"same -> score={same.score} band={same.band} norm={same.target_norm}")
+    _out(f"same -> score={same.score} band={same.band} norm={same.target_norm}")
     assert same.score >= 95, same
 
     wrong = score_intelligibility("こんにちは。", "さようなら")
-    print(f"wrong -> score={wrong.score} band={wrong.band}")
+    _out(f"wrong -> score={wrong.score} band={wrong.band}")
     assert wrong.score < 60, wrong
 
     kana = score_intelligibility("日本語を勉強しています。", "にほんごをべんきょうしています")
-    print(f"kana match -> score={kana.score} band={kana.band}")
+    _out(f"kana match -> score={kana.score} band={kana.band}")
     assert kana.score >= 85, kana
 
-    wav = ROOT / "recordings" / "smoke_tts.wav"
-    if wav.exists():
-        from kaiwa.config import get_settings
-        from kaiwa import stt
+    _out("skip wav STT check (offline smoke is scoring only; live Whisper is smoke_stt.py)")
 
-        settings = get_settings()
-        heard = stt.transcribe_file(settings, wav)
-        target = "こんにちは。今日は日本語の練習をしましょう。"
-        live = score_intelligibility(target, heard)
-        print(f"wav heard={heard!r}")
-        print(f"wav score={live.score} band={live.band}")
-    else:
-        print("skip wav STT check (no recordings/smoke_tts.wav)")
-
-    print("smoke_practice ok")
+    _out("smoke_practice ok")
 
 
 if __name__ == "__main__":

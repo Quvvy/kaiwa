@@ -241,15 +241,49 @@ def _join_segments(segments) -> str:
 
 
 _JP_SCRIPT_RE = re.compile(r"[\u3040-\u30ff\u3400-\u9fff]")
-_CHAT_STT_CORE = "会話 会話さん Kaiwa"
+_IDENTITY_DUMP_RES = (
+    re.compile(r"会話さん"),
+    re.compile(r"会話"),
+    re.compile(r"カイワ"),
+    re.compile(r"kaiwa", re.IGNORECASE),
+)
+_LEFTOVER_JUNK_RE = re.compile(r"[\s\W_、。！？・…「」『』（）()]+", re.UNICODE)
 
 
-def chat_stt_hint(preferred_name: str = "") -> str:
-    """Short Whisper prior for Chat. Never rewrite the displayed transcript."""
-    name = " ".join((preferred_name or "").strip().split())
-    if not name:
-        return _CHAT_STT_CORE
-    return f"{_CHAT_STT_CORE} {name}"
+def is_identity_prompt_dump(text: str) -> bool:
+    """True when the transcript is only 会話 / Kaiwa tokens (Whisper hint regurgitation)."""
+    raw = (text or "").strip()
+    if not raw:
+        return False
+    leftover = raw
+    for pat in _IDENTITY_DUMP_RES:
+        leftover = pat.sub(" ", leftover)
+    leftover = _LEFTOVER_JUNK_RE.sub("", leftover)
+    return leftover == ""
+
+
+def empty_transcript_is_freeze(stt_meta: dict[str, Any] | None) -> bool:
+    """Identity-only dumps are unheard, not a freeze card (#135)."""
+    return (stt_meta or {}).get("accepted") != "identity_dump"
+
+
+UNHEARD_TYPE_RETRY_DETAIL = "Couldn't catch that — type it below."
+
+
+def unheard_chat_payload(
+    stt_meta: dict[str, Any] | None = None,
+    *,
+    detail: str | None = None,
+) -> dict[str, Any]:
+    """JSON for an empty Chat clip. No fake tutor turn. UI should focus the type row."""
+    identity = (stt_meta or {}).get("accepted") == "identity_dump"
+    msg = (detail or "").strip() or UNHEARD_TYPE_RETRY_DETAIL
+    return {
+        "heard": False,
+        "type_retry": True,
+        "identity_dump": identity,
+        "detail": msg,
+    }
 
 
 def _transcribe(model: WhisperModel, path: str | Path, kwargs: dict[str, Any]):
@@ -291,22 +325,18 @@ def transcribe_file(
 def transcribe_chat_file(
     settings: Settings,
     path: str | Path,
-    *,
-    preferred_name: str = "",
 ) -> tuple[str, dict[str, Any]]:
     """Chat STT: keep clear English; accept first-pass JP when confident or script-rich.
 
     Forced ``language=ja`` alone would "translate" English speech into Japanese.
     Auto-detect first. Second pass only when the first pass is empty, not clear EN,
-    and lacks Japanese script (decision #103).
+    and lacks Japanese script (decision #103). No identity ``initial_prompt`` /
+    ``hotwords`` (#125 / #135).
     """
     model = get_model(settings)
-    hint = chat_stt_hint(preferred_name)
     kwargs: dict[str, Any] = {
         "vad_filter": True,
         "beam_size": 1,
-        "initial_prompt": hint,
-        "hotwords": hint,
     }
     segments, info = _transcribe(model, path, kwargs)
     auto_text = _join_segments(segments)
@@ -327,13 +357,7 @@ def transcribe_chat_file(
     if auto_text and _jp_script_count(auto_text) >= 2:
         return auto_text, {**base_meta, "passes": 1, "accepted": "jp_script"}
 
-    forced = transcribe_file(
-        settings,
-        path,
-        language="ja",
-        initial_prompt=hint,
-        hotwords=hint,
-    )
+    forced = transcribe_file(settings, path, language="ja")
     return forced, {**base_meta, "passes": 2, "accepted": "forced_ja"}
 
 
@@ -343,7 +367,6 @@ def transcribe_audio_bytes(
     suffix: str = ".webm",
     *,
     mode: str = "ja",
-    preferred_name: str = "",
 ) -> tuple[str, dict[str, Any]]:
     """Write upload bytes to a temp file and transcribe.
 
@@ -352,6 +375,7 @@ def transcribe_audio_bytes(
       - ``chat`` — auto-detect English vs Japanese (Chat)
 
     Returns ``(transcript, stt_meta)`` where meta includes ``passes`` / ``accepted``.
+    Identity-only dumps (会話 / Kaiwa) return an empty transcript.
     """
     if not data or len(data) < 256:
         raise ValueError(
@@ -364,11 +388,13 @@ def transcribe_audio_bytes(
         tmp_path = Path(tmp.name)
     try:
         if mode == "chat":
-            return transcribe_chat_file(
-                settings, tmp_path, preferred_name=preferred_name
-            )
-        text = transcribe_file(settings, tmp_path, language="ja")
-        return text, {"passes": 1, "detected": "ja", "accepted": "forced_ja"}
+            text, meta = transcribe_chat_file(settings, tmp_path)
+        else:
+            text = transcribe_file(settings, tmp_path, language="ja")
+            meta = {"passes": 1, "detected": "ja", "accepted": "forced_ja"}
+        if is_identity_prompt_dump(text):
+            return "", {**meta, "accepted": "identity_dump"}
+        return text, meta
     except Exception as exc:
         msg = str(exc)
         # PyAV / FFmpeg EOF on truncated MediaRecorder webm (common on tiny holds / WebView2)

@@ -33,7 +33,7 @@ def main() -> None:
         next_rescue_step("日本語、難しいね。") == "yes_no",
         "short statement → yes_no",
     )
-    _check(next_rescue_step("猫好き？") == "ab", "short yes/no ？ → ab")
+    _check(next_rescue_step("猫好き？") == "shorter", "short yes/no ？ → shorter")
     _check(
         next_rescue_step("コーヒー、それともお茶？") == "ab",
         "soretomo → ab",
@@ -63,10 +63,11 @@ def main() -> None:
     apply_chat_signals(spoken, "flowing", "猫が好きです")
     _check(spoken.stats.struggle_streak == 1, "later flowing turn decays streak")
 
-    block = rescue_rewrite_block("猫好き？", "ab")
+    block = rescue_rewrite_block("猫好き？", "shorter")
     _check("[rescue]" in block, "rescue block tagged")
     _check("わからない" in block, "rescue block forbids fake utterance")
     _check("猫好き？" in block, "original line in rescue block")
+    print("smoke_rescue ok")
 
 
 if __name__ == "__main__":
