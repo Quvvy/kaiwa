@@ -398,6 +398,15 @@ def health() -> dict[str, Any]:
     }
 
 
+@app.get("/api/tts/state")
+def tts_state() -> dict[str, Any]:
+    """Cheap poll target while the desktop app is still starting the voice engine."""
+    prefs = load_prefs()
+    state = tts.engine_state(settings, prefs.tts_engine)
+    label = tts.ENGINE_LABELS[tts.normalize_engine(prefs.tts_engine, settings.tts_engine)]
+    return {"state": state, "engine": prefs.tts_engine, "label": label}
+
+
 class UpdateDismissBody(BaseModel):
     version: str = ""
 

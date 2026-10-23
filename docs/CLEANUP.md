@@ -82,7 +82,7 @@ Chat reads the learned phrases. See `src/kaiwa/course/`.
 - [ ] **M** Turn the smoke scripts into pytest. They already pass and already fail loudly on a broken check. Make `repro_bugs.py` fail when a bug fires (10 known BUG lines today).
 - [ ] **S** Make `KAIWA_DATA_DIR` fully isolated. It still copies the repo `.env` key and `data/profiles` into whatever folder it points at.
 - [ ] **S** Stop polling `/api/ptt/events` and `/api/ptt/state` every few hundred ms when running in a plain browser, where global PTT can't work.
-- [ ] **M** Speed up cold start (about 53 s in the last log: TTS 29 s, API 20 s). Start the API and the TTS engine in parallel, and open the window before Whisper finishes loading.
+- [x] **M** Speed up cold start. The window now opens when the API answers (~3 s from source); the voice engine (15–25 s) finishes in the background and the page shows "Voice engine starting…". Liveness checks probe the socket first: Windows takes ~2 s to refuse a closed port over HTTP.
 - [ ] **M** Shrink the docs.
   - Rewrite the README Notes section in plain English.
   - Collapse `ROADMAP.md`'s finished phases into one "Shipped" list.

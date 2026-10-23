@@ -345,6 +345,8 @@ class PttController:
         threading.Thread(target=self._finish_turn, name="kaiwa-ptt-turn", daemon=True).start()
 
     def _sync_mic(self) -> None:
+        if self._stop.is_set():
+            return  # shutting down: don't reopen the mic stop() just closed
         with self._lock:
             enabled = self._prefs_enabled
             label = self._prefs_mic

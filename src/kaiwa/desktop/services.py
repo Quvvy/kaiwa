@@ -192,6 +192,16 @@ def http_ok(url: str, timeout: float = 2.0) -> bool:
         return False
 
 
+def local_ready(port: int, url: str) -> bool:
+    """Fast liveness check for a service on this PC.
+
+    Windows retries a connection to a closed port for ~2 s before refusing it,
+    so probe the socket with a short timeout first (a listening local port
+    accepts in well under a millisecond) and only then ask over HTTP.
+    """
+    return port_open("127.0.0.1", port, timeout=0.15) and http_ok(url, timeout=1.5)
+
+
 def _aivis_candidates() -> list[Path]:
     from kaiwa.bootstrap import aivis_run_candidates_under_install
 
@@ -236,11 +246,11 @@ def engine_base_url(engine: AivisOrVoicevox) -> str:
 
 
 def engine_already_running(engine: AivisOrVoicevox) -> bool:
-    return http_ok(f"{engine_base_url(engine)}/version", timeout=1.5)
+    return local_ready(ENGINE_PORTS[engine], f"{engine_base_url(engine)}/version")
 
 
 def kaiwa_already_running() -> bool:
-    return http_ok(f"http://127.0.0.1:{KAIWA_PORT}/api/health", timeout=1.5)
+    return local_ready(KAIWA_PORT, f"http://127.0.0.1:{KAIWA_PORT}/api/health")
 
 
 def read_preferred_tts_engine() -> AivisOrVoicevox:
@@ -322,9 +332,9 @@ def start_tts_engine(
     registry.tts.started_by_us = True
 
     url = f"{engine_base_url(engine)}/version"
-    for _ in range(45):
-        time.sleep(1)
-        if http_ok(url):
+    for _ in range(225):
+        time.sleep(0.2)
+        if local_ready(port, url):
             return
         if proc.poll() is not None:
             label = "AivisSpeech" if engine == "aivisspeech" else "VOICEVOX"
@@ -338,7 +348,12 @@ def start_tts_engine(
     )
 
 
-def start_kaiwa(registry: ServiceRegistry) -> None:
+def start_kaiwa(registry: ServiceRegistry, *, tts_booting: bool = False) -> None:
+    """Start the API and wait until it answers.
+
+    `tts_booting`: the voice engine is being launched alongside, so the API
+    reports it as "starting" (not "down") until it comes up.
+    """
     registry.kaiwa.port = KAIWA_PORT
     if kaiwa_already_running():
         registry.kaiwa.started_by_us = False
@@ -349,6 +364,8 @@ def start_kaiwa(registry: ServiceRegistry) -> None:
     root = resolve_app_root()
     child_env = os.environ.copy()
     child_env["KAIWA_ROOT"] = str(root)
+    if tts_booting:
+        child_env["KAIWA_TTS_BOOTING"] = "1"
     proc = subprocess.Popen(
         [str(python), "-m", "kaiwa.app"],
         cwd=str(root),
@@ -361,9 +378,9 @@ def start_kaiwa(registry: ServiceRegistry) -> None:
     registry.kaiwa.started_by_us = True
 
     url = f"http://127.0.0.1:{KAIWA_PORT}/api/health"
-    for _ in range(90):
-        time.sleep(1)
-        if http_ok(url):
+    for _ in range(450):
+        time.sleep(0.2)
+        if local_ready(KAIWA_PORT, url):
             return
         if proc.poll() is not None:
             raise RuntimeError(

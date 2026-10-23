@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 import hashlib
+import os
+import socket
 import threading
+import time
 from collections import OrderedDict
+from urllib.parse import urlparse
 from typing import Any, Literal
 
 import httpx
@@ -40,6 +44,58 @@ def engine_base_url(settings: Settings, engine: str) -> str:
     return settings.aivisspeech_base_url
 
 
+# The desktop app opens its window before the voice engine finishes loading
+# (AivisSpeech takes 15-25 s). It sets KAIWA_TTS_BOOTING=1 for this process when
+# it launched the engine itself; until the deadline, a missing engine means
+# "still starting", and voice calls wait for it instead of failing.
+BOOT_GRACE_S = 90.0
+_boot_deadline = time.monotonic() + BOOT_GRACE_S if os.environ.get("KAIWA_TTS_BOOTING") == "1" else 0.0
+
+
+def _port_open(base: str) -> bool:
+    """Socket probe: a closed port on Windows takes ~2 s to refuse over HTTP."""
+    parsed = urlparse(base)
+    try:
+        with socket.create_connection((parsed.hostname or "127.0.0.1", parsed.port or 80), timeout=0.15):
+            return True
+    except OSError:
+        return False
+
+
+_seen_up: set[str] = set()
+
+
+def _engine_up(settings: Settings, eng: str) -> bool:
+    base = engine_base_url(settings, eng)
+    if not _port_open(base):
+        return False
+    if eng in _seen_up:
+        return True  # busy synthesizing can make /version slow; the port is enough now
+    try:
+        ok = httpx.get(f"{base}/version", timeout=1.0).status_code < 500
+    except httpx.HTTPError:
+        return False
+    if ok:
+        _seen_up.add(eng)
+    return ok
+
+
+def engine_state(settings: Settings, engine: str | None = None) -> str:
+    """"ready", "starting" (desktop app is still launching it) or "down"."""
+    global _boot_deadline
+    eng = normalize_engine(engine, settings.tts_engine)
+    if _engine_up(settings, eng):
+        _boot_deadline = 0.0  # seen up once: later failures are real failures
+        return "ready"
+    return "starting" if time.monotonic() < _boot_deadline else "down"
+
+
+def wait_while_starting(settings: Settings, engine: str | None = None) -> None:
+    """Block (up to the boot deadline) while the engine is still starting."""
+    while engine_state(settings, engine) == "starting":
+        time.sleep(0.3)
+
+
 def engine_default_speaker(settings: Settings, engine: str) -> int:
     eng = normalize_engine(engine, settings.tts_engine)
     if eng == "voicevox":
@@ -75,6 +131,10 @@ def synthesize(
     speaker = engine_default_speaker(settings, eng) if speaker_id is None else speaker_id
     base = engine_base_url(settings, eng)
     label = ENGINE_LABELS[eng]
+    if _boot_deadline:
+        wait_while_starting(settings, eng)
+    if not _port_open(base):
+        raise TtsError(f"The {label} voice engine isn't running. {engine_hint(eng)}")
 
     with httpx.Client(timeout=60.0) as client:
         try:
@@ -117,6 +177,10 @@ def list_speakers(settings: Settings, *, engine: str | None = None) -> list[dict
     eng = normalize_engine(engine, settings.tts_engine)
     base = engine_base_url(settings, eng)
     label = ENGINE_LABELS[eng]
+    if _boot_deadline:
+        wait_while_starting(settings, eng)
+    if not _port_open(base):
+        raise TtsError(f"The {label} voice engine isn't running. {engine_hint(eng)}")
     with httpx.Client(timeout=15.0) as client:
         try:
             resp = client.get(f"{base}/speakers")

@@ -78,10 +78,31 @@
   let currentAudio = null;
   let audioProblem = "";
 
+  // While the desktop app is still starting the voice engine, hold audio requests
+  // here (one cheap poll) instead of sending a burst that would wait server-side
+  // and use up the browser's six connections.
+  let voiceReadyPromise = null;
+  function voiceReady() {
+    if (!voiceReadyPromise) {
+      voiceReadyPromise = (async () => {
+        for (;;) {
+          let state = "ready";
+          try { state = (await api("/api/tts/state")).state; } catch (_) {}
+          if (state !== "starting") break;
+          setAudioProblem("starting");
+          await new Promise((r) => setTimeout(r, 700));
+        }
+        if (audioProblem === STARTING_NOTE) setAudioProblem(null);
+      })();
+    }
+    return voiceReadyPromise;
+  }
+  const STARTING_NOTE = "Voice engine starting… audio plays in a few seconds.";
+
   function audioFor(text, { slow = false, voice = "a" } = {}) {
     const key = `${voice}|${slow ? 1 : 0}|${text}`;
     if (!audioCache.has(key)) {
-      const pending = postJson("/api/course/tts", { text, slow, voice }).then((d) => d.audio_base64);
+      const pending = voiceReady().then(() => postJson("/api/course/tts", { text, slow, voice })).then((d) => d.audio_base64);
       pending.catch(() => audioCache.delete(key));
       audioCache.set(key, pending);
     }
@@ -115,7 +136,8 @@
     for (const [text, opts] of items) audioFor(text, opts).catch(() => {});
   }
   function setAudioProblem(err) {
-    audioProblem = err ? "No audio: the voice engine isn't running. Restart Kaiwa or switch engines in Settings → Speech." : "";
+    audioProblem = err === "starting" ? STARTING_NOTE
+      : err ? "No audio: the voice engine isn't running. Restart Kaiwa or switch engines in Settings → Speech." : "";
     const note = root.querySelector(".lesson-audio-note");
     if (note) {
       note.textContent = audioProblem;

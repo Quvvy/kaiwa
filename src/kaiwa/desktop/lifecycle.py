@@ -6,6 +6,7 @@ from typing import Any
 
 from kaiwa.desktop.services import (
     ServiceRegistry,
+    engine_already_running,
     kaiwa_already_running,
     read_preferred_tts_engine,
     run_bootstrap,
@@ -22,6 +23,7 @@ class Lifecycle:
     def __init__(self) -> None:
         self.registry = ServiceRegistry()
         self.running = False
+        self.tts_error = ""
 
     def session_healthy(self) -> bool:
         """True when the Kaiwa API responds."""
@@ -66,9 +68,10 @@ class Lifecycle:
             aivis = run_bootstrap(on_progress=progress)
             engine = read_preferred_tts_engine()
             status("Starting Kaiwa…")
-            # The voice engine and the API don't depend on each other: start them
-            # together so launch waits for the slower one, not the sum.
-            tts_errors: list[BaseException] = []
+            # The API is up in ~2 s; the voice engine takes 15-25 s. Open the window
+            # as soon as the API answers and let the engine finish in the background:
+            # the page shows "Voice engine starting…" until it's ready.
+            tts_booting = not engine_already_running(engine)
 
             def tts_job() -> None:
                 try:
@@ -77,15 +80,11 @@ class Lifecycle:
                         self.registry,
                         exe_path=aivis if engine == "aivisspeech" else None,
                     )
-                except BaseException as exc:  # re-raised on the boot thread
-                    tts_errors.append(exc)
+                except BaseException as exc:  # the page reports the engine as down
+                    self.tts_error = str(exc)
 
-            tts_thread = threading.Thread(target=tts_job, name="kaiwa-tts-start", daemon=True)
-            tts_thread.start()
-            start_kaiwa(self.registry)
-            tts_thread.join()
-            if tts_errors:
-                raise tts_errors[0]
+            threading.Thread(target=tts_job, name="kaiwa-tts-start", daemon=True).start()
+            start_kaiwa(self.registry, tts_booting=tts_booting)
         except Exception:
             stop_all(self.registry)
             self.running = False

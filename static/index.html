@@ -4043,6 +4043,21 @@
 
     checkForUpdates(false).catch(() => {});
 
+    (async function watchVoiceEngineStart() {
+      // The desktop app opens before the voice engine has finished loading.
+      for (let shown = false; ; ) {
+        let data = {};
+        try { data = await (await fetch("/api/tts/state")).json(); } catch (_) { return; }
+        if (data.state !== "starting") {
+          if (shown) clearEngineAlert();
+          return;
+        }
+        if (!shown) showEngineAlert((data.label || "Voice") + " engine starting…");
+        shown = true;
+        await new Promise((r) => setTimeout(r, 1000));
+      }
+    })();
+
     registerPttSession();
     refreshPttHookStatus();
     setInterval(() => {
