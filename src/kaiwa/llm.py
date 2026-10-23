@@ -16,7 +16,6 @@ from kaiwa.persona import (
     RECAST_RETRY_BLOCK,
     SHAPE_RETRY_BLOCK,
     build_practice_sitting_system_prompt,
-    build_practice_tip_system_prompt,
     build_tutor_system_prompt,
     compute_support_mode,
     governor_pitch,
@@ -395,30 +394,4 @@ def chat_stream(
 
     return ChatStreamStart(
         model=model, deltas=_deltas(), retry=False, locked=False
-    )
-
-
-def practice_tip(
-    settings: Settings,
-    *,
-    target: str,
-    heard: str,
-    score: int,
-    band: str,
-    prefs: UserPrefs | None = None,
-    client: OpenAI | None = None,
-) -> str:
-    prefs = prefs or load_prefs()
-    user = (
-        f"目標文: {target}\n"
-        f"聞こえた文: {heard}\n"
-        f"明瞭さスコア: {score}/100（{band}）\n"
-        "短いヒントをください。"
-    )
-    return _completion(
-        settings,
-        build_practice_tip_system_prompt(prefs),
-        [{"role": "user", "content": user}],
-        client=client,
-        model=settings.deepseek_model,
     )

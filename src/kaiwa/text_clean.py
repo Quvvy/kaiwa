@@ -74,23 +74,9 @@ def clean_reply_for_speech(text: str) -> str:
 _TRY_LINE_RE = re.compile(r"^TRY\s*[:：]\s*(.+)$", re.IGNORECASE)
 
 
-def split_try_phrase(text: str) -> tuple[str, str | None]:
-    """Split optional trailing `TRY: …` line from spoken reply.
-
-    Returns (spoken_reply, better_phrase_or_None).
-    """
-    raw = (text or "").rstrip()
-    if not raw:
-        return "", None
-    lines = raw.split("\n")
-    better: str | None = None
-    m = _TRY_LINE_RE.match(lines[-1].strip())
-    if m:
-        phrase = m.group(1).strip()
-        if phrase:
-            better = phrase[:120]
+def strip_try_line(text: str) -> str:
+    """Drop a stray trailing `TRY: …` line. Chat no longer asks for one; this is a speech safety net."""
+    lines = (text or "").rstrip().split("\n")
+    if lines and _TRY_LINE_RE.match(lines[-1].strip()):
         lines = lines[:-1]
-        while lines and not lines[-1].strip():
-            lines.pop()
-    spoken = "\n".join(lines).strip()
-    return spoken, better
+    return "\n".join(lines).strip()

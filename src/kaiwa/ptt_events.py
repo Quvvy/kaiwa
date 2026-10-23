@@ -58,7 +58,6 @@ def push_event(
     *,
     user_text: str,
     reply_text: str,
-    better_phrase: str | None = None,
     recast_phrase: str | None = None,
     session_id: str = "",
 ) -> int:
@@ -71,7 +70,6 @@ def push_event(
                 "session_id": session_id,
                 "user_text": user_text,
                 "reply_text": reply_text,
-                "better_phrase": better_phrase or "",
                 "recast_phrase": recast_phrase or "",
             }
         )

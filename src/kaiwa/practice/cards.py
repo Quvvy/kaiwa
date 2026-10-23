@@ -472,12 +472,11 @@ def build_card(
     signal: str,
     learner_line: str,
     tutor_reply: str,
-    better_phrase: str | None = None,
+    speakable: str | None = None,
     help_type: str = "none",
     prior_user: str = "",
     prior_assistant: str = "",
 ) -> dict[str, Any]:
-    speakable = (better_phrase or "").strip() or None
     return {
         "id": uuid.uuid4().hex,
         "ts": datetime.now(timezone.utc).isoformat(),
@@ -486,7 +485,7 @@ def build_card(
         "help_type": help_type,
         "learner_line": learner_line,
         "tutor_reply": tutor_reply,
-        "speakable": speakable,
+        "speakable": (speakable or "").strip() or None,
         "prior_user": prior_user,
         "prior_assistant": prior_assistant,
     }
@@ -499,7 +498,7 @@ def maybe_write_card(
     learner_state: str,
     transcript: str,
     reply: str,
-    better_phrase: str | None = None,
+    speakable: str | None = None,
     rescue: bool = False,
     path: Path | None = None,
 ) -> dict[str, Any] | None:
@@ -512,7 +511,7 @@ def maybe_write_card(
         if not tutor_reply:
             return None
         prior_user, prior_assistant = prior_context(history, skip_last=2)
-        phrase = better_phrase
+        phrase = speakable
 
         if signal in {"rescue", "help_request"}:
             pass
@@ -566,7 +565,7 @@ def maybe_write_card(
             signal=signal,
             learner_line=learner_line,
             tutor_reply=tutor_reply,
-            better_phrase=phrase,
+            speakable=phrase,
             help_type=_help_type_for(signal=signal, transcript=learner_line),
             prior_user=prior_user,
             prior_assistant=prior_assistant,

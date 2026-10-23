@@ -118,12 +118,12 @@ def main() -> None:
             learner_state="help_request",
             transcript="わからない",
             reply="ゆっくり言うね。コーヒーが好き？",
-            better_phrase="コーヒーが好きです。",
+            speakable="コーヒーが好きです。",
             path=tmp,
         )
         _check(first is not None and first["signal"] == "help_request", "help writes card")
         _check(first["learner_line"] == "わからない", "stores learner line")
-        _check(first["speakable"] == "コーヒーが好きです。", "stores better_phrase as speakable")
+        _check(first["speakable"] == "コーヒーが好きです。", "stores speakable as speakable")
         _check(first["prior_user"] == "昨日映画を見た", "stores prior user")
 
         dup = maybe_write_card(
@@ -744,7 +744,7 @@ def main() -> None:
                     signal="struggling",
                     learner_line=f"miss {i}",
                     tutor_reply=line,
-                    better_phrase=line,
+                    speakable=line,
                     help_type="particle",
                 ),
                 path=cards_file,

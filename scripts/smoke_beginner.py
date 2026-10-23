@@ -297,7 +297,7 @@ def scenario_misunderstands(tmp: Path) -> None:
         learner_state="help_request",
         transcript=vocab,
         reply="「眠い」は sleepy。眠い？",
-        better_phrase="眠いです。",
+        speakable="眠いです。",
     )
     _check(
         vocab_card is not None and vocab_card["help_type"] == "vocabulary",

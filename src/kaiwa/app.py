@@ -27,7 +27,6 @@ from kaiwa.personalities_store import (
     list_user_presets,
     update_user_preset,
 )
-from kaiwa.practice import next_phrase, score_intelligibility
 from kaiwa.practice.cards import last_assistant_line, maybe_write_card
 from kaiwa.wo_ga import recast_phrase, with_recast_notices
 from kaiwa.practice import sitting as practice_sitting
@@ -40,7 +39,6 @@ from kaiwa.learner_profile import (
     apply_chat_signals,
     apply_manual_override,
     apply_assess,
-    apply_practice_score,
     fetch_assess,
     load_profile,
     reset_profile,
@@ -54,10 +52,7 @@ from kaiwa.learner_memory import (
     clip_preferred_name,
     fetch_extract,
     load_memory,
-    next_recycle_target,
-    next_vocab_target,
     note_chat_turn,
-    note_practice_result,
     reset_memory,
     save_memory,
     should_extract,
@@ -66,7 +61,7 @@ from kaiwa import jsonio
 from kaiwa import leftovers
 from kaiwa import session_store
 from kaiwa.stream_util import SentenceBuffer
-from kaiwa.text_clean import clean_reply_for_speech, split_try_phrase
+from kaiwa.text_clean import clean_reply_for_speech, strip_try_line
 from kaiwa.quiz import (
     QUIZ_SIZE,
     answer_item,
@@ -193,7 +188,6 @@ def _snapshot_struggle_card(
     learner_state: str,
     transcript: str,
     reply: str,
-    better_phrase: str | None,
     rescue: bool = False,
 ) -> None:
     maybe_write_card(
@@ -202,7 +196,6 @@ def _snapshot_struggle_card(
         learner_state=learner_state,
         transcript=transcript,
         reply=reply,
-        better_phrase=better_phrase,
         rescue=rescue,
     )
 
@@ -219,7 +212,7 @@ def _snapshot_empty_stt_freeze(sid: str) -> None:
         learner_state="flowing",
         transcript="",
         reply=last,
-        better_phrase="えっと…",
+        speakable="えっと…",
     )
 
 
@@ -1092,9 +1085,9 @@ async def rescue_turn(body: RescueBody) -> dict[str, Any]:
     llm_ms = int((time.perf_counter() - t0) * 1000)
 
     reply = clean_reply_for_speech(gen.reply)
-    reply, better_phrase = split_try_phrase(reply)
+    reply = strip_try_line(reply)
     if not reply.strip():
-        reply = better_phrase or last_assistant
+        reply = last_assistant
     history[-1] = {"role": "assistant", "content": reply}
     reply_shape = analyze_reply_shape(
         reply=reply,
@@ -1135,7 +1128,6 @@ async def rescue_turn(body: RescueBody) -> dict[str, Any]:
             "rescue_step": step,
             "transcript": "",
             "reply": reply,
-            "better_phrase": better_phrase,
             "tts_ok": not tts_error,
             "tts_error": tts_error,
             "tts_engine": prefs.tts_engine,
@@ -1145,7 +1137,6 @@ async def rescue_turn(body: RescueBody) -> dict[str, Any]:
             "speaking_level": profile.speaking_level,
             "comprehension_level": profile.comprehension_level,
             "model_used": gen.model,
-            "memory_updated": False,
             "timing": timing,
             "input": "rescue",
             "client_source": "ui",
@@ -1159,7 +1150,6 @@ async def rescue_turn(body: RescueBody) -> dict[str, Any]:
         learner_state="help_request",
         transcript="",
         reply=reply,
-        better_phrase=better_phrase,
         rescue=True,
     )
 
@@ -1169,7 +1159,6 @@ async def rescue_turn(body: RescueBody) -> dict[str, Any]:
         "rescue_step": step,
         "transcript": "",
         "reply_text": reply,
-        "better_phrase": better_phrase,
         "audio_base64": audio_b64,
         "audio_mime": "audio/wav",
         "tts_error": tts_error,
@@ -1177,7 +1166,6 @@ async def rescue_turn(body: RescueBody) -> dict[str, Any]:
         "speaking_level": profile.speaking_level,
         "comprehension_level": profile.comprehension_level,
         "model_used": gen.model,
-        "memory_updated": False,
         "timing": timing,
     }
 
@@ -1390,9 +1378,9 @@ def _stream_chat_events(
 
     raw_reply = "".join(raw_parts)
     reply = clean_reply_for_speech(raw_reply)
-    reply, better_phrase = split_try_phrase(reply)
+    reply = strip_try_line(reply)
     if not reply.strip():
-        reply = better_phrase or "うん。"
+        reply = "うん。"
     prompt_line = last_assistant_line(history)
     history.append({"role": "assistant", "content": reply})
     reply_shape = analyze_reply_shape(
@@ -1432,7 +1420,6 @@ def _stream_chat_events(
             "mode": "chat",
             "transcript": transcript,
             "reply": reply,
-            "better_phrase": better_phrase,
             "tts_ok": not tts_error,
             "tts_error": tts_error,
             "tts_engine": prefs.tts_engine,
@@ -1442,7 +1429,6 @@ def _stream_chat_events(
             "speaking_level": profile.speaking_level,
             "comprehension_level": profile.comprehension_level,
             "model_used": model_used,
-            "memory_updated": False,
             "timing": timing,
             "input": "text" if stt_ms == 0 else "voice",
             "client_source": "ui_stream",
@@ -1457,7 +1443,6 @@ def _stream_chat_events(
         learner_state=learner_state,
         transcript=transcript,
         reply=reply,
-        better_phrase=better_phrase,
     )
     practice_sitting.consume_pending_elicit()
 
@@ -1467,7 +1452,6 @@ def _stream_chat_events(
             "session_id": sid,
             "transcript": transcript,
             "reply_text": reply,
-            "better_phrase": better_phrase,
             "recast_phrase": recast_phrase(
                 transcript, reply, last_assistant=prompt_line
             ),
@@ -1476,7 +1460,6 @@ def _stream_chat_events(
             "speaking_level": profile.speaking_level,
             "comprehension_level": profile.comprehension_level,
             "model_used": model_used,
-            "memory_updated": False,
             "timing": timing,
         },
     )
@@ -1629,10 +1612,9 @@ async def _run_chat_turn(
     model_used = gen.model
 
     reply = clean_reply_for_speech(gen.reply)
-    reply, better_phrase = split_try_phrase(reply)
+    reply = strip_try_line(reply)
     if not reply.strip():
-        # Model only emitted TRY: — keep a minimal spoken fallback
-        reply = better_phrase or "うん。"
+        reply = "うん。"
     prompt_line = last_assistant_line(history)
     history.append({"role": "assistant", "content": reply})
     reply_shape = analyze_reply_shape(
@@ -1698,7 +1680,6 @@ async def _run_chat_turn(
             "mode": "chat",
             "transcript": transcript,
             "reply": reply,
-            "better_phrase": better_phrase,
             "tts_ok": not tts_error,
             "tts_error": tts_error,
             "tts_engine": prefs.tts_engine,
@@ -1708,7 +1689,6 @@ async def _run_chat_turn(
             "speaking_level": profile.speaking_level,
             "comprehension_level": profile.comprehension_level,
             "model_used": model_used,
-            "memory_updated": False,
             "timing": timing,
             "input": "text" if stt_ms == 0 else "voice",
             "client_source": client_source or "ui",
@@ -1722,7 +1702,6 @@ async def _run_chat_turn(
         learner_state=learner_state,
         transcript=transcript,
         reply=reply,
-        better_phrase=better_phrase,
     )
 
     notice = recast_phrase(transcript, reply, last_assistant=prompt_line)
@@ -1731,7 +1710,6 @@ async def _run_chat_turn(
         ptt_events.push_event(
             user_text=transcript,
             reply_text=reply,
-            better_phrase=better_phrase,
             recast_phrase=notice,
             session_id=sid,
         )
@@ -1740,7 +1718,6 @@ async def _run_chat_turn(
         "session_id": sid,
         "transcript": transcript,
         "reply_text": reply,
-        "better_phrase": better_phrase,
         "recast_phrase": notice,
         "audio_base64": audio_b64,
         "audio_mime": "audio/wav",
@@ -1749,7 +1726,6 @@ async def _run_chat_turn(
         "speaking_level": profile.speaking_level,
         "comprehension_level": profile.comprehension_level,
         "model_used": model_used,
-        "memory_updated": False,
         "timing": timing,
     }
 
@@ -1937,78 +1913,6 @@ def practice_sitting_finish() -> dict[str, Any]:
     return practice_sitting.finish_sitting()
 
 
-@app.get("/api/practice/next")
-def practice_next(
-    session_id: str = "",
-    source: str = "bank",
-    after_id: str = "",
-) -> dict[str, Any]:
-    sid = session_id.strip()
-    src = (source or "bank").strip().lower()
-    after = after_id.strip()
-
-    if src == "last_reply":
-        text = _last_assistant_text(sid) if sid else None
-        if not text:
-            raise HTTPException(
-                status_code=404,
-                detail="Chat a little first, then you can say the last reply again.",
-            )
-        # Prefer first sentence for repeat practice.
-        short = text.split("。")[0].strip()
-        if short and not short.endswith("。") and "。" in text:
-            short = short + "。"
-        target = short or text
-        return {"phrase_id": "last_reply", "text": target, "source": "last_reply", "note": ""}
-
-    if src == "vocab":
-        memory = load_memory()
-        picked = next_vocab_target(memory, after_id=after)
-        if not picked:
-            raise HTTPException(
-                status_code=404,
-                detail="Chat a little more — useful lines will show up here.",
-            )
-        return picked
-
-    if src == "recycle":
-        memory = load_memory()
-        picked = next_recycle_target(memory, after_id=after)
-        if picked:
-            return picked
-        picked = next_vocab_target(memory, after_id="")
-        if picked:
-            return picked
-        text = _last_assistant_text(sid) if sid else None
-        if text:
-            short = text.split("。")[0].strip()
-            if short and not short.endswith("。") and "。" in text:
-                short = short + "。"
-            return {
-                "phrase_id": "last_reply",
-                "text": short or text,
-                "source": "last_reply",
-                "note": "",
-            }
-        raise HTTPException(
-            status_code=404,
-            detail="Nothing to say again yet — chat a bit, or try a light phrase from the bank.",
-        )
-
-    after_bank = after or _practice_cursor.get(sid or "_", "")
-    phrase = next_phrase(after_bank or None)
-    if sid:
-        _practice_cursor[sid] = phrase["id"]
-    else:
-        _practice_cursor["_"] = phrase["id"]
-    return {
-        "phrase_id": phrase["id"],
-        "text": phrase["text"],
-        "source": "bank",
-        "note": "",
-    }
-
-
 @app.post("/api/practice/speak")
 def practice_speak(body: SpeakRequest) -> dict[str, Any]:
     text = body.text.strip()
@@ -2031,106 +1935,6 @@ def practice_speak(body: SpeakRequest) -> dict[str, Any]:
         "audio_mime": "audio/wav",
         "speaker_id": speaker,
         "tts_engine": prefs.tts_engine,
-    }
-
-
-@app.post("/api/practice")
-async def practice(
-    audio: UploadFile = File(...),
-    target_text: str = Form(...),
-    session_id: str = Form(default=""),
-    practice_source: str = Form(default=""),
-) -> dict[str, Any]:
-    sid = _resolve_session(session_id.strip())
-    target = (target_text or "").strip()
-    if not target:
-        raise HTTPException(status_code=400, detail="target_text is required")
-
-    raw = await audio.read()
-    if not raw:
-        raise HTTPException(status_code=400, detail="Empty audio upload")
-
-    suffix = Path(audio.filename or "utterance.webm").suffix or ".webm"
-    try:
-        heard, _stt_meta = await asyncio.to_thread(
-            stt.transcribe_audio_bytes,
-            settings,
-            raw,
-            suffix=suffix,
-            mode="ja",
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"STT failed: {exc}") from exc
-
-    if not heard:
-        raise HTTPException(status_code=400, detail="Could not hear any Japanese speech")
-
-    result = score_intelligibility(target, heard)
-    prefs = load_prefs()
-    profile = load_profile()
-    profile = apply_practice_score(profile, result.score, result.band)
-    save_profile(profile)
-
-    memory = load_memory()
-    memory = note_practice_result(
-        memory,
-        target=target,
-        band=result.band,
-        practice_source=practice_source,
-    )
-    save_memory(memory)
-
-    tip = ""
-    tip_error = None
-    try:
-        _require_deepseek_key()
-        tip = llm.practice_tip(
-            settings,
-            target=target,
-            heard=heard,
-            score=result.score,
-            band=result.band,
-            prefs=prefs,
-        )
-        tip = clean_reply_for_speech(tip)
-    except HTTPException as exc:
-        tip_error = str(exc.detail)
-    except Exception as exc:
-        tip_error = str(exc)
-
-    _append_session(
-        sid,
-        {
-            "ts": datetime.now(timezone.utc).isoformat(),
-            "mode": "practice",
-            "target": target,
-            "heard": heard,
-            "score": result.score,
-            "band": result.band,
-            "score_kind": result.score_kind,
-            "target_norm": result.target_norm,
-            "heard_norm": result.heard_norm,
-            "tip": tip,
-            "tip_error": tip_error,
-            "practice_source": (practice_source or "").strip() or "bank",
-            "speaking_level": profile.speaking_level,
-            "comprehension_level": profile.comprehension_level,
-        },
-        kind="practice",
-    )
-
-    return {
-        "session_id": sid,
-        "target_text": target,
-        "heard_text": heard,
-        "score": result.score,
-        "band": result.band,
-        "score_kind": result.score_kind,
-        "tip": tip,
-        "tip_error": tip_error,
-        "reference_audio_base64": None,
     }
 
 

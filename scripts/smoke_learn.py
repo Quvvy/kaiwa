@@ -33,7 +33,7 @@ def _write(path: Path, *, session_id: str, line: str, speakable: str, ts: str) -
         signal="struggling",
         learner_line=line,
         tutor_reply=speakable,
-        better_phrase=speakable,
+        speakable=speakable,
         help_type="particle",
     )
     card["ts"] = ts

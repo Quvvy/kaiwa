@@ -15,7 +15,6 @@ LearnerLevel = Literal["pre_n5", "n5", "n4"]
 LEVEL_ORDER = ("pre_n5", "n5", "n4")
 VALID_LEVELS = set(LEVEL_ORDER)
 
-MAX_PRACTICE_SCORES = 20
 MAX_TOPIC_TAGS = 8
 MAX_NOTES = 500
 ASSESS_EVERY_N_TURNS = 8
@@ -25,7 +24,6 @@ PLACEMENT_PROTECT_TURNS = 15
 @dataclass
 class ProfileStats:
     chat_turns: int = 0
-    practice_scores: list[int] = field(default_factory=list)
     # Scaffolding intensity for Chat (0 normal … 3 heavy); decays on success.
     struggle_streak: int = 0
     flow_streak: int = 0
@@ -136,14 +134,6 @@ def _normalize_tags(raw: Any) -> list[str]:
 def _parse_stats(raw: Any) -> ProfileStats:
     if not isinstance(raw, dict):
         return ProfileStats()
-    scores_raw = raw.get("practice_scores", [])
-    scores: list[int] = []
-    if isinstance(scores_raw, list):
-        for s in scores_raw[-MAX_PRACTICE_SCORES:]:
-            try:
-                scores.append(max(0, min(100, int(s))))
-            except (TypeError, ValueError):
-                continue
     try:
         chat_turns = max(0, int(raw.get("chat_turns", 0)))
     except (TypeError, ValueError):
@@ -162,7 +152,6 @@ def _parse_stats(raw: Any) -> ProfileStats:
         last_assess = 0
     return ProfileStats(
         chat_turns=chat_turns,
-        practice_scores=scores,
         struggle_streak=struggle,
         flow_streak=flow,
         last_assess_turn=last_assess,
@@ -323,30 +312,6 @@ def apply_chat_signals(
     return profile
 
 
-def apply_practice_score(profile: LearnerProfile, score: int, band: str) -> LearnerProfile:
-    score = max(0, min(100, int(score)))
-    scores = list(profile.stats.practice_scores)
-    scores.append(score)
-    profile.stats.practice_scores = scores[-MAX_PRACTICE_SCORES:]
-
-    lock_levels = (not profile.placement_completed) or placement_levels_locked(profile)
-    mean = sum(profile.stats.practice_scores) / len(profile.stats.practice_scores)
-    if not lock_levels:
-        if mean >= 85 and len(profile.stats.practice_scores) >= 3:
-            profile.speaking_level = nudge_level(profile.speaking_level, 1)
-            profile.confidence = min(0.9, profile.confidence + 0.04)
-        elif mean < 50 and len(profile.stats.practice_scores) >= 3:
-            profile.speaking_level = nudge_level(profile.speaking_level, -1)
-            profile.confidence = max(0.15, profile.confidence - 0.04)
-
-    if band == "unclear" and profile.placement_completed and not placement_levels_locked(profile):
-        profile.confidence = max(0.15, profile.confidence - 0.02)
-    elif band == "clear" and profile.placement_completed and not placement_levels_locked(profile):
-        profile.confidence = min(0.9, profile.confidence + 0.01)
-
-    return profile
-
-
 def should_assess(profile: LearnerProfile, prefs: UserPrefs) -> bool:
     if prefs.model_routing == "flash_only":
         # Still allow assess on Flash — routing only gates Pro for chat replies.
@@ -467,7 +432,6 @@ def fetch_assess(
         f"current_comprehension: {profile.comprehension_level}\n"
         f"{placement_hint}"
         f"utterance: {transcript}\n"
-        f"recent_practice_scores: {profile.stats.practice_scores[-5:]}\n"
     )
     try:
         raw_text = _completion(

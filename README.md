@@ -1,6 +1,8 @@
 # Kaiwa
 
-Personal Japanese AI conversation partner — turn-based chat, Practice, and a self-assessment placement check.
+**Kaiwa is a patient Japanese speaking partner for beginners: you talk, it keeps the conversation going at your level, and it gently models what you meant to say.**
+
+Chat is the product. Practice is a short add-on that rehearses something you struggled with in Chat, then sends you back. Anything that doesn't serve that sentence gets cut.
 
 **Repo:** [github.com/Quvvy/kaiwa](https://github.com/Quvvy/kaiwa)  
 **Version:** **1.0.3**
@@ -77,7 +79,6 @@ Extra AivisSpeech voices (from AivisHub):
 .\.venv\Scripts\python.exe scripts\smoke_tts.py
 .\.venv\Scripts\python.exe scripts\smoke_tts.py --engine voicevox
 .\.venv\Scripts\python.exe scripts\smoke_stt.py
-.\.venv\Scripts\python.exe scripts\smoke_practice.py
 .\.venv\Scripts\python.exe scripts\smoke_reply_shape.py
 .\.venv\Scripts\python.exe scripts\smoke_state_files.py
 .\.venv\Scripts\python.exe scripts\eval_turn_latency.py
