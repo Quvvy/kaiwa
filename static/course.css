@@ -237,3 +237,15 @@
 .course-choices { display: flex; flex-wrap: wrap; gap: 0.45rem; }
 .course-choices button.right { border-color: var(--ok); color: var(--ok); opacity: 1; }
 .course-choices button.wrong { border-color: var(--bad); color: var(--bad); opacity: 1; }
+
+.course-extra {
+  width: 100%;
+  margin-top: 0.6rem;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  text-align: left;
+  padding: 0.75rem 0.9rem;
+}
+.course-extra span { font-size: 0.82rem; color: var(--muted); font-weight: 400; }

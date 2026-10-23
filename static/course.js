@@ -294,6 +294,11 @@
               el("p", { text: "You're done for today. Come back tomorrow for your reviews." }),
               el("button", { class: "secondary", type: "button", onclick: () => goChat() }, "Try your phrases in Chat"),
             ),
+        s.phrases_learned
+          ? el("button", { class: "secondary course-extra", type: "button", onclick: runExtraListening },
+              el("strong", { text: "Extra listening" }),
+              el("span", { text: "A new short conversation using only what you know. As many as you like." }))
+          : null,
         el("p", { class: "course-foot" }, romajiToggle(showHome)),
       ),
     );
@@ -458,7 +463,42 @@
 
   // ---------- listen ----------
   function runListen(unit) {
-    const d = unit.dialogue;
+    listenView({
+      title: `Listen · Unit ${unit.number}`,
+      dialogue: unit.dialogue,
+      questions: unit.questions,
+      doneLabel: "Continue",
+      onDone: async () => {
+        await postJson("/api/course/step", { unit_id: unit.id, step: "listen" });
+        await refresh();
+        runSpeak(unit);
+      },
+    });
+  }
+
+  async function runExtraListening() {
+    frame("Extra listening", "", el("div", { class: "course-card course-center" },
+      el("p", { class: "course-muted", text: "Writing a new conversation from the phrases you know…" })));
+    let story;
+    try {
+      story = await api("/api/course/story", { method: "POST" });
+    } catch (err) {
+      frame("Extra listening", "", el("div", { class: "course-card course-center" },
+        el("p", { class: "course-verdict off", text: String(err.message || err) }),
+        el("button", { type: "button", onclick: runExtraListening }, "Try again")));
+      return;
+    }
+    listenView({
+      title: "Extra listening",
+      dialogue: { scene: story.scene, lines: story.lines },
+      questions: story.questions,
+      doneLabel: "Another conversation",
+      onDone: runExtraListening,
+    });
+  }
+
+  function listenView({ title, dialogue, questions: qs, doneLabel, onDone }) {
+    const d = dialogue;
     let showJp = false;
     let showEn = false;
     let playing = false;
@@ -500,7 +540,7 @@
       el("button", { class: "secondary", type: "button", onclick: (e) => { showEn = !showEn; e.target.textContent = showEn ? "Hide English" : "Show English"; renderLines(); } }, "Show English"),
     );
 
-    const questions = el("div", { class: "course-questions" }, unit.questions.map((q, qi) => {
+    const questions = el("div", { class: "course-questions" }, qs.map((q, qi) => {
       const feedback = el("p", { class: "course-verdict" });
       const choices = el("div", { class: "course-choices" }, q.choices.map((choice, ci) =>
         el("button", {
@@ -513,20 +553,16 @@
             if (!right) choices.children[q.answer].classList.add("right");
             feedback.className = "course-verdict " + (right ? "good" : "off");
             feedback.textContent = right ? "Right." : "Not quite — replay the conversation and listen for it.";
-            if (answered.size === unit.questions.length) doneBtn.disabled = false;
+            if (answered.size === qs.length) doneBtn.disabled = false;
           },
         }, choice)));
       return el("div", { class: "course-question" }, el("p", { class: "course-q", text: q.q }), choices, feedback);
     }));
-    const doneBtn = el("button", { class: "course-cta", type: "button", disabled: true, onclick: async () => {
-      await postJson("/api/course/step", { unit_id: unit.id, step: "listen" });
-      await refresh();
-      runSpeak(unit);
-    } }, "Continue");
+    const doneBtn = el("button", { class: "course-cta", type: "button", disabled: true, onclick: onDone }, doneLabel);
 
     renderLines();
-    frame(`Listen · Unit ${unit.number}`, "", el("div", { class: "course-card" },
-      el("p", { class: "course-prompt", text: d.scene + " Listen first — try to follow before showing any text." }),
+    frame(title, "", el("div", { class: "course-card" },
+      el("p", { class: "course-prompt", text: (d.scene ? d.scene + " " : "") + "Listen first — try to follow before showing any text." }),
       playBtn,
       toggles,
       linesBox,

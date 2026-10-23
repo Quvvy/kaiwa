@@ -3750,7 +3750,7 @@
       if (!placementCompleted) {
         clearPlacementDismiss(activeProfileId);
       }
-      maybeOfferPlacement(profilePayload, { profileId: activeProfileId, forceOpen: !placementCompleted });
+      maybeOfferPlacement(profilePayload, { profileId: activeProfileId });
       refreshChatList();
     }
 
@@ -4985,10 +4985,6 @@
       return "kaiwa_placement_dismissed_" + (profileId || "default");
     }
 
-    function isPlacementDismissed(profileId) {
-      return localStorage.getItem(placementDismissKey(profileId)) === "1";
-    }
-
     function dismissPlacement(profileId) {
       localStorage.setItem(placementDismissKey(profileId), "1");
     }
@@ -4998,7 +4994,6 @@
     }
 
     function maybeOfferPlacement(profilePayload, opts) {
-      const forceOpen = !!(opts && opts.forceOpen);
       const completed = profilePayload && profilePayload.placement_completed;
       if (typeof completed === "boolean") {
         placementCompleted = completed;
@@ -5011,16 +5006,14 @@
       if (pid) activeProfileId = pid;
       quizSoftBanner.hidden = placementCompleted;
       syncPlaceMeHint();
-      if (placementCompleted) return;
-      if (!forceOpen && isPlacementDismissed(activeProfileId)) return;
-      openPlaceMe();
+      // Never auto-opens: the Learn tab is the starting point; Place me waits in Settings.
     }
 
     function skipPlacement() {
       dismissPlacement(activeProfileId);
       quizStatusEl.textContent = "Skipped. Chat stays extra simple until you finish Place me (Settings).";
       resetQuizUi();
-      setMode("chat");
+      setMode("learn");
     }
 
     function resetQuizUi() {
@@ -5417,13 +5410,8 @@
       saveDeepseekKey(input && input.value, status)
         .then(() => {
           if (input) input.value = "";
-          // Gate was covering Place me; offer soft placement once key is saved.
-          if (!placementCompleted) {
-            maybeOfferPlacement(
-              { placement_completed: false },
-              { forceOpen: true, profileId: activeProfileId }
-            );
-          }
+          // Key saved: start where a beginner should start.
+          setMode("learn");
         })
         .catch((err) => {
           if (status) {

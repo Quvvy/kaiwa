@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 
 from kaiwa import stt, tts
 from kaiwa.config import get_settings
-from kaiwa.course import coach, state
+from kaiwa.course import coach, state, stories
 from kaiwa.course.speech_check import check_phrase
 from kaiwa.prefs import load_prefs
 
@@ -110,6 +110,20 @@ async def speak_task(
     if not heard:
         raise HTTPException(status_code=400, detail="Say or type an answer first.")
     return await asyncio.to_thread(coach.judge, get_settings(), task=unit["speak"][task], heard=heard)
+
+
+@router.post("/story")
+async def story() -> dict[str, Any]:
+    """Extra listening built from learned phrases."""
+    settings = get_settings()
+    if not settings.deepseek_api_key:
+        raise HTTPException(status_code=400, detail="Extra listening needs your DeepSeek key (Settings → Your data).")
+    data = await asyncio.to_thread(stories.generate, settings)
+    if data is None:
+        if not state.learned_phrase_ids(state.load_state()):
+            raise HTTPException(status_code=400, detail="Learn your first phrases, then extra listening unlocks.")
+        raise HTTPException(status_code=502, detail="Couldn't make a conversation this time — try again.")
+    return data
 
 
 @router.post("/step")

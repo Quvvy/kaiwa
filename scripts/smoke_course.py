@@ -117,10 +117,29 @@ def coach_fallback() -> None:
     _check(bad["verdict"] == "retry" and bad["model"] == task["hint"], "offline fallback offers the model answer")
 
 
+def story_checks() -> None:
+    from kaiwa.course.stories import _shuffled, _valid
+
+    good = {
+        "lines": [{"who": "a", "jp": "こんばんは。"}, {"who": "b", "jp": "こんばんは。"}, {"who": "a", "jp": "じゃあ、また。"}],
+        "questions": [{"q": "When?", "choices": ["Morning", "Evening", "Noon"], "answer": 1}],
+    }
+    _check(_valid(good), "well-formed story passes")
+    _check(not _valid({**good, "lines": good["lines"][:2]}), "too-short story rejected")
+    _check(not _valid({**good, "questions": [{"q": "x", "choices": ["a", "b"], "answer": 5}]}), "bad answer index rejected")
+    _check(not _valid({**good, "lines": [{"who": "c", "jp": "x"}] * 4}), "unknown speaker rejected")
+    for _ in range(20):
+        q = _shuffled({"q": "When?", "choices": ["Right", "Wrong 1", "Wrong 2"], "answer": 0})
+        if q["choices"][q["answer"]] != "Right":
+            _check(False, "shuffle keeps the right answer")
+    _check(True, "shuffle keeps the right answer")
+
+
 def main() -> None:
     content()
     speech()
     srs()
+    story_checks()
     coach_fallback()
     print("smoke_course ok")
 
