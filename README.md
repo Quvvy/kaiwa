@@ -1,8 +1,8 @@
 # Kaiwa
 
-**Kaiwa is a patient Japanese speaking partner for beginners: you talk, it keeps the conversation going at your level, and it gently models what you meant to say.**
+**Kaiwa teaches a pre-N5 beginner to understand and speak everyday Japanese: a short daily lesson that teaches, checks and reviews real phrases out loud, plus a conversation partner that uses exactly what you've learned.**
 
-Chat is the product. Practice is a short add-on that rehearses something you struggled with in Chat, then sends you back. Anything that doesn't serve that sentence gets cut.
+**Learn** is home: review what's due, learn a few new phrases, hear them in a conversation, then answer questions out loud and get one concrete fix. **Chat** is where you use it. Anything that doesn't help you understand or speak gets cut.
 
 **Repo:** [github.com/Quvvy/kaiwa](https://github.com/Quvvy/kaiwa)  
 **Version:** **1.0.3**
@@ -13,16 +13,15 @@ Chat is the product. Practice is a short add-on that rehearses something you str
 2. Run the installer → open **Kaiwa** from the Start Menu.
 3. First launch may download a speech model (~1.5 GB) and voice engine (~200 MB) into `%LocalAppData%\Kaiwa\` (progress on the splash; relaunch resumes).
 4. When asked, paste a [DeepSeek](https://platform.deepseek.com/) API key (saved under AppData, not in the install folder).
-5. Optional soft **Place me** quiz; then talk in Chat. **NVIDIA GPU recommended** for faster speech recognition; CPU works.
+5. Start today's lesson on the **Learn** tab. **NVIDIA GPU recommended** for faster speech recognition; CPU works.
 
 If Kaiwa fails to start, details are in `%LocalAppData%\Kaiwa\Kaiwa.desktop.log`. When a newer release exists, Kaiwa can notify you and download/run the Windows Setup from Settings → About (or the update banner). Uninstall via Windows Apps keeps your key and models in `%LocalAppData%\Kaiwa\`.
 
 ## Stack
 
 ```
-Chat:     Mic → faster-whisper → DeepSeek V4 Flash → AivisSpeech (or VOICEVOX)
-Practice: Today’s practice / Start → say the snapshot line, one tiny exchange → Chat
-Quiz:     Self-assessment placement (stage / listening / speaking / pace) → profile + goal
+Learn:    Review (spaced) → New phrases (hear, say, Whisper check) → Listen (dialogue + questions) → Speak (Flash coach)
+Chat:     Mic → faster-whisper → DeepSeek V4 Flash (knows your learned phrases) → AivisSpeech (or VOICEVOX)
 ```
 
 | Layer | Choice |
@@ -30,11 +29,11 @@ Quiz:     Self-assessment placement (stage / listening / speaking / pace) → pr
 | STT | Local `faster-whisper` `large-v3-turbo` (CUDA when available, else CPU) |
 | LLM | `deepseek-v4-flash` (thinking disabled by default) |
 | TTS | **AivisSpeech** default (`:10101`); **VOICEVOX** fallback (`:50021`) |
-| Practice | Chat struggle snapshots → say-this + one exchange (not pitch accent) |
+| Course | 10 hand-written units / 60 phrases (`src/kaiwa/course/units.py`), Leitner review, extra listening |
 | Tutor prefs | Goals, Immersion/Adaptive, Formal/Casual, naturalness, personalities, TTS engine/voice, Flash/Pro routing |
 | Learner profile | Live speaking/comprehension estimates (auto-updating) |
 | Long-term memory | Comfort prefs, topics, vocab, grammar (auto-updating) |
-| App | FastAPI + Chat / Practice / Settings tabs at `/` |
+| App | FastAPI + Learn / Chat / Settings tabs at `/` |
 
 ## Setup (developers / owners)
 
@@ -81,6 +80,7 @@ Extra AivisSpeech voices (from AivisHub):
 .\.venv\Scripts\python.exe scripts\smoke_stt.py
 .\.venv\Scripts\python.exe scripts\smoke_reply_shape.py
 .\.venv\Scripts\python.exe scripts\smoke_state_files.py
+.\.venv\Scripts\python.exe scripts\smoke_course.py
 .\.venv\Scripts\python.exe scripts\eval_turn_latency.py
 ```
 
@@ -118,7 +118,7 @@ Extra AivisSpeech voices (from AivisHub):
 Open **http://127.0.0.1:8787**
 
 - **Chat** — hold to talk, free conversation; type a short line if Whisper misses you; **Hear that again** re-plays Kaiwa’s last line; **Simpler** on Kaiwa’s last bubble says it more easily; **Easy** / **Free** picks the gym lock (Easy is the default); a quiet turn count sits by the status; **New chat** starts a fresh thread (keeps memory; past chats stay on disk) and may show **From this chat** leftovers; **Chats** lists and reopens your threads; **Same questions** re-asks this thread’s questions as a new chat
-- **Practice** — **Start**: a short sitting from something you struggled with in Chat, then back. **Or pick a line** lists lines from your Chat struggles (or starters if none). **Why?** is a one-liner. **You’ve said** lists recently practiced lines.
+- **Learn** — today's lesson: **Review** (hear → meaning, English → say it; spaced repetition), **New phrases** (audio, slow replay, romaji toggle, say-it-back check), **Listen** (two-voice dialogue + questions), **Speak** (answer Kaiwa out loud; the coach shows what you said, a natural model answer and one fix). **Extra listening** makes a fresh conversation from what you know.
 - **Place me** — Settings section; soft first-run (auto-opens when new/reset; Skip anytime); expanded English self-ratings that shape how Kaiwa talks
 - **Settings** — Your data, Appearance, Tutor, Learning, Place me, Memory, Speech (searchable). **Your data** exports/imports a backup or resets everything; Kaiwa saves a copy of the old data first.
 
