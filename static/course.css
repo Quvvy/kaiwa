@@ -718,39 +718,54 @@
   }
 }
 
-/* ---------- ask panel ---------- */
-.ask-panel {
+/* ---------- ask: corner button + docked chat ---------- */
+.ask-launcher {
   position: fixed;
-  top: 41px;
-  right: 0;
-  bottom: 0;
-  width: min(380px, 100%);
+  right: 16px;
+  bottom: 16px;
   z-index: 20;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 10px 14px;
-  background: var(--surface);
-  border-left: 1px solid var(--line-strong);
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 18px;
   box-shadow: var(--shadow);
-  overflow-y: auto;
 }
 
-body:not([data-mode="learn"]) .ask-panel {
+body:not([data-mode="learn"]) .ask-launcher,
+body:not([data-mode="learn"]) .ask-dock {
   display: none;
 }
 
-/* Make room so the lesson isn't hidden under the panel on wide windows. */
-@media (min-width: 1000px) {
-  body:has(.ask-panel:not([hidden])) #course {
-    padding-right: 380px;
+/* Narrow windows: sit above the lesson's Next button. */
+@media (max-width: 1000px) {
+  .ask-launcher {
+    bottom: 72px;
   }
+}
+
+/* Sits above the lesson's footer so Next stays clickable while the chat is open. */
+.ask-dock {
+  position: fixed;
+  right: 16px;
+  bottom: 66px;
+  z-index: 21;
+  width: min(350px, calc(100vw - 32px));
+  height: min(440px, calc(100vh - 130px));
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+  overflow: hidden;
 }
 
 .ask-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 6px 6px 12px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
 }
 
 .ask-title {
@@ -758,14 +773,73 @@ body:not([data-mode="learn"]) .ask-panel {
 }
 
 .ask-about {
-  font-size: 15px;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
   color: var(--ink-2);
+  font-size: 13.5px;
+}
+
+.ask-close {
+  min-height: 26px;
+  width: 28px;
+  padding: 0;
+  background: transparent;
+  border-color: transparent;
+  color: var(--ink-2);
+  font-weight: 400;
+}
+
+.ask-close:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--ink);
+}
+
+.ask-log {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ask-log:empty::before {
+  content: "Stuck on something? Ask in English, or tap a button below.";
+  color: var(--ink-3);
+  font-size: 13px;
+}
+
+.ask-msg {
+  max-width: 92%;
+  padding: 7px 10px;
+  border-radius: var(--radius-lg);
+  font-size: 14px;
+}
+
+.ask-msg-q {
+  align-self: flex-end;
+  background: var(--accent-soft);
+}
+
+.ask-msg-a {
+  align-self: flex-start;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .ask-quick {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
+  padding: 6px 10px 0;
+  border-top: 1px solid var(--line);
 }
 
 .ask-quick button {
@@ -777,30 +851,11 @@ body:not([data-mode="learn"]) .ask-panel {
 .ask-form {
   display: flex;
   gap: 6px;
-}
-
-.ask-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.ask-entry {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding-top: 10px;
-  border-top: 1px solid var(--line);
-}
-
-.ask-q {
-  font-weight: 600;
-  font-size: 13.5px;
+  padding: 6px 10px 10px;
 }
 
 .ask-a {
-  font-size: 14.5px;
-  line-height: 1.55;
+  line-height: 1.5;
 }
 
 .ask-unsure {
@@ -810,18 +865,18 @@ body:not([data-mode="learn"]) .ask-panel {
 
 .ask-breakdown {
   border-collapse: collapse;
-  font-size: 13.5px;
+  font-size: 13px;
 }
 
 .ask-breakdown td {
-  padding: 3px 8px 3px 0;
+  padding: 2px 8px 2px 0;
   border-bottom: 1px solid var(--line);
   vertical-align: top;
 }
 
 .ask-breakdown td:first-child {
   font-family: var(--font-jp);
-  font-size: 16px;
+  font-size: 15px;
   white-space: nowrap;
 }
 
@@ -833,30 +888,25 @@ body:not([data-mode="learn"]) .ask-panel {
 }
 
 .ask-example [lang="ja"] {
-  font-size: 16px;
+  font-size: 15px;
 }
 
 .ask-example-en {
   grid-column: 2;
-  font-size: 13px;
+  font-size: 12.5px;
   color: var(--ink-2);
 }
 
 .ask-more summary {
   cursor: pointer;
-  font-size: 13px;
+  font-size: 12.5px;
   color: var(--ink-2);
 }
 
 .ask-more p {
-  font-size: 13.5px;
-  line-height: 1.55;
-  margin-top: 4px;
-}
-
-.lesson-ask {
-  min-height: 28px;
   font-size: 13px;
+  line-height: 1.5;
+  margin-top: 4px;
 }
 
 /* ---------- Japanese-first bits ---------- */

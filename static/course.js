@@ -344,52 +344,62 @@
     if (askContext) askContext = { ...askContext, result };
   }
 
+  // A chat box docked in the bottom-right corner, opened from a button that sits
+  // there on every lesson screen. It overlays the corner; the lesson doesn't move.
   const askPanel = (() => {
-    const list = el("div", { class: "ask-list" });
-    const about = el("p", { class: "ask-about" });
-    const input = el("input", { type: "text", maxlength: "500", placeholder: "Ask anything about this" });
+    const log = el("div", { class: "ask-log", "aria-live": "polite" });
+    const about = el("span", { class: "ask-about" });
+    const input = el("input", { type: "text", maxlength: "500", placeholder: "Ask about this screen…" });
     const quick = (label, key) => el("button", { type: "button", class: "secondary", onclick: () => send("", key) }, label);
     const wrongBtn = quick("What did I get wrong?", "wrong");
-    const panel = el("aside", { class: "ask-panel", hidden: true, "aria-label": "Ask" },
+    const launcher = el("button", { type: "button", class: "ask-launcher", hidden: true, onclick: () => open() },
+      "Ask a question", kbd("?"));
+    const panel = el("section", { class: "ask-dock", hidden: true, "aria-label": "Ask a question" },
       el("div", { class: "ask-head" },
         el("span", { class: "ask-title", text: "Ask" }),
-        el("button", { type: "button", class: "secondary", onclick: () => close() }, "Close", kbd("Esc"))),
-      about,
+        about,
+        el("button", { type: "button", class: "ask-close", "aria-label": "Close", onclick: () => close() }, "✕")),
+      log,
       el("div", { class: "ask-quick" }, quick("Break this down", "breakdown"), quick("Why?", "why"), wrongBtn),
       el("form", { class: "ask-form", onsubmit: (e) => { e.preventDefault(); send(input.value, ""); } },
-        input, el("button", { type: "submit" }, "Ask")),
-      list);
-    document.body.append(panel);
+        input, el("button", { type: "submit" }, "Send")));
+    document.body.append(launcher, panel);
 
     function refresh() {
-      if (!askContext) return close();
+      if (!askContext) {
+        launcher.hidden = true;
+        return close();
+      }
+      launcher.hidden = !panel.hidden;
       about.textContent = askContext.jp || askContext.title || "";
       about.lang = askContext.jp ? "ja" : "";
       wrongBtn.hidden = !askContext.result;
     }
     function open() {
       if (!askContext) return;
-      refresh();
       panel.hidden = false;
+      refresh();
       input.focus();
     }
     function close() {
       panel.hidden = true;
+      launcher.hidden = !askContext;
       if (document.activeElement && panel.contains(document.activeElement)) document.activeElement.blur();
     }
     async function send(question, key) {
       if (!askContext || (!key && !question.trim())) return;
-      const entry = el("div", { class: "ask-entry" },
-        el("p", { class: "ask-q", text: key ? { breakdown: "Break this down", why: "Why?", wrong: "What did I get wrong?" }[key] : question }),
-        el("p", { class: "pending", text: "Thinking…" }));
-      list.prepend(entry);
+      const label = key ? { breakdown: "Break this down", why: "Why?", wrong: "What did I get wrong?" }[key] : question;
+      const answer = el("div", { class: "ask-msg ask-msg-a" }, el("p", { class: "pending", text: "Thinking…" }));
+      log.append(el("div", { class: "ask-msg ask-msg-q", text: label }), answer);
+      log.scrollTop = log.scrollHeight;
       input.value = "";
       try {
         const r = await postJson("/api/course/ask", { question, quick: key, context: askContext });
-        entry.replaceChildren(entry.firstChild, ...renderAnswer(r));
+        answer.replaceChildren(...renderAnswer(r));
       } catch (err) {
-        entry.replaceChildren(entry.firstChild, el("p", { class: "verdict off", text: String(err.message || err) }));
+        answer.replaceChildren(el("p", { class: "verdict off", text: String(err.message || err) }));
       }
+      log.scrollTop = log.scrollHeight;
     }
     function renderAnswer(r) {
       const parts = [el("p", { class: "ask-a", text: r.answer })];
@@ -433,8 +443,6 @@
       el("button", { class: "secondary lesson-exit", type: "button", onclick: () => showHome() }, "Exit"),
       el("h2", { class: "lesson-title", text: title }),
       total ? el("span", { class: "lesson-count", text: `${index + 1} of ${total}` }) : null,
-      el("button", { class: "secondary lesson-ask", type: "button", onclick: () => askPanel.toggle(),
-        "data-tip": "Ask a question about this screen" }, "Ask", kbd("?")),
     );
     const steps = total
       ? el("div", { class: "lesson-steps", "aria-hidden": "true" },
@@ -495,7 +503,7 @@
     stopAudio();
     screenId += 1;
     askContext = null;
-    askPanel.close();
+    askPanel.refresh();
     keys.primary = keys.hold = keys.replay = keys.choice = null;
     try {
       await refresh();
@@ -1205,8 +1213,9 @@
         el("button", { class: "secondary line-play", type: "button", "aria-label": "Play", onclick: () => play(ex.jp) }, "▶"),
         el("span", { class: "example-jp", lang: "ja", text: ex.jp }),
         el("span", { class: "example-en", text: ex.en }))));
+      const [lead, ...rest] = g.explain;
       const explainBox = el("div", { class: "grammar-explain", hidden: true },
-        g.explain.map((para) => el("p", { class: "grammar-text", text: para })));
+        rest.map((para) => el("p", { class: "grammar-text", text: para })));
       const meaningsBtn = el("button", { class: "secondary", type: "button", "aria-pressed": "false", onclick: () => {
         const on = list.classList.toggle("meanings-hidden");
         meaningsBtn.setAttribute("aria-pressed", String(!on));
@@ -1214,7 +1223,7 @@
       const explainBtn = el("button", { class: "secondary", type: "button", "aria-pressed": "false", onclick: () => {
         explainBox.hidden = !explainBox.hidden;
         explainBtn.setAttribute("aria-pressed", String(!explainBox.hidden));
-      } }, "Explain");
+      } }, "More");
       async function playAll() {
         for (const ex of g.examples) {
           if (!here()) return;
@@ -1227,18 +1236,19 @@
         ask: { screen: "grammar", title: g.title, rule: g.rule, explanation: g.explain, examples: g.examples },
         body: el("div", { class: "card-body grammar" },
           el("h3", { class: "grammar-title", text: g.title }),
-          list,
           g.rule ? el("p", { class: "grammar-rule", text: g.rule }) : null,
+          lead ? el("p", { class: "grammar-text", text: lead }) : null,
+          list,
           el("div", { class: "lesson-play" },
             el("button", { class: "secondary", type: "button", onclick: playAll }, "Play all", kbd("R")),
-            meaningsBtn, explainBtn),
+            meaningsBtn, rest.length ? explainBtn : null),
           explainBox),
         actions, primary: go,
       });
       const here = onThisScreen();
       keys.replay = playAll;
       keys.meanings = () => meaningsBtn.click();
-      if (!g.rule) explainBox.hidden = false; // older content without a rule line
+
     }
 
     // 2. Practice questions with a one-line reason after each answer.
