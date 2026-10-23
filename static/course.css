@@ -860,18 +860,6 @@ body:not([data-mode="learn"]) .ask-panel {
 }
 
 /* ---------- Japanese-first bits ---------- */
-.word-pic {
-  font-size: 22px;
-  width: 48px;
-  text-align: center;
-}
-
-.choice-pic {
-  justify-content: flex-start;
-  font-size: 30px;
-  min-height: 54px;
-}
-
 .grammar-rule {
   font-size: 14.5px;
   font-weight: 600;
@@ -889,13 +877,6 @@ body:not([data-mode="learn"]) .ask-panel {
 
 .examples.meanings-hidden .example-en {
   visibility: hidden;
-}
-
-.scene {
-  font-size: 44px;
-  line-height: 1.2;
-  cursor: help;
-  width: max-content;
 }
 
 .scene-line {

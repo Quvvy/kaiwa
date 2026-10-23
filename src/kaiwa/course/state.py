@@ -421,8 +421,7 @@ def today_payload(*, path: Path | None = None) -> dict[str, Any]:
         "kana_known": "".join(sorted(known_chars(state))),
         "kana_pool": [{"char": ch, "ro": KANA_ROMAJI[ch]} for l in KANA_LESSONS if l["id"] in state["kana"]
                       for ch, _ in l["kana"]],
-        "words_pool": [{"jp": w["jp"], "en": w["en"], "pic": w.get("pic", "")} for wid, w in _WORDS.items()
-                       if f"{wid}:mean" in state["cards"]],
+        "words_pool": [{"jp": w["jp"], "en": w["en"]} for wid, w in _WORDS.items() if f"{wid}:mean" in state["cards"]],
     }
 
 

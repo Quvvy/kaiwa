@@ -289,11 +289,11 @@
    * One multiple-choice question. Calls onAnswer(right) after showing the result.
    * Number keys pick an option; a right answer moves on by itself.
    */
-  function choiceBlock({ options, answer, onAnswer, jp = false, explain = "", pics = false }) {
+  function choiceBlock({ options, answer, onAnswer, jp = false, explain = "" }) {
     const feedback = el("p", { class: "verdict" });
     let done = false;
     const buttons = options.map((opt, i) =>
-      el("button", { class: "secondary choice" + (pics ? " choice-pic" : ""), type: "button", lang: jp ? "ja" : null, onclick: () => pick(i) },
+      el("button", { class: "secondary choice", type: "button", lang: jp ? "ja" : null, onclick: () => pick(i) },
         el("span", { class: "choice-key", text: String(i + 1) }), String(opt)));
     function pick(i) {
       if (done || i >= options.length) return;
@@ -311,13 +311,8 @@
     pendingChoice = pick; // frame() hands it to the number keys once the screen is up
     return el("div", { class: "choice-block" }, el("div", { class: "choices" }, buttons), feedback);
   }
-  /** Picture choices when this word and at least three others have one; else English. */
   function meaningChoices(word, pool) {
-    const pics = pool.filter((w) => w.pic && w.jp !== word.jp).map((w) => w.pic);
-    if (word.pic && new Set(pics).size >= 3) {
-      return { options: choicesFor(word.pic, pics), answer: word.pic, pics: true };
-    }
-    return { options: choicesFor(word.en, pool.map((w) => w.en)), answer: word.en, pics: false };
+    return { options: choicesFor(word.en, pool.map((w) => w.en)), answer: word.en };
   }
 
   let pendingChoice = null;
@@ -657,7 +652,7 @@
     }
 
     /** Auto-graded cards (kana, words): answer, see the result, move on. */
-    function choiceCard(card, { prompt, big, bigJp, answer, pool, options, pics = false, after, audio, extra = null }) {
+    function choiceCard(card, { prompt, big, bigJp, answer, pool, options, after, audio, extra = null }) {
       const result = el("div", { class: "result" });
       const nextBtn = primaryButton("Next", () => gradeCard(card, lastRight));
       nextBtn.hidden = true;
@@ -670,7 +665,6 @@
         choiceBlock({
           options: options || choicesFor(answer, pool),
           answer,
-          pics,
           onAnswer: async (right) => {
             lastRight = right;
             if (after) result.replaceChildren(after());
@@ -721,7 +715,7 @@
       const w = card.word;
       const m = meaningChoices(w, today.words_pool || []);
       choiceCard(card, {
-        prompt: "", big: w.jp, bigJp: true, answer: m.answer, options: m.options, pics: m.pics, audio: w.jp,
+        prompt: "", big: w.jp, bigJp: true, answer: m.answer, options: m.options, audio: w.jp,
         after: () => needsRomaji(w.jp) ? el("p", { class: "phrase-ro", text: w.ro }) : el("span"),
       });
     }
@@ -1146,7 +1140,6 @@
               el("td", {}, el("button", { class: "secondary line-play", type: "button", "aria-label": "Play", onclick: () => play(w.jp) }, "▶")),
               el("td", { class: "word-jp", lang: "ja", text: w.jp }),
               el("td", { class: "word-ro", text: needsRomaji(w.jp) ? w.ro : "" }),
-              el("td", { class: "word-pic", text: w.pic || "" }),
               el("td", { class: "word-en", text: w.en })))))),
         actions, primary: go,
       });
@@ -1172,7 +1165,6 @@
             playRow(w.jp),
             choiceBlock({
               ...meaningChoices(w, words),
-              explain: w.pic ? w.en : "",
               onAnswer: async (right) => {
                 if (!right && !queue[n].retried) queue.push({ w, retried: true });
                 if (right) { const here = onThisScreen(); await wait(600); if (here()) advance(); }
@@ -1265,9 +1257,7 @@
           title: `Grammar practice, unit ${unit.number}`, index: n, total: qs.length,
           ask: { screen: "grammar question", question: q.q, choices: q.choices, correct: answer, explain: q.explain },
           body: el("div", { class: "card-body" },
-            q.scene
-              ? el("p", { class: "scene", "data-tip": q.q, text: q.scene })
-              : el("p", { class: "question-q", text: q.q }),
+            el("p", { class: "question-q", text: q.q }),
             q.say ? el("div", { class: "scene-line" },
               el("button", { class: "secondary line-play", type: "button", "aria-label": "Play", onclick: () => play(q.say) }, "▶"),
               el("span", { lang: "ja", text: q.say })) : null,
