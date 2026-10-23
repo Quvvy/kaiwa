@@ -12,13 +12,11 @@ from pydantic import BaseModel, Field
 
 from kaiwa import stt, tts
 from kaiwa.config import get_settings
-from kaiwa.course import coach, state, stories
+from kaiwa.course import coach, prerender, state, stories
 from kaiwa.course.speech_check import check_phrase
-from kaiwa.prefs import load_prefs
 
 router = APIRouter(prefix="/api/course")
 
-SLOW_SPEED = 0.75
 
 
 class TtsBody(BaseModel):
@@ -45,20 +43,15 @@ def today() -> dict[str, Any]:
 @router.post("/tts")
 async def speak(body: TtsBody) -> dict[str, Any]:
     settings = get_settings()
-    prefs = load_prefs()
-    speaker = prefs.voicevox_speaker_id
-    if body.voice == "b":
-        speaker = await asyncio.to_thread(
-            tts.alternate_speaker, settings, engine=prefs.tts_engine, primary=speaker
-        )
+    speaker, engine = await asyncio.to_thread(prerender.speaker_for, settings, body.voice)
     try:
         wav = await asyncio.to_thread(
             tts.synthesize_cached,
             settings,
             body.text,
             speaker_id=speaker,
-            engine=prefs.tts_engine,
-            speed=SLOW_SPEED if body.slow else None,
+            engine=engine,
+            speed=prerender.SLOW_SPEED if body.slow else None,
         )
     except Exception as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc

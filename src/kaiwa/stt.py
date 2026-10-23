@@ -237,7 +237,14 @@ def get_model(settings: Settings) -> WhisperModel:
 
 
 def _join_segments(segments) -> str:
-    return "".join(seg.text for seg in segments).strip()
+    # Whisper invents words for breaths and clicks that slip past VAD; it flags
+    # those itself with a high no-speech probability and a low log-probability.
+    kept = (
+        seg.text
+        for seg in segments
+        if not (getattr(seg, "no_speech_prob", 0.0) > 0.6 and getattr(seg, "avg_logprob", 0.0) < -1.0)
+    )
+    return "".join(kept).strip()
 
 
 _JP_SCRIPT_RE = re.compile(r"[\u3040-\u30ff\u3400-\u9fff]")

@@ -58,6 +58,7 @@ from kaiwa.learner_memory import (
     should_extract,
 )
 from kaiwa import jsonio
+from kaiwa.course import prerender as course_prerender
 from kaiwa.course import routes as course_routes
 from kaiwa import leftovers
 from kaiwa import session_store
@@ -249,9 +250,12 @@ async def _warm_stt() -> None:
         for _ in range(60):
             try:
                 tts.synthesize(settings, "こんにちは。", speaker_id=prefs.voicevox_speaker_id, engine=prefs.tts_engine)
-                return
+                break
             except Exception:
                 time.sleep(2)
+        else:
+            return
+        course_prerender.run(settings)
 
     asyncio.create_task(asyncio.to_thread(_load))
     threading.Thread(target=_warm_tts, name="kaiwa-tts-warm", daemon=True).start()
@@ -521,6 +525,7 @@ def put_prefs(body: PrefsUpdate) -> dict[str, Any]:
         preferred_id=prefs.voicevox_speaker_id,
     )
     save_prefs(prefs)
+    course_prerender.start(settings)  # new voice → render its lesson lines
     return {
         "prefs": prefs.to_dict(),
         "personalities": preset_public_list(),

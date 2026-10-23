@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import threading
 from collections import OrderedDict
 from typing import Any, Literal
@@ -176,6 +177,23 @@ _cache_lock = threading.Lock()
 _alt_speaker: dict[tuple[str, int], int] = {}
 
 
+def _disk_path(key: tuple):
+    from kaiwa.secrets_store import user_data_dir
+
+    engine, speaker_id, text, speed = key
+    folder = f"{engine}_{speaker_id}_{speed or 1}"
+    name = hashlib.sha1(text.encode("utf-8")).hexdigest()[:20] + ".wav"
+    return user_data_dir() / "tts_cache" / folder / name
+
+
+def is_cached(settings: Settings, text: str, *, speaker_id: int | None, engine: str | None, speed: float | None = None) -> bool:
+    key = (normalize_engine(engine, settings.tts_engine), speaker_id, text, speed)
+    with _cache_lock:
+        if key in _cache:
+            return True
+    return _disk_path(key).is_file()
+
+
 def synthesize_cached(
     settings: Settings,
     text: str,
@@ -184,14 +202,29 @@ def synthesize_cached(
     engine: str | None = None,
     speed: float | None = None,
 ) -> bytes:
-    """synthesize() with a small in-memory LRU — lessons replay the same lines often."""
+    """synthesize() behind an in-memory LRU and a disk cache.
+
+    Lesson lines never change, so once rendered they are read from disk instead
+    of costing ~0.8 s of synthesis each time the app starts.
+    """
     key = (normalize_engine(engine, settings.tts_engine), speaker_id, text, speed)
     with _cache_lock:
         hit = _cache.get(key)
         if hit is not None:
             _cache.move_to_end(key)
             return hit
-    wav = synthesize(settings, text, speaker_id=speaker_id, engine=engine, speed=speed)
+    path = _disk_path(key)
+    try:
+        wav = path.read_bytes()
+    except OSError:
+        wav = synthesize(settings, text, speaker_id=speaker_id, engine=engine, speed=speed)
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = path.with_suffix(".tmp")
+            tmp.write_bytes(wav)
+            tmp.replace(path)
+        except OSError:
+            pass
     with _cache_lock:
         _cache[key] = wav
         while len(_cache) > _CACHE_MAX:
