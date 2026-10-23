@@ -890,87 +890,150 @@
     });
   }
 
+  /**
+   * A listening exercise laid out as a message thread of voice bubbles.
+   * Lines arrive one by one as they're spoken. Text is per line and only offered
+   * after one full listen (Japanese first, English on a second click); questions
+   * appear after that first listen too, and a miss offers another listen, not text.
+   */
   function listenView({ title, dialogue: d, questions: qs, doneLabel, onDone }) {
-    let showJp = false;
-    let showEn = false;
-    let playing = false;
-    const answered = new Map();
-    const lineEls = [];
     const voice = (line) => ({ voice: line.who === "b" ? "b" : "a" });
     prefetch(d.lines.map((line) => [line.jp, voice(line)]));
+    const here = () => thread.isConnected;
+    let playing = false;
+    let heard = 0;
+    let peeked = false;
+    let revealed = 0; // how many bubbles have arrived in the thread
+    const answered = new Map();
 
-    const linesBox = el("ol", { class: "dialogue" });
-    function renderLines() {
-      linesBox.replaceChildren(...d.lines.map((line, idx) => {
-        const row = el("li", { class: `line who-${line.who}` },
-          el("button", { class: "line-play", type: "button", "aria-label": "Play this line", onclick: () => play(line.jp, voice(line)) },
-            line.who === "b" ? "B" : "A"),
-          el("div", { class: "line-text" },
-            showJp
-              ? el("span", { class: "line-jp", lang: "ja", text: line.jp })
-              : el("span", { class: "line-hidden", text: "Text hidden" }),
-            showEn ? el("span", { class: "line-en", text: line.en }) : null,
-            showJp && line.gloss ? el("span", { class: "line-gloss", text: line.gloss }) : null,
-          ),
-        );
-        lineEls[idx] = row;
-        return row;
-      }));
+    const thread = el("div", { class: "thread", "data-empty": "Press play and just listen." });
+    const bubbles = d.lines.map((line, idx) => {
+      const textBox = el("div", { class: "bubble-text", hidden: true });
+      let level = 0; // 0 voice only, 1 + Japanese, 2 + English
+      const peek = el("button", { class: "bubble-peek", type: "button", hidden: true, "aria-label": "Show text",
+        "data-tip": "Show this line", onclick: (e) => {
+          e.stopPropagation();
+          level = Math.min(2, level + 1);
+          peeked = true;
+          textBox.hidden = false;
+          textBox.replaceChildren(...[
+            el("span", { class: "bubble-jp", lang: "ja", text: line.jp }),
+            line.gloss ? el("span", { class: "bubble-gloss", text: line.gloss }) : null,
+            level >= 2 ? el("span", { class: "bubble-en", text: line.en }) : null,
+          ].filter(Boolean));
+          peek.hidden = level >= 2;
+          peek.dataset.tip = "Show the meaning";
+          peek.textContent = "EN";
+        } }, "あ");
+      const bubble = el("div", { class: "bubble-voice", role: "button", tabindex: "0", "aria-label": "Play this line",
+        onclick: () => playLine(idx), onkeydown: (e) => { if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); playLine(idx); } } },
+        el("span", { class: "bubble-icon", "aria-hidden": "true" }),
+        waveform(line.jp),
+        textBox);
+      const row = el("div", { class: `msg msg-${line.who === "b" ? "b" : "a"}`, hidden: true },
+        el("span", { class: "msg-avatar", text: line.who === "b" ? "B" : "A" }),
+        bubble, peek);
+      return { row, bubble, peek };
+    });
+    const typing = el("div", { class: "msg msg-a typing", hidden: true },
+      el("span", { class: "msg-avatar" }), el("span", { class: "typing-dots" }, el("i"), el("i"), el("i")));
+    thread.append(...bubbles.map((b) => b.row), typing);
+
+    function waveform(text) {
+      // Bars sized from the line itself: longer lines, longer messages.
+      const n = Math.max(8, Math.min(30, Math.round(text.length * 1.4)));
+      const bars = [];
+      for (let i = 0; i < n; i++) {
+        const c = text.charCodeAt(i % text.length);
+        bars.push(el("i", { style: `--h:${30 + ((c * 37 + i * 53) % 70)}%` }));
+      }
+      return el("span", { class: "wave" }, bars);
     }
+
+    async function playLine(idx) {
+      if (playing) return;
+      const b = bubbles[idx];
+      b.bubble.classList.add("speaking");
+      await play(d.lines[idx].jp, voice(d.lines[idx]));
+      b.bubble.classList.remove("speaking");
+    }
+
     async function playAll() {
       if (playing) return;
       playing = true;
-      playAllBtn.disabled = true;
+      playBtn.disabled = true;
       for (let idx = 0; idx < d.lines.length; idx++) {
-        lineEls[idx]?.classList.add("speaking");
+        if (!here()) return;
+        const b = bubbles[idx];
+        if (idx >= revealed) {
+          // Lines arrive as they're spoken, like a conversation happening now.
+          typing.className = `msg msg-${d.lines[idx].who === "b" ? "b" : "a"} typing`;
+          typing.hidden = false;
+          thread.append(typing);
+          await wait(450);
+          typing.hidden = true;
+          b.row.hidden = false;
+          revealed = idx + 1;
+          b.row.scrollIntoView({ block: "nearest" });
+        }
+        b.bubble.classList.add("speaking");
         await play(d.lines[idx].jp, voice(d.lines[idx]));
-        lineEls[idx]?.classList.remove("speaking");
-        await new Promise((r) => setTimeout(r, 300));
+        b.bubble.classList.remove("speaking");
+        await wait(350);
       }
       playing = false;
-      playAllBtn.disabled = false;
-      playAllBtn.firstChild.textContent = "Play again";
+      playBtn.disabled = false;
+      heard += 1;
+      playBtn.firstChild.textContent = "Play again";
+      heardNote.textContent = heard === 1 ? "Heard once" : `Heard ${heard} times`;
+      if (heard === 1) {
+        // Only now: per-line text, and the questions.
+        for (const b of bubbles) b.peek.hidden = false;
+        questionsBox.hidden = false;
+      }
     }
-    const playAllBtn = el("button", { type: "button", onclick: playAll }, "Play the conversation", kbd("R"));
-    const toggleJp = el("button", { class: "secondary", type: "button", "aria-pressed": "false", onclick: () => {
-      showJp = !showJp; toggleJp.setAttribute("aria-pressed", String(showJp)); renderLines();
-    } }, "Japanese text");
-    const toggleEn = el("button", { class: "secondary", type: "button", "aria-pressed": "false", onclick: () => {
-      showEn = !showEn; toggleEn.setAttribute("aria-pressed", String(showEn)); renderLines();
-    } }, "English");
+
+    const playBtn = el("button", { type: "button", onclick: playAll }, "Play the conversation", kbd("R"));
+    const heardNote = el("span", { class: "heard-note" });
 
     const doneBtn = primaryButton(doneLabel, onDone, { disabled: true });
-    const questionsBox = el("div", { class: "questions" }, qs.map((q, qi) => {
-      const feedback = el("p", { class: "verdict" });
-      const choices = el("div", { class: "choices" }, q.choices.map((choice, ci) =>
-        el("button", {
-          class: "secondary", type: "button",
-          onclick: (e) => {
-            const right = ci === q.answer;
-            answered.set(qi, right);
-            for (const b of choices.children) b.disabled = true;
-            e.currentTarget.classList.add(right ? "right" : "wrong");
-            if (!right) choices.children[q.answer].classList.add("right");
-            feedback.className = "verdict " + (right ? "good" : "off");
-            feedback.textContent = right ? "Right." : "Not quite. Play it again and listen for it.";
-            if (answered.size === qs.length) {
-              doneBtn.disabled = false;
-              keys.primary = onDone;
-            }
-          },
-        }, choice)));
-      return el("div", { class: "question" }, el("p", { class: "question-q", text: q.q }), choices, feedback);
-    }));
+    const byEar = el("p", { class: "by-ear", hidden: true, text: "Caught by ear." });
+    const questionsBox = el("div", { class: "questions", hidden: true },
+      el("h3", { class: "questions-title", text: "Did you catch it?" }),
+      qs.map((q, qi) => {
+        const feedback = el("p", { class: "verdict" });
+        const again = el("button", { class: "secondary", type: "button", hidden: true, onclick: playAll }, "Listen again");
+        const choices = el("div", { class: "choices" }, q.choices.map((choice, ci) =>
+          el("button", {
+            class: "secondary", type: "button",
+            onclick: (e) => {
+              const right = ci === q.answer;
+              answered.set(qi, right);
+              for (const b of choices.children) b.disabled = true;
+              e.currentTarget.classList.add(right ? "right" : "wrong");
+              if (!right) choices.children[q.answer].classList.add("right");
+              feedback.className = "verdict " + (right ? "good" : "off");
+              feedback.textContent = right ? "Right." : "Not quite.";
+              again.hidden = right;
+              if (answered.size === qs.length) {
+                doneBtn.disabled = false;
+                keys.primary = onDone;
+                byEar.hidden = peeked || [...answered.values()].some((v) => !v);
+              }
+            },
+          }, choice)));
+        return el("div", { class: "question" }, el("p", { class: "question-q", text: q.q }), choices,
+          el("div", { class: "verdict-row" }, feedback, again));
+      }),
+      byEar);
 
-    renderLines();
     frame({
       title,
       ask: { screen: "listening", scene: d.scene, lines: d.lines.map((l) => `${l.who}: ${l.jp} (${l.en})`), questions: qs.map((q) => q.q) },
-      body: el("div", { class: "card-body" },
-        el("p", { class: "prompt", text: d.scene || "Listen before showing the text." }),
-        el("div", { class: "lesson-play" }, playAllBtn, toggleJp, toggleEn),
-        linesBox,
-        el("h3", { class: "questions-title", text: "Did you catch it?" }),
+      body: el("div", { class: "card-body listen" },
+        d.scene ? el("p", { class: "prompt", text: d.scene }) : null,
+        el("div", { class: "listen-bar" }, playBtn, heardNote),
+        thread,
         questionsBox,
       ),
       actions: [doneBtn],
