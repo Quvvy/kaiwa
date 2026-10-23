@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 os.environ.setdefault("KAIWA_DATA_DIR", tempfile.mkdtemp(prefix="kaiwa-course-smoke-"))
 
+from kaiwa.course import srs  # noqa: E402
 from kaiwa.course import state as course_state  # noqa: E402
 from kaiwa.course.coach import judge  # noqa: E402
 from kaiwa.course.speech_check import check_phrase, matches_any, normalize  # noqa: E402
@@ -83,7 +84,7 @@ def speech() -> None:
     _check(not matches_any(["*がすきです"], "寿司を好きです"), "*がすきです rejects を")
 
 
-def srs() -> None:
+def spaced_review() -> None:
     with tempfile.TemporaryDirectory() as raw:
         path = Path(raw) / "course_state.json"
         payload = course_state.today_payload(path=path)
@@ -95,7 +96,9 @@ def srs() -> None:
         _check(len(st["cards"]) == 12, "learning unit 1 schedules 6 phrases × 2 skills")
         _check(course_state.stats(st)["phrases_learned"] == 6, "6 phrases learned")
         _check(course_state.stats(st)["streak"] == 1, "studying today starts a streak")
-        _check(not course_state.due_cards(st), "new cards wait until tomorrow")
+        _check(not course_state.due_cards(st), "new cards aren't reviews yet")
+        recap = course_state.recap_cards(st)
+        _check(len(recap) == 12, "new cards are today's recap (their second look)")
 
         _check(course_state.unit_steps(UNITS[0]) == ["learn", "words", "grammar", "listen", "speak"],
                "unit 1 uses the full template")
@@ -118,38 +121,51 @@ def srs() -> None:
         _check(set("あいうえお") <= set(payload["kana_known"]), "known kana feed romaji fading")
         _check(course_state.next_unit(st)["id"] == "u2", "next unit is u2")
 
-        # Pretend it's tomorrow: everything from unit 1 is due.
-        real_today = course_state._today
-        course_state._today = lambda: real_today() + timedelta(days=1)
-        try:
-            st = course_state.load_state(path)
-            due = [c for c in course_state.due_cards(st, limit=100) if c["kind"] == "phrase"]
-            _check(len(due) == 12, "all 12 phrase cards due the next day")
-            kinds = {c["kind"] for c in course_state.due_cards(st, limit=100)}
-            _check(kinds == {"phrase", "word", "kana"}, "word and kana cards come up in review")
-            pairs = [due[i]["phrase"]["id"] == due[i + 1]["phrase"]["id"] for i in range(len(due) - 1)]
-            _check(not any(pairs), "a phrase's two sides are never back to back")
-            good = course_state.grade("u1.ohayou:listen", True, path=path)
-            _check(good["box"] == 2 and good["due"] == (real_today() + timedelta(days=1 + 3)).isoformat(),
-                   "good answer → box 2, due in 3 days")
-            todays = course_state.todays_reviews(st)
-            cost = sum(course_state.card_cost(c["kind"], c["skill"]) for c in todays)
-            _check(0 < cost <= course_state.DAILY_REVIEW_BUDGET, "today's reviews fit the daily budget")
-            _check(len(todays) < len(course_state.due_cards(st, limit=100)), "the rest of the backlog waits")
-            _check(course_state.grade("kana.あ:read", True, path=path)["box"] == 2, "kana cards grade")
-            after = course_state.load_state(path)
-            _check(after["reviewed"][course_state._today().isoformat()] == 3, "reviewing spends today's budget (listen 2 + kana 1)")
-            _check(course_state.grade("u1w.asa:mean", True, path=path)["box"] == 2, "word cards grade")
-            bad = course_state.grade("u1.ohayou:speak", False, path=path)
-            _check(bad["box"] == 1 and bad["lapses"] == 1, "miss → box 1 with a lapse")
-            _check(course_state.streak(course_state.load_state(path)) == 2, "two days in a row")
-        finally:
-            course_state._today = real_today
+        # Learning steps: a new card comes back within minutes, two clean answers graduate it.
+        first = course_state.grade("u1.ohayou:listen", correct=True, ms=3000, path=path)
+        _check(first["again_soon"], "a new card comes back within the session")
+        second = course_state.grade("u1.ohayou:listen", correct=True, ms=3000, path=path)
+        _check(not srs.is_learning(second) and second["due"] > course_state._today().isoformat(),
+               "two clean answers graduate it to a review days away")
+        miss = course_state.grade("u1.ohayou:speak", correct=False, path=path)
+        _check(miss["rating"] == srs.AGAIN and miss["again_soon"], "a miss is Again and comes back soon")
+        after = course_state.load_state(path)
+        _check(after["reviewed"] == {}, "learning steps don't spend the review budget")
+        recap_kinds = {c["kind"]: c["format"] for c in course_state.recap_cards(after)}
+        _check(recap_kinds.get("word") == "choice" and recap_kinds.get("kana") == "choice", "new words and kana are multiple choice")
 
+        # Old Leitner cards convert without losing progress.
+        conv = srs.from_legacy({"box": 4, "due": "2026-01-01", "reps": 5, "lapses": 1})
+        _check(not srs.is_learning(conv) and srs.stability(conv) == 14 and conv["reps"] == 5, "a box-4 card becomes a 14-day memory")
+        _check(srs.known(conv), "a reviewed card is answered by producing it")
+
+        # Pretend every unit 1 card is a review due today (as converted Leitner cards would be).
+        st = course_state.load_state(path)
+        today_iso = course_state._today().isoformat()
+        for cid in list(st["cards"]):
+            st["cards"][cid] = srs.from_legacy({"box": 1, "due": today_iso, "reps": 1})
+        st["reviewed"] = {}
+        course_state.save_state(st, path)
+        st = course_state.load_state(path)
+        due = [c for c in course_state.due_cards(st, limit=100) if c["kind"] == "phrase"]
+        _check(len(due) == 12, "all 12 phrase cards due")
+        kinds = {c["kind"] for c in course_state.due_cards(st, limit=100)}
+        _check(kinds == {"phrase", "word", "kana"}, "word and kana cards come up in review")
+        pairs = [due[i]["phrase"]["id"] == due[i + 1]["phrase"]["id"] for i in range(len(due) - 1)]
+        _check(not any(pairs), "a phrase's two sides are never back to back")
+        todays = course_state.todays_reviews(st)
+        cost = sum(course_state.card_cost(c["kind"], c["skill"]) for c in todays)
+        _check(0 < cost <= course_state.DAILY_REVIEW_BUDGET, "today's reviews fit the daily budget")
+        _check(len(todays) < len(course_state.due_cards(st, limit=100)), "the rest of the backlog waits")
+        course_state.grade("kana.あ:read", correct=True, ms=2000, path=path)
+        course_state.grade("u1.ohayou:listen", correct=True, ms=2000, path=path)
+        after = course_state.load_state(path)
+        _check(after["reviewed"][today_iso] == 3, "reviews spend today's budget (kana 1 + listen 2)")
+        _check(course_state.streak(after) == 1, "studying today keeps the streak")
         known = course_state.known_phrases_for_chat(path=path)
         _check(known[0]["jp"] == "おはようございます。" and len(known) == 6, "Chat sees the learned phrases")
         try:
-            course_state.grade("nope:listen", True, path=path)
+            course_state.grade("nope:listen", correct=True, path=path)
             _check(False, "unknown card rejected")
         except KeyError:
             _check(True, "unknown card rejected")
@@ -196,6 +212,27 @@ def sentence_checks() -> None:
     _check(contains_word("いまはあさです。", "いま", vocab), "いま on its own counts")
 
 
+def auto_grades() -> None:
+    usual = [3000] * 10
+
+    def r(**kw):
+        args = {"correct": True, "ms": 3000, "helped": False, "guessed": False, "band": "", "reps": 5, "times": usual}
+        args.update(kw)
+        return srs.rating_for(**args)
+
+    _check(r(correct=False) == srs.AGAIN, "wrong → Again")
+    _check(r(band="off") == srs.AGAIN, "speech check off → Again")
+    _check(r(band="close") == srs.HARD, "speech check close → Hard")
+    _check(r(guessed=True) == srs.HARD, "\"I guessed\" → Hard")
+    _check(r(helped=True) == srs.HARD, "needed help → Hard")
+    _check(r(ms=7000) == srs.HARD, "much slower than usual → Hard")
+    _check(r(ms=3000) == srs.GOOD, "usual speed → Good")
+    _check(r(ms=1500) == srs.EASY, "much faster than usual, with a track record → Easy")
+    _check(r(ms=1500, reps=1) == srs.GOOD, "fast on a young card is only Good")
+    _check(r(ms=40_000) == srs.GOOD, "a very long pause (looked away) doesn't count as slow")
+    _check(r(ms=9000, times=[3000] * 3) == srs.GOOD, "speed is ignored until there's a baseline")
+
+
 def pacing() -> None:
     real_today = course_state._today
     day = [real_today()]
@@ -207,16 +244,16 @@ def pacing() -> None:
     try:
         with tempfile.TemporaryDirectory() as raw:
             path = Path(raw) / "course_state.json"
-            _check(plan(path)["plan"] == ["kana", "learn", "words"], "day 1: a short kana lesson fits beside the unit's day one")
+            _check(plan(path)["plan"] == ["kana", "learn", "words", "recap"], "day 1: a short kana lesson fits beside the unit's day one")
             course_state.complete_kana("h1", path=path)
             for s in ("learn", "words"):
                 course_state.complete_step("u1", s, path=path)
             p1 = plan(path)
-            _check(p1["plan"] == [] and p1["day_two_tomorrow"], "grammar, listening and speaking wait for day 2")
+            _check(p1["plan"] == ["recap"] and p1["day_two_tomorrow"], "after day one: only the recap; day two waits")
 
             day[0] = real_today() + timedelta(days=1)
             p2 = plan(path)["plan"]
-            _check(p2[0] == "review" and p2[1:] == ["kana", "grammar", "listen", "speak"], "day 2: reviews, kana, then day two")
+            _check(p2 == ["kana", "grammar", "listen", "speak", "recap"], "day 2: kana, day two, then the recap")
             for s in ("grammar", "listen", "speak"):
                 course_state.complete_step("u1", s, path=path)
             for lid in ("h2", "h3", "h4", "h5", "h6", "h7", "h8", "h9", "h10"):
@@ -225,15 +262,16 @@ def pacing() -> None:
             day[0] = real_today() + timedelta(days=2)
             st = course_state.load_state(path)
             st["reviewed"] = {}
-            for card in st["cards"].values():
-                card["due"] = "2099-01-01"  # nothing due, so only the new-item rule decides
+            for cid in list(st["cards"]):
+                # Nothing due and nothing learning, so only the new-item rule decides.
+                st["cards"][cid] = srs.from_legacy({"box": 3, "due": "2099-01-01", "reps": 2})
             course_state.save_state(st, path)
             p3 = plan(path)["plan"]
-            _check(p3 in (["kana"], ["learn", "words"]), "a long kana lesson and a unit's day one alternate")
+            _check(p3 in (["kana", "recap"], ["learn", "words", "recap"]), "a long kana lesson and a unit's day one alternate")
 
             st = course_state.load_state(path)
-            for card in st["cards"].values():
-                card["due"] = "2000-01-01"
+            for cid in list(st["cards"]):
+                st["cards"][cid] = srs.from_legacy({"box": 1, "due": "2000-01-01", "reps": 1})
             course_state.save_state(st, path)
             p4 = plan(path)
             _check(p4["catching_up"] and p4["plan"] == ["review"], "a big backlog means a reviews-only day")
@@ -247,7 +285,8 @@ def main() -> None:
     content()
     kana_track()
     speech()
-    srs()
+    spaced_review()
+    auto_grades()
     pacing()
     story_checks()
     sentence_checks()

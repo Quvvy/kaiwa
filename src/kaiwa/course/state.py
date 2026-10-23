@@ -5,9 +5,10 @@ Card kinds (id = "<item>:<skill>"):
   word    "u1w.asa:mean"                 see/hear the word → pick its meaning
   kana    "kana.あ:read"                  see the character → pick its sound
 
-Scheduling is a plain Leitner ladder: a good answer moves a card up a box
-(longer gap), a miss drops it back to box 1 (tomorrow). Simple, predictable,
-and enough for a few hundred phrases.
+Scheduling is FSRS (see srs.py): each card's memory is modelled and the next
+review lands where recall is ~90%. Grades come from how the learner answered,
+never from buttons. New and missed cards take short learning steps first; the
+day's Recap step gives them their second look.
 
 A unit's steps come from its content (learn, words, grammar, listen, speak), so
 units written in the newer template gain steps without resetting older progress.
@@ -20,14 +21,13 @@ from pathlib import Path
 from typing import Any
 
 from kaiwa import jsonio
+from kaiwa.course import srs
 from kaiwa.course.kana import KANA_LESSONS, KANA_ROMAJI, LESSON_BY_ID, lesson_chars
 from kaiwa.course.units import ROMAJI, UNITS
 
 STATE_FILE = "course_state.json"
 SKILLS = ("listen", "speak")
 STEP_ORDER = ("learn", "words", "grammar", "listen", "speak")
-BOX_DAYS = {1: 1, 2: 3, 3: 7, 4: 14, 5: 30, 6: 60, 7: 120}
-MAX_BOX = max(BOX_DAYS)
 MAX_DAYS_KEPT = 400
 
 _PHRASES: dict[str, dict[str, Any]] = {}
@@ -66,7 +66,7 @@ def card_cost(kind: str, skill: str) -> int:
 
 
 def _empty() -> dict[str, Any]:
-    return {"version": 1, "units": {}, "cards": {}, "days": [], "kana": {}, "questions": [], "reviewed": {}}
+    return {"version": 2, "units": {}, "cards": {}, "days": [], "kana": {}, "questions": [], "reviewed": {}, "timing": {}}
 
 
 def load_state(path: Path | None = None) -> dict[str, Any]:
@@ -77,7 +77,10 @@ def load_state(path: Path | None = None) -> dict[str, Any]:
     if isinstance(raw.get("units"), dict):
         state["units"] = raw["units"]
     if isinstance(raw.get("cards"), dict):
-        state["cards"] = {k: v for k, v in raw["cards"].items() if isinstance(v, dict)}
+        # Leitner cards from before FSRS convert here, keeping their progress.
+        state["cards"] = {k: srs.ensure(v) for k, v in raw["cards"].items() if isinstance(v, dict)}
+    if isinstance(raw.get("timing"), dict):
+        state["timing"] = {str(k): [int(x) for x in v if str(x).isdigit()] for k, v in raw["timing"].items() if isinstance(v, list)}
     if isinstance(raw.get("days"), list):
         state["days"] = [str(d) for d in raw["days"]][-MAX_DAYS_KEPT:]
     if isinstance(raw.get("kana"), dict):
@@ -157,8 +160,7 @@ def _with_state(fn, path: Path | None = None):
 
 
 def _new_card() -> dict[str, Any]:
-    due = (_today() + timedelta(days=BOX_DAYS[1])).isoformat()
-    return {"box": 1, "due": due, "reps": 0, "lapses": 0, "last": ""}
+    return srs.new_card()
 
 
 def unit_done(state: dict[str, Any], unit: dict[str, Any]) -> bool:
@@ -221,30 +223,44 @@ def _card_kind(card_id: str) -> tuple[str, str, str] | None:
     return None
 
 
-def grade(card_id: str, good: bool, *, path: Path | None = None) -> dict[str, Any]:
+def grade(
+    card_id: str,
+    *,
+    correct: bool,
+    ms: int | None = None,
+    helped: bool = False,
+    guessed: bool = False,
+    band: str = "",
+    fmt: str = "",
+    path: Path | None = None,
+) -> dict[str, Any]:
+    """Apply one answer. The FSRS grade is worked out here (srs.rating_for).
+
+    Returns the card plus `rating` and `again_soon` (due within the session:
+    the client shows it again a few cards later).
+    """
     kind = _card_kind(card_id)
     if kind is None:
         raise KeyError(f"unknown card: {card_id}")
+    fmt = fmt or f"{kind[0]}:{kind[2]}"
 
     def apply(state: dict[str, Any]) -> dict[str, Any]:
-        today = _today().isoformat()
-        spent = state["reviewed"].get(today, 0) + card_cost(kind[0], kind[2])
-        state["reviewed"] = {today: spent}  # only today's spend matters
-        card = state["cards"].setdefault(
-            card_id, {"box": 1, "due": "", "reps": 0, "lapses": 0, "last": ""}
+        card = state["cards"].get(card_id) or _new_card()  # lessons may grade before the step finishes
+        if not srs.is_learning(card):
+            # Only real reviews spend the daily budget; learning steps are part of the lesson.
+            today = _today().isoformat()
+            spent = state["reviewed"].get(today, 0) + card_cost(kind[0], kind[2])
+            state["reviewed"] = {today: spent}
+        rating = srs.rating_for(
+            correct=correct, ms=ms, helped=helped, guessed=guessed, band=band,
+            reps=int(card.get("reps") or 0), times=state["timing"].get(fmt, []),
         )
-        box = int(card.get("box") or 1)
-        if good:
-            box = min(MAX_BOX, box + 1)
-        else:
-            box = 1
-            card["lapses"] = int(card.get("lapses") or 0) + 1
-        card["box"] = box
-        card["reps"] = int(card.get("reps") or 0) + 1
-        card["due"] = (_today() + timedelta(days=BOX_DAYS[box])).isoformat()
-        card["last"] = datetime.now(timezone.utc).isoformat()
+        srs.record_time(state["timing"], fmt, ms, correct and not (helped or guessed))
+        card = srs.review(card, rating)
+        state["cards"][card_id] = card
         _mark_day(state)
-        return dict(card)
+        soon = srs.due_at(card) - datetime.now(timezone.utc) < timedelta(minutes=30)
+        return {**card, "rating": rating, "again_soon": soon}
 
     return _with_state(apply, path)
 
@@ -257,6 +273,27 @@ def _card_payload(kind: str, item: str) -> dict[str, Any]:
     return {"kana": {"char": item, "ro": KANA_ROMAJI[item]}}
 
 
+def answer_format(kind: str, skill: str, card: dict[str, Any]) -> str:
+    """How the card is answered: recognise while new, produce once it's known.
+
+    choice   pick from options (new kana and words; hearing a phrase)
+    produce  say or type the answer (known kana: its sound; known words: the Japanese)
+    speak    say the phrase (the speaking side of a phrase)
+    """
+    if kind == "phrase":
+        return "speak" if skill == "speak" else "choice"
+    return "produce" if srs.known(card) else "choice"
+
+
+def _card_row(card_id: str, kind: tuple[str, str, str], card: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "card_id": card_id, "kind": kind[0], "skill": kind[2],
+        "format": answer_format(kind[0], kind[2], card),
+        "stability": round(srs.stability(card), 1),
+        **_card_payload(kind[0], kind[1]),
+    }
+
+
 def due_cards(state: dict[str, Any], *, limit: int = 20, budget: int | None = None) -> list[dict[str, Any]]:
     """Due cards, most-forgotten first (lowest box, then oldest), within `budget` if given.
 
@@ -266,9 +303,10 @@ def due_cards(state: dict[str, Any], *, limit: int = 20, budget: int | None = No
     rows = []
     for card_id, card in state["cards"].items():
         kind = _card_kind(card_id)
-        if kind is None or str(card.get("due") or "") > today:
+        if kind is None or srs.is_learning(card) or str(card.get("due") or "") > today:
             continue
-        rows.append((int(card.get("box") or 1), str(card.get("due") or ""), card_id, kind))
+        # Weakest memories first (lowest stability), then the most overdue.
+        rows.append((srs.stability(card), str(card.get("due") or ""), card_id, kind))
     rows.sort(key=lambda r: (r[0], r[1]))
     if budget is not None:
         # Take turns between kana, words and phrases so one kind never fills the day.
@@ -298,10 +336,22 @@ def due_cards(state: dict[str, Any], *, limit: int = 20, budget: int | None = No
         last = ordered[-1][3][1] if ordered else None
         idx = next((i for i, r in enumerate(pending) if r[3][1] != last), 0)
         ordered.append(pending.pop(idx))
-    return [
-        {"card_id": r[2], "kind": r[3][0], "skill": r[3][2], "box": r[0], **_card_payload(r[3][0], r[3][1])}
-        for r in ordered
-    ]
+    return [_card_row(r[2], r[3], state["cards"][r[2]]) for r in ordered]
+
+
+RECAP_LIMIT = 40
+
+
+def recap_cards(state: dict[str, Any]) -> list[dict[str, Any]]:
+    """New and just-missed cards in their short learning steps: today's second look."""
+    today = _today().isoformat()
+    rows = []
+    for card_id, card in state["cards"].items():
+        kind = _card_kind(card_id)
+        if kind and srs.is_learning(card) and str(card.get("due") or "") <= today:
+            rows.append((srs.due_at(card), card_id, kind))
+    rows.sort(key=lambda r: r[0])
+    return [_card_row(r[1], r[2], state["cards"][r[1]]) for r in rows[:RECAP_LIMIT]]
 
 
 # ---------- pacing ----------
@@ -352,6 +402,8 @@ def plan_today(state: dict[str, Any]) -> dict[str, Any]:
     if todays_reviews(state):
         plan.append("review")
     if catching_up(state):
+        if recap_cards(state):
+            plan.append("recap")
         return {"plan": plan, "catching_up": True, "day_two_tomorrow": False}
 
     kana_wanted = bool(kana) and iso not in state["kana"].values()
@@ -381,6 +433,9 @@ def plan_today(state: dict[str, Any]) -> dict[str, Any]:
     if kana_wanted:
         plan.append("kana")
     plan.extend(unit_plan)
+    if unit_plan or kana_wanted or recap_cards(state):
+        # After the new material: a second look at today's new and missed cards.
+        plan.append("recap")
     return {"plan": plan, "catching_up": False, "day_two_tomorrow": day_two_tomorrow}
 
 
@@ -461,7 +516,7 @@ def stats(state: dict[str, Any]) -> dict[str, Any]:
     strong = {
         cid.partition(":")[0]
         for cid, card in state["cards"].items()
-        if int(card.get("box") or 1) >= 3
+        if srs.stability(card) >= 7
     }
     words = [w for w in _WORDS if f"{w}:mean" in state["cards"]]
     return {
@@ -497,6 +552,8 @@ def today_payload(*, path: Path | None = None) -> dict[str, Any]:
         "kana_pool": [{"char": ch, "ro": KANA_ROMAJI[ch]} for l in KANA_LESSONS if l["id"] in state["kana"]
                       for ch, _ in l["kana"]],
         "words_pool": [{"jp": w["jp"], "en": w["en"]} for wid, w in _WORDS.items() if f"{wid}:mean" in state["cards"]],
+        "phrases_pool": [{"jp": _PHRASES[i]["jp"], "en": _PHRASES[i]["en"]} for i in learned_phrase_ids(state)],
+        "recap": recap_cards(state),
         **plan_today(state),
     }
 

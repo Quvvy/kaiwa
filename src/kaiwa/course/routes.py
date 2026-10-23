@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field
 from kaiwa import stt, tts
 from kaiwa.config import get_settings
 from kaiwa.course import ask, coach, kana_judge, prerender, sentences, state, stories
+from kaiwa.course.kana import KANA_ROMAJI
 from kaiwa.course.speech_check import check_phrase, normalize
 from kaiwa.secrets_store import user_data_dir
 
@@ -36,8 +37,16 @@ class StepBody(BaseModel):
 
 
 class GradeBody(BaseModel):
+    """What happened on one answer; the server turns it into an FSRS grade."""
+
     card_id: str
-    good: bool
+    correct: bool | None = None
+    good: bool | None = None  # older clients
+    ms: int | None = Field(default=None, ge=0, le=600_000)  # time to answer
+    helped: bool = False   # revealed text, opened a hint…
+    guessed: bool = False  # pressed "I guessed"
+    band: str = ""         # speech check: good / close / off
+    fmt: str = ""          # answer format, for per-format speed baselines
 
 
 class KanaBody(BaseModel):
@@ -136,7 +145,9 @@ async def check(audio: UploadFile = File(...), phrase_id: str = Form(...)) -> di
     return {"heard": shown, "whisper": heard, "score": result.score, "band": band, "tip": tip}
 
 
-def _judge(audio: UploadFile, phrase: dict[str, Any], heard: str) -> kana_judge.Verdict | None:
+def _judge(
+    audio: UploadFile, phrase: dict[str, Any], heard: str, rivals: tuple[str, ...] = ()
+) -> kana_judge.Verdict | None:
     """Ask the kana model which of the target / Whisper's hearing / a typical slip fits."""
     if not kana_judge.available():
         return None
@@ -147,9 +158,49 @@ def _judge(audio: UploadFile, phrase: dict[str, Any], heard: str) -> kana_judge.
         samples = decode_audio(io.BytesIO(audio.file.read()), sampling_rate=16000)
         targets = list(phrase.get("kana") or [phrase["jp"]])
         targets += [a for a in phrase.get("accept") or [] if "*" not in a]
-        return kana_judge.judge(samples, [normalize(x) for x in targets], normalize(heard))
+        return kana_judge.judge(samples, [normalize(x) for x in targets], normalize(heard), rivals)
     except Exception:
         return None
+
+
+@router.post("/check_text")
+async def check_text(audio: UploadFile = File(...), target: str = Form(..., max_length=60)) -> dict[str, Any]:
+    """Say-it check against any short kana target (known kana and words in review).
+
+    Single kana are too short for Whisper to be reliable, so for those the kana
+    model's verdict decides and an empty transcript is not an error.
+    """
+    short = target in KANA_ROMAJI  # one kana card (blends like きゃ included), not a word
+    try:
+        heard = await _transcribe(audio)
+    except HTTPException:
+        if not short:
+            raise
+        heard = ""
+    result = check_phrase(target, heard) if heard else None
+    band = result.band if result else "off"
+    shown, tip = heard, ""
+    # A single kana has no "typical slip" variants, so every other kana competes.
+    rivals = tuple(sorted({normalize(ch) for ch in KANA_ROMAJI if len(ch) <= 2})) if short else ()
+    if short and kana_judge.available():
+        band = "off"  # the kana model decides for single sounds
+    verdict = await asyncio.to_thread(_judge, audio, {"jp": target}, heard, rivals)
+    if verdict is not None:
+        shown = verdict.sounded_like
+        if verdict.band == "heard":
+            band = "close" if band == "good" else band
+        else:
+            band, tip = verdict.band, verdict.tip
+    if short and heard and normalize(heard) == normalize(target):
+        # Whisper heard exactly this sound: trust it over the kana model, which
+        # can mistake a short, quiet vowel for a neighbouring kana.
+        band, shown = "good", heard
+    if short and band != "good":
+        # One kana is too short to judge reliably by ear (measured on clean TTS:
+        # correct あ, し and ん were each rejected in some runs). Speech may confirm
+        # a single kana but never fail it; the learner is asked to type it instead.
+        band = "unsure"
+    return {"heard": shown or heard, "band": band, "tip": tip}
 
 
 @router.post("/speak")
@@ -236,7 +287,11 @@ def kana_done(body: KanaBody) -> dict[str, Any]:
 @router.post("/grade")
 def grade(body: GradeBody) -> dict[str, Any]:
     try:
-        card = state.grade(body.card_id, body.good)
+        correct = body.correct if body.correct is not None else bool(body.good)
+        card = state.grade(
+            body.card_id, correct=correct, ms=body.ms, helped=body.helped,
+            guessed=body.guessed, band=body.band, fmt=body.fmt,
+        )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return {"card": card}

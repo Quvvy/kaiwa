@@ -20,6 +20,7 @@ dependencies = [
   "python-multipart>=0.0.9",
   "pykakasi>=2.2.0",
   "py7zr>=0.22.0",
+  "fsrs>=6.0",
 ]
 
 [project.optional-dependencies]

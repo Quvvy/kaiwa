@@ -1149,3 +1149,47 @@ body:not([data-mode="learn"]) .ask-dock {
   font-size: 13.5px;
   color: var(--ink-2);
 }
+
+/* ---------- producing answers ---------- */
+.produce {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.produce-form {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.produce-input {
+  max-width: 320px;
+  font-size: 16px;
+}
+
+.produce-preview {
+  font-family: var(--font-jp);
+  font-size: 22px;
+  min-width: 2em;
+}
+
+.produce-answer {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.produce-answer [lang="ja"] {
+  font-family: var(--font-jp);
+  font-size: 26px;
+}
+
+.produce-answer-ro {
+  color: var(--ink-2);
+}
+
+.lesson-actions .guess {
+  min-height: 30px;
+  font-size: 13px;
+}

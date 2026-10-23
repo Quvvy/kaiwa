@@ -10,7 +10,7 @@
 
   let today = null;
   let showRomaji = readPref("kaiwa_course_romaji", "1") === "1";
-  const keys = { primary: null, hold: null, replay: null, choice: null, meanings: null, text: null };
+  const keys = { primary: null, hold: null, replay: null, choice: null, meanings: null, text: null, guess: null, tab: null };
 
   // ---------- helpers ----------
   function readPref(key, fallback) {
@@ -74,6 +74,12 @@
     } else if ((e.key === "r" || e.key === "R") && keys.replay && !e.repeat) {
       e.preventDefault();
       keys.replay();
+    } else if ((e.key === "g" || e.key === "G") && keys.guess && !e.repeat) {
+      e.preventDefault();
+      keys.guess();
+    } else if (e.key === "Tab" && keys.tab && !e.shiftKey) {
+      e.preventDefault();
+      keys.tab();
     } else if ((e.key === "t" || e.key === "T") && keys.text && !e.repeat) {
       e.preventDefault();
       keys.text();
@@ -315,6 +321,11 @@
     return { options: choicesFor(word.en, pool.map((w) => w.en)), answer: word.en };
   }
 
+  /** First answers inside lessons count as each new card's first review. */
+  function lessonGrade(cardId, outcome) {
+    postJson("/api/course/grade", { card_id: cardId, ...outcome }).catch(() => {});
+  }
+
   let pendingChoice = null;
   function wait(ms) {
     return new Promise((r) => setTimeout(r, ms));
@@ -437,6 +448,8 @@
     keys.replay = null;
     keys.meanings = null;
     keys.text = null;
+    keys.guess = null;
+    keys.tab = null;
     keys.choice = pendingChoice;
     pendingChoice = null;
     const top = el("div", { class: "lesson-top" },
@@ -472,6 +485,7 @@
   }
   function runStep(step) {
     if (step === "review") return runReview(today.review);
+    if (step === "recap") return runReview(today.recap || [], { title: "Recap", planStep: "recap" });
     if (step === "kana") return runKana(today.kana);
     if (step === "learn") return runLearn(today.unit);
     if (step === "words") return runWords(today.unit);
@@ -521,6 +535,11 @@
       rows.push(planRow("Review", `${n} card${n === 1 ? "" : "s"}, about ${Math.max(1, Math.round(secs / 60))} min`, false, open("review", () => runReview(today.review))));
     } else if (s.phrases_learned) {
       rows.push(planRow("Review", "Nothing left today", false, null));
+    }
+    if ((today.recap || []).length) {
+      const n = today.recap.length;
+      rows.push(planRow("Recap", `${n} new card${n === 1 ? "" : "s"}, a second look`, false,
+        steps.includes("recap") ? open("recap", () => runStep("recap")) : () => runStep("recap")));
     }
     const kp = today.kana_progress;
     if (today.kana) {
@@ -604,24 +623,131 @@
     if (tab) tab.click();
   }
 
+  // ---------- answering in Japanese ----------
+  // Romaji typed in the answer box becomes kana as you type (no Japanese keyboard needed).
+  const ROMAJI_KANA = (() => {
+    const base = {
+      a: "あ", i: "い", u: "う", e: "え", o: "お",
+      ka: "か", ki: "き", ku: "く", ke: "け", ko: "こ", ga: "が", gi: "ぎ", gu: "ぐ", ge: "げ", go: "ご",
+      sa: "さ", shi: "し", si: "し", su: "す", se: "せ", so: "そ", za: "ざ", ji: "じ", zi: "じ", zu: "ず", ze: "ぜ", zo: "ぞ",
+      ta: "た", chi: "ち", ti: "ち", tsu: "つ", tu: "つ", te: "て", to: "と", da: "だ", di: "ぢ", du: "づ", de: "で", do: "ど",
+      na: "な", ni: "に", nu: "ぬ", ne: "ね", no: "の",
+      ha: "は", hi: "ひ", fu: "ふ", hu: "ふ", he: "へ", ho: "ほ", ba: "ば", bi: "び", bu: "ぶ", be: "べ", bo: "ぼ",
+      pa: "ぱ", pi: "ぴ", pu: "ぷ", pe: "ぺ", po: "ぽ",
+      ma: "ま", mi: "み", mu: "む", me: "め", mo: "も", ya: "や", yu: "ゆ", yo: "よ",
+      ra: "ら", ri: "り", ru: "る", re: "れ", ro: "ろ", wa: "わ", wo: "を", nn: "ん", "n'": "ん",
+      sha: "しゃ", shu: "しゅ", sho: "しょ", sya: "しゃ", syu: "しゅ", syo: "しょ",
+      cha: "ちゃ", chu: "ちゅ", cho: "ちょ", tya: "ちゃ", tyu: "ちゅ", tyo: "ちょ",
+      ja: "じゃ", ju: "じゅ", jo: "じょ", zya: "じゃ", zyu: "じゅ", zyo: "じょ",
+      "-": "ー",
+    };
+    for (const [c, k] of Object.entries({ k: "き", g: "ぎ", n: "に", h: "ひ", b: "び", p: "ぴ", m: "み", r: "り" })) {
+      base[c + "ya"] = k + "ゃ";
+      base[c + "yu"] = k + "ゅ";
+      base[c + "yo"] = k + "ょ";
+    }
+    return base;
+  })();
+  function toKana(text, { final = false } = {}) {
+    const s = String(text || "").toLowerCase();
+    let out = "";
+    let i = 0;
+    while (i < s.length) {
+      const ch = s[i];
+      if (!/[a-z'\-]/.test(ch)) { out += ch; i += 1; continue; }
+      // nn: ん, and if a vowel follows, the second n starts the next kana (konnichiha → こんにちは).
+      if (ch === "n" && s[i + 1] === "n") {
+        out += "ん";
+        i += /[aiueoy]/.test(s[i + 2] || "") ? 1 : 2;
+        continue;
+      }
+      // Doubled consonant → small っ (kk, tt, ss, pp… not nn).
+      if (ch !== "n" && /[bcdfghjklmpqrstvwxyz]/.test(ch) && s[i + 1] === ch) { out += "っ"; i += 1; continue; }
+      let hit = "";
+      for (const len of [3, 2, 1]) {
+        const piece = s.slice(i, i + len);
+        if (ROMAJI_KANA[piece]) { hit = piece; break; }
+      }
+      if (hit === "n" || (!hit && ch === "n")) {
+        // A lone n is ん before a consonant or at the end; before a vowel/y it's waiting.
+        const after = s[i + 1];
+        if (after && !/[aiueoy']/.test(after)) { out += "ん"; i += 1; continue; }
+        if (!after && final) { out += "ん"; i += 1; continue; }
+      }
+      if (hit) { out += ROMAJI_KANA[hit]; i += hit.length; continue; }
+      out += ch;
+      i += 1;
+    }
+    return out;
+  }
+  const VOWEL_OF = {};
+  for (const [ro, kana] of Object.entries(ROMAJI_KANA)) {
+    const v = ro.slice(-1);
+    if ("aiueo".includes(v)) VOWEL_OF[kana.slice(-1)] = { a: "あ", i: "い", u: "う", e: "え", o: "お" }[v];
+  }
+  /** Compare-form: hiragana, no punctuation, ー spelled as the vowel it lengthens. */
+  function kanaKey(text) {
+    let s = "";
+    for (const ch of String(text || "")) {
+      const code = ch.charCodeAt(0);
+      s += code >= 0x30a1 && code <= 0x30f6 ? String.fromCharCode(code - 0x60) : ch;
+    }
+    s = s.replace(/[\s、。！？!?.,・「」]/g, "");
+    let out = "";
+    for (const ch of s) out += ch === "ー" ? (VOWEL_OF[out.slice(-1)] || "") : ch;
+    return out;
+  }
+
+  /**
+   * Say-or-type answer box. Typing shows kana as you go; Enter submits.
+   * `onAnswer({ text, kana })` for typed answers; spoken audio goes to `onAudio`.
+   */
+  function produceBox({ placeholder, onTyped, onAudio, onProblem, romajiOnly = false, typeFirst = false }) {
+    const typing = typeFirst || answerMode() === "type";
+    const preview = el("span", { class: "produce-preview", lang: "ja" });
+    const input = el("input", { type: "text", class: "produce-input", placeholder, autocomplete: "off", spellcheck: "false",
+      oninput: () => { preview.textContent = romajiOnly ? "" : toKana(input.value); } });
+    const form = el("form", { class: "produce-form", onsubmit: (e) => {
+      e.preventDefault();
+      if (!input.value.trim()) return;
+      input.disabled = true;
+      onTyped({ text: input.value.trim(), kana: toKana(input.value.trim(), { final: true }) });
+    } }, input, el("button", { type: "submit", class: "secondary" }, "Check"), preview);
+    const hold = holdControl("Hold and say it", onAudio, onProblem);
+    const box = el("div", { class: "produce" }, typing ? [form, hold] : [hold, form]);
+    box.focusTyping = () => input.focus();
+    box.hold = hold;
+    if (typing) setTimeout(() => input.focus(), 0);
+    return box;
+  }
+  function answerMode() {
+    return readPref("kaiwa_answer_mode", "speak") === "type" ? "type" : "speak";
+  }
+
   // ---------- review ----------
-  function runReview(cards) {
-    const queue = cards.map((c) => ({ ...c, retried: false }));
+  /**
+   * Run a queue of cards. Grades are worked out on the server from what happened
+   * (right/wrong, time to answer, help, "I guessed", speech result); cards the
+   * scheduler wants to see again within minutes come back a few cards later.
+   */
+  function runReview(cards, { title = "Review", planStep = "review" } = {}) {
+    const queue = cards.map((c) => ({ ...c, repeat: 0 }));
     let index = 0;
     let right = 0;
+    let firsts = 0;
     let total = queue.length;
+    const MAX_REPEATS = 2;
     prefetch(queue.map((c) => [c.phrase ? c.phrase.jp : c.word ? c.word.jp : c.kana.char, {}]));
 
-    // Word cards you haven't reached yet get swapped for short listening sentences
-    // built from them (fetched in the background; the plain cards stay if it fails).
-    const wordIds = queue.filter((c) => c.kind === "word").map((c) => c.card_id);
+    // Upcoming recognition word cards get swapped for short listening sentences.
+    const wordIds = queue.filter((c) => c.kind === "word" && c.format === "choice").map((c) => c.card_id);
     if (wordIds.length >= 2) {
       postJson("/api/course/sentences", { card_ids: wordIds }).then(({ sentences }) => {
         for (const s of sentences || []) {
-          const at = s.card_ids.map((id) => queue.findIndex((c, i) => i > index && c.card_id === id && !c.retried));
-          if (at.some((i) => i < 0)) continue; // one of its words is already done
+          const at = s.card_ids.map((id) => queue.findIndex((c, i) => i > index && c.card_id === id && !c.repeat));
+          if (at.some((i) => i < 0)) continue;
           for (const i of [...at].sort((a, b) => b - a)) queue.splice(i, 1);
-          queue.splice(Math.min(...at), 0, { kind: "sentence", sentence: s, retried: false,
+          queue.splice(Math.min(...at), 0, { kind: "sentence", sentence: s, repeat: 0,
             covers: cards.filter((c) => s.card_ids.includes(c.card_id)) });
           total -= s.card_ids.length - 1;
           prefetch([[s.jp, {}]]);
@@ -629,60 +755,67 @@
       }).catch(() => {});
     }
 
+    let shownAt = 0;
     function next() {
       if (index >= queue.length) return finish();
       const card = queue[index];
+      shownAt = performance.now();
       if (card.kind === "sentence") sentenceCard(card);
-      else if (card.kind === "kana") kanaCard(card);
-      else if (card.kind === "word") wordCard(card);
-      else if (card.skill === "listen") listenCard(card);
-      else speakCard(card);
+      else if (card.kind === "phrase" && card.skill === "speak") speakCard(card);
+      else if (card.kind === "phrase") listenCard(card);
+      else if (card.format === "produce") produceCard(card);
+      else if (card.kind === "kana") kanaChoice(card);
+      else wordChoice(card);
     }
-    function gradeCard(card, good) {
-      if (card.kind === "sentence") {
-        // One answer grades every word the sentence covered; misses come back as single cards.
-        for (const c of card.covers) postJson("/api/course/grade", { card_id: c.card_id, good }).catch(() => {});
-        if (good) right += 1;
-        else queue.push(...card.covers.map((c) => ({ ...c, retried: true })));
-        index += 1;
-        return next();
+    const elapsed = () => Math.round(performance.now() - shownAt);
+
+    /** Send what happened; repeat the card a few cards later if it's due again soon. */
+    function grade(card, outcome) {
+      const ids = card.kind === "sentence" ? card.covers.map((c) => c.card_id) : [card.card_id];
+      if (!card.repeat) {
+        firsts += 1;
+        if (outcome.correct && !outcome.guessed) right += 1;
       }
-      if (!card.retried) {
-        postJson("/api/course/grade", { card_id: card.card_id, good }).catch(() => {});
-        if (good) right += 1;
+      for (const id of ids) {
+        postJson("/api/course/grade", { card_id: id, ...outcome }).then(({ card: saved }) => {
+          if (!saved || !saved.again_soon) return;
+          const base = card.kind === "sentence" ? card.covers.find((c) => c.card_id === id) : card;
+          if (!base || card.repeat >= MAX_REPEATS) return;
+          queue.splice(Math.min(queue.length, index + 4), 0, { ...base, repeat: card.repeat + 1 });
+        }).catch(() => {});
       }
-      if (!good && !card.retried) queue.push({ ...card, retried: true });
       index += 1;
       next();
     }
-    function gradeActions(card, suggestGood) {
-      const missed = el("button", { type: "button", class: suggestGood ? "secondary" : "", onclick: () => gradeCard(card, false) }, "I missed it");
-      const got = el("button", { type: "button", class: suggestGood ? "lesson-primary" : "secondary", onclick: () => gradeCard(card, true) }, "I knew it");
-      return { buttons: [missed, got], primary: () => gradeCard(card, !!suggestGood) };
+    function counter() {
+      return { index: Math.min(index, queue.length - 1), total: queue.length };
     }
 
-    /** Auto-graded cards (kana, words): answer, see the result, move on. */
-    function choiceCard(card, { prompt, big, bigJp, answer, pool, options, after, audio, extra = null }) {
+    /** Multiple choice. A right answer moves on by itself; G during that moment = "I guessed". */
+    function choiceCard(card, { big, bigJp, answer, options, audio, after, extra = null, fmt, askJp }) {
       const result = el("div", { class: "result" });
-      const nextBtn = primaryButton("Next", () => gradeCard(card, lastRight));
+      let helped = false;
+      let outcome = null;
+      const guessBtn = el("button", { class: "secondary guess", type: "button", hidden: true,
+        onclick: () => { outcome.guessed = true; advance(); } }, "I guessed", kbd("G"));
+      const nextBtn = primaryButton("Next", () => advance());
       nextBtn.hidden = true;
-      let lastRight = false;
       const body = el("div", { class: "card-body" },
-        prompt ? el("p", { class: "prompt", text: prompt }) : null,
         big ? el("p", { class: bigJp ? "kana-big" : "prompt-en", lang: bigJp ? "ja" : null, text: big }) : null,
         audio ? playRow(audio) : null,
-        extra,
+        typeof extra === "function" ? extra(() => { helped = true; }) : extra,
         choiceBlock({
-          options: options || choicesFor(answer, pool),
-          answer,
-          onAnswer: async (right) => {
-            lastRight = right;
+          options, answer,
+          onAnswer: async (correct) => {
+            outcome = { correct, ms: elapsed(), helped, guessed: false, fmt };
             if (after) result.replaceChildren(after());
             if (audio) play(audio);
-            if (right && !card.retried) {
+            if (correct) {
+              guessBtn.hidden = false;
+              keys.guess = () => guessBtn.click();
               const here = onThisScreen();
-              await wait(700);
-              if (here()) advance();
+              await wait(1100);
+              if (here() && outcome && !outcome.sent) advance();
             } else {
               nextBtn.hidden = false;
               keys.primary = advance;
@@ -691,119 +824,211 @@
         }),
         result,
       );
-      function advance() { keys.primary = null; gradeCard(card, lastRight); }
-      frame({ title: "Review", index: Math.min(index, queue.length - 1), total: queue.length, body, actions: [nextBtn],
-        ask: { screen: "review " + card.kind, jp: card.word ? card.word.jp : card.kana ? card.kana.char : card.sentence ? card.sentence.jp : "", answer } });
-      if (audio && !card.retried && card.kind === "sentence") play(audio);
-      keys.primary = null;
+      function advance() {
+        if (!outcome || outcome.sent) return;
+        outcome.sent = true;
+        keys.primary = keys.guess = null;
+        const { sent, ...rest } = outcome;
+        grade(card, rest);
+      }
+      frame({ title, ...counter(), body, actions: [guessBtn, nextBtn],
+        ask: { screen: `${title.toLowerCase()} ${card.kind}`, jp: askJp || "", answer } });
       if (audio) keys.replay = () => play(audio);
+    }
+    function kanaChoice(card) {
+      const k = card.kana;
+      const pool = (today.kana_pool || []).filter((x) => x.ro !== k.ro).map((x) => x.ro);
+      choiceCard(card, { big: k.char, bigJp: true, answer: k.ro, options: choicesFor(k.ro, pool), audio: k.char,
+        fmt: "kana:choice", askJp: k.char });
+    }
+    function wordChoice(card) {
+      const w = card.word;
+      const m = meaningChoices(w, today.words_pool || []);
+      choiceCard(card, { big: w.jp, bigJp: true, answer: m.answer, options: m.options, audio: w.jp, fmt: "word:choice", askJp: w.jp,
+        after: () => needsRomaji(w.jp) ? el("p", { class: "phrase-ro", text: w.ro }) : el("span") });
+      play(w.jp);
+    }
+    function listenCard(card) {
+      // Hear the phrase, pick its meaning; the Japanese shows after answering.
+      const p = card.phrase;
+      const pool = (today.phrases_pool || []).map((x) => x.en);
+      choiceCard(card, { answer: p.en, options: choicesFor(p.en, pool), audio: p.jp, fmt: "phrase:listen", askJp: p.jp,
+        after: () => phraseBlock(p) });
+      play(p.jp);
     }
     function sentenceCard(card) {
       const s = card.sentence;
       const text = el("p", { class: "sentence-jp", lang: "ja", hidden: true, text: s.jp });
-      const showText = el("button", { class: "secondary", type: "button", onclick: () => { text.hidden = false; showText.hidden = true; } },
-        "Show text", kbd("T"));
       choiceCard(card, {
-        prompt: "", big: "", answer: s.en, options: s.choices,
-        audio: s.jp,
-        extra: [el("div", { class: "lesson-play" }, showText), text],
+        answer: s.en, options: s.choices, audio: s.jp, fmt: "sentence", askJp: s.jp,
+        extra: (markHelped) => {
+          const showText = el("button", { class: "secondary", type: "button", onclick: () => {
+            markHelped(); text.hidden = false; showText.hidden = true; } }, "Show text", kbd("T"));
+          keys.text = () => showText.click();
+          return [el("div", { class: "lesson-play" }, showText), text];
+        },
         after: () => {
           text.hidden = false;
-          showText.hidden = true;
           return el("p", { class: "sentence-words" }, s.words.map((w) =>
             el("span", {}, el("span", { lang: "ja", text: w.jp }), ` ${w.en}`)));
         },
       });
-      keys.text = () => showText.click();
-    }
-    function kanaCard(card) {
-      const k = card.kana;
-      const pool = (today.kana_pool || []).filter((x) => x.ro !== k.ro).map((x) => x.ro);
-      choiceCard(card, { prompt: "", big: k.char, bigJp: true, answer: k.ro, pool, audio: k.char });
-    }
-    function wordCard(card) {
-      const w = card.word;
-      const m = meaningChoices(w, today.words_pool || []);
-      choiceCard(card, {
-        prompt: "", big: w.jp, bigJp: true, answer: m.answer, options: m.options, audio: w.jp,
-        after: () => needsRomaji(w.jp) ? el("p", { class: "phrase-ro", text: w.ro }) : el("span"),
-      });
+      play(s.jp);
     }
 
-    function listenCard(card) {
-      const p = card.phrase;
-      const answer = el("div", { class: "reveal", hidden: true }, phraseBlock(p));
-      function reveal() {
-        answer.hidden = false;
-        const g = gradeActions(card, true);
-        frameRefresh(g.buttons, g.primary);
+    /** Known kana and words: produce the answer (say it, or type it). */
+    function produceCard(card) {
+      const isKana = card.kind === "kana";
+      const target = isKana ? card.kana.char : card.word.jp;
+      const result = el("div", { class: "result" });
+      const nextBtn = primaryButton("Next", () => advance());
+      nextBtn.hidden = true;
+      let outcome = null;
+      let startedAt = 0;
+      function settle(o, shown) {
+        if (outcome) return;
+        outcome = { ...o, fmt: `${card.kind}:produce:${o.spoken ? "say" : "type"}` };
+        delete outcome.spoken;
+        result.replaceChildren(...shown);
+        play(target);
+        dontKnow.hidden = true;
+        nextBtn.hidden = false;
+        keys.primary = advance;
+        keys.replay = () => play(target);
       }
-      const body = el("div", { class: "card-body" },
-        el("p", { class: "prompt", text: card.retried ? "Once more. What does this mean?" : "Listen. What does it mean?" }),
-        playRow(p.jp),
-        answer,
-      );
-      const showBtn = primaryButton("Show meaning", reveal);
-      function frameRefresh(buttons, primary) {
-        root.querySelector(".lesson-actions").replaceChildren(...buttons);
-        keys.primary = primary;
+      function reveal(correct, band) {
+        return [
+          el("p", { class: "verdict " + (correct ? (band === "close" ? "close" : "good") : "off"),
+            text: correct ? (band === "close" ? "Close." : "Right.") : "Not quite." }),
+          el("p", { class: "produce-answer" }, el("span", { lang: "ja", text: target }),
+            el("span", { class: "produce-answer-ro", text: isKana ? card.kana.ro : `${card.word.ro} · ${card.word.en}` })),
+        ];
       }
-      frame({ title: "Review", index: Math.min(index, queue.length - 1), total: queue.length, body, actions: [showBtn], primary: reveal,
-        ask: { screen: "review listen", jp: p.jp, en: p.en, note: p.note } });
-      keys.replay = () => play(p.jp);
-      play(p.jp);
+      const box = produceBox({
+        placeholder: isKana ? "Type its sound (romaji)" : "Type it (romaji becomes kana)",
+        romajiOnly: isKana,
+        typeFirst: isKana, // single sounds are judged far more reliably typed than spoken
+        onTyped: ({ text, kana }) => {
+          const ms = elapsed();
+          const correct = isKana
+            ? kanaKey(kana) === kanaKey(target) || text.toLowerCase().replace(/[^a-z]/g, "") === card.kana.ro.replace(/ \(.*\)/, "")
+              || (target === "を" && text.toLowerCase() === "o")
+            : kanaKey(kana) === kanaKey(target);
+          settle({ correct, ms }, reveal(correct, ""));
+        },
+        onAudio: async (blob, ext) => {
+          const ms = Math.round(startedAt - shownAt);
+          result.replaceChildren(el("p", { class: "pending", text: "Checking…" }));
+          try {
+            const r = await api("/api/course/check_text", { method: "POST", body: audioForm(blob, ext, { target }) });
+            if (r.band === "unsure") {
+              result.replaceChildren(el("p", { class: "verdict close", text: "Hard to judge this sound by ear. Type it instead." }));
+              box.focusTyping();
+              return;
+            }
+            const correct = r.band !== "off";
+            noteResult({ said: r.heard, band: r.band, tip: r.tip });
+            settle({ correct, ms, band: r.band, spoken: true },
+              [...reveal(correct, r.band), heardLine("Sounded like ", r.heard), r.tip ? el("p", { class: "tip", text: r.tip }) : null].filter(Boolean));
+          } catch (err) {
+            result.replaceChildren(el("p", { class: "verdict off", text: String(err.message || err) }));
+          }
+        },
+        onProblem: showProblem(result),
+      });
+      const holdStart = box.hold.holdApi.start;
+      box.hold.holdApi.start = () => { startedAt = performance.now(); return holdStart(); };
+      box.hold.addEventListener("pointerdown", () => { startedAt = performance.now(); }, true);
+      const dontKnow = el("button", { type: "button", class: "secondary", onclick: () =>
+        settle({ correct: false, ms: elapsed() }, reveal(false, "")) }, "Show me");
+      function advance() {
+        if (!outcome || outcome.sent) return;
+        outcome.sent = true;
+        keys.primary = null;
+        const { sent, ...rest } = outcome;
+        grade(card, rest);
+      }
+      frame({
+        title, ...counter(),
+        body: el("div", { class: "card-body" },
+          isKana
+            ? el("p", { class: "kana-big", lang: "ja", text: target })
+            : el("p", { class: "prompt-en", text: card.word.en }),
+          el("p", { class: "prompt", text: isKana ? "Say or type its sound." : "Say it in Japanese, or type it." }),
+          box, micRow(), result),
+        actions: [dontKnow, nextBtn],
+        hold: box.hold,
+        ask: { screen: `${title.toLowerCase()} produce ${card.kind}`, jp: isKana ? target : "", en: isKana ? "" : card.word.en },
+      });
+      keys.tab = () => box.focusTyping();
     }
 
     function speakCard(card) {
       const p = card.phrase;
       const result = el("div", { class: "result" });
       const answer = el("div", { class: "reveal", hidden: true });
-      function showAnswer(suggestGood) {
+      const nextBtn = primaryButton("Next", () => advance());
+      nextBtn.hidden = true;
+      let outcome = null;
+      let startedAt = 0;
+      function settle(o) {
+        if (outcome) return;
+        outcome = { ...o, fmt: "phrase:speak" };
         answer.hidden = false;
         answer.replaceChildren(phraseBlock(p), playRow(p.jp));
         keys.replay = () => play(p.jp);
-        const g = gradeActions(card, suggestGood);
-        root.querySelector(".lesson-actions").replaceChildren(...g.buttons);
-        keys.primary = g.primary;
+        giveUp.hidden = true;
+        nextBtn.hidden = false;
+        keys.primary = advance;
       }
       const hold = holdControl("Hold to say it", async (blob, ext) => {
+        const ms = Math.round(startedAt - shownAt);
         result.replaceChildren(el("p", { class: "pending", text: "Checking…" }));
         try {
           const r = await api("/api/course/check", { method: "POST", body: audioForm(blob, ext, { phrase_id: p.id }) });
           result.replaceChildren(verdictLine(r.band), heardLine("Sounded like ", r.heard), r.tip ? el("p", { class: "tip", text: r.tip }) : null);
           noteResult({ said: r.heard, band: r.band, tip: r.tip });
-          showAnswer(r.band === "good");
+          settle({ correct: r.band !== "off", ms, band: r.band });
           if (r.band !== "good") play(p.jp);
         } catch (err) {
           result.replaceChildren(el("p", { class: "verdict off", text: String(err.message || err) }));
         }
       }, showProblem(result));
-      const body = el("div", { class: "card-body" },
-        el("p", { class: "prompt", text: "Say this in Japanese" }),
-        el("p", { class: "prompt-en", text: p.en }),
-        hold,
-        micRow(),
-        result,
-        answer,
-      );
-      const giveUp = el("button", { type: "button", class: "secondary", onclick: () => { showAnswer(false); play(p.jp); } }, "Show me");
-      frame({ title: "Review", index: Math.min(index, queue.length - 1), total: queue.length, body, actions: [giveUp], hold,
-        ask: { screen: "review speak", jp: p.jp, en: p.en, note: p.note } });
+      hold.addEventListener("pointerdown", () => { startedAt = performance.now(); }, true);
+      const holdStart = hold.holdApi.start;
+      hold.holdApi.start = () => { startedAt = performance.now(); return holdStart(); };
+      const giveUp = el("button", { type: "button", class: "secondary", onclick: () => {
+        settle({ correct: false, ms: elapsed() }); play(p.jp); } }, "Show me");
+      function advance() {
+        if (!outcome || outcome.sent) return;
+        outcome.sent = true;
+        keys.primary = null;
+        const { sent, ...rest } = outcome;
+        grade(card, rest);
+      }
+      frame({ title, ...counter(),
+        body: el("div", { class: "card-body" },
+          el("p", { class: "prompt", text: "Say this in Japanese" }),
+          el("p", { class: "prompt-en", text: p.en }),
+          hold, micRow(), result, answer),
+        actions: [giveUp, nextBtn], hold,
+        ask: { screen: `${title.toLowerCase()} speak`, jp: p.jp, en: p.en, note: p.note } });
     }
 
     function finish() {
       const go = async () => {
         await refresh();
-        // Today's share is done; anything still due waits for tomorrow's budget.
-        today.review = [];
-        today.plan = (today.plan || []).filter((s) => s !== "review");
+        // This step is done for now; what's still due waits for its time.
+        today.plan = (today.plan || []).filter((s) => s !== planStep);
         runNext();
       };
       frame({
-        title: "Review",
+        title,
         body: el("div", { class: "card-body" },
-          el("h3", { class: "end-title", text: `${right} of ${total} on the first try` }),
-          el("p", { class: "prompt", text: "Missed phrases come back tomorrow." })),
+          el("h3", { class: "end-title", text: `${right} of ${firsts} right` }),
+          el("p", { class: "prompt", text: planStep === "recap"
+            ? "These come back over the next days, further apart each time you get them right."
+            : "Each card comes back when you're about to forget it." })),
         actions: [primaryButton("Continue", go)],
         primary: go,
       });
@@ -818,6 +1043,7 @@
     let i = 0;
     const phrases = unit.phrases;
     prefetch(phrases.map((p) => [p.jp, {}]));
+    const spoken = new Set();
 
     function show() {
       const p = phrases[i];
@@ -828,6 +1054,10 @@
           const r = await api("/api/course/check", { method: "POST", body: audioForm(blob, ext, { phrase_id: p.id }) });
           result.replaceChildren(verdictLine(r.band), heardLine("Sounded like ", r.heard), r.tip ? el("p", { class: "tip", text: r.tip }) : null);
           noteResult({ said: r.heard, band: r.band, tip: r.tip });
+          if (!spoken.has(p.id)) {
+            spoken.add(p.id); // repeating right after hearing it: no timing, just whether it came out
+            lessonGrade(`${p.id}:speak`, { correct: r.band !== "off", band: r.band, fmt: "phrase:speak:learn" });
+          }
           if (r.band !== "good") play(p.jp);
         } catch (err) {
           result.replaceChildren(el("p", { class: "verdict off", text: String(err.message || err) }));
@@ -1100,9 +1330,11 @@
       ]);
       let n = 0;
       const total = queue.length;
+      const graded = new Set();
       function ask() {
         if (n >= queue.length) return words();
         const { k, mode } = queue[n];
+        const shown = performance.now();
         const nextBtn = primaryButton("Next", advance);
         nextBtn.hidden = true;
         function advance() { n += 1; ask(); }
@@ -1119,6 +1351,10 @@
             });
         async function onAnswer(right) {
           play(k.char);
+          if (mode === "read" && !graded.has(k.char)) {
+            graded.add(k.char);
+            lessonGrade(`kana.${k.char}:read`, { correct: right, ms: Math.round(performance.now() - shown), fmt: "kana:choice" });
+          }
           if (!right) queue.push(queue[n]);
           if (right) { const here = onThisScreen(); await wait(600); if (here()) advance(); }
           else { nextBtn.hidden = false; keys.primary = advance; }
@@ -1234,7 +1470,8 @@
       const total = queue.length;
       function ask() {
         if (n >= queue.length) return finish();
-        const { w } = queue[n];
+        const { w, retried } = queue[n];
+        const shown = performance.now();
         const nextBtn = primaryButton("Next", advance);
         nextBtn.hidden = true;
         function advance() { n += 1; ask(); }
@@ -1248,6 +1485,7 @@
             choiceBlock({
               ...meaningChoices(w, words),
               onAnswer: async (right) => {
+                if (!retried) lessonGrade(`${w.id}:mean`, { correct: right, ms: Math.round(performance.now() - shown), fmt: "word:choice" });
                 if (!right && !queue[n].retried) queue.push({ w, retried: true });
                 if (right) { const here = onThisScreen(); await wait(600); if (here()) advance(); }
                 else { nextBtn.hidden = false; keys.primary = advance; }
@@ -1480,6 +1718,12 @@
       ],
       primary: showHome,
     });
+  }
+
+  const answerSelect = document.getElementById("answerModeSelect");
+  if (answerSelect) {
+    answerSelect.value = answerMode();
+    answerSelect.addEventListener("change", () => writePref("kaiwa_answer_mode", answerSelect.value));
   }
 
   window.KaiwaCourse = { show: showHome };

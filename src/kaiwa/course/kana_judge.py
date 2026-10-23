@@ -156,11 +156,12 @@ class Verdict:
     tip: str
 
 
-def judge(audio: np.ndarray, targets_kana: list[str], heard_kana: str) -> Verdict | None:
+def judge(audio: np.ndarray, targets_kana: list[str], heard_kana: str, rivals_kana: tuple[str, ...] = ()) -> Verdict | None:
     """Pick the band from the audio itself. None when the model isn't available.
 
     `targets_kana[0]` is the phrase; the rest are accepted variants (おはよう for
-    おはようございます), which count as correct too.
+    おはようございます), which count as correct too. `rivals_kana` are extra
+    wrong answers to compete against (other kana, for a single-kana target).
     """
     if not _load():
         return None
@@ -180,6 +181,10 @@ def judge(audio: np.ndarray, targets_kana: list[str], heard_kana: str) -> Verdic
     heard = "".join(c for c in heard_kana if c in _vocab)
     if heard and heard not in targets and heard not in {r[1] for r in rivals}:
         rivals.append((cost(heard), heard, ""))
+    for rival in rivals_kana:
+        rival = "".join(c for c in rival if c in _vocab)
+        if rival and rival not in targets and rival not in {r[1] for r in rivals}:
+            rivals.append((cost(rival), rival, ""))
     if not rivals:
         return Verdict("good", target, "")
     best_cost, best, tip = min(rivals)
