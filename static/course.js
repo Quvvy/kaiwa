@@ -53,8 +53,18 @@
   // ---------- keyboard ----------
   document.addEventListener("keydown", (e) => {
     if (!learnVisible() || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.key === "Escape" && askPanel.isOpen()) {
+      e.preventDefault();
+      askPanel.close();
+      return;
+    }
     const tag = (e.target && e.target.tagName) || "";
     if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+    if (e.key === "?" && askContext) {
+      e.preventDefault();
+      askPanel.toggle();
+      return;
+    }
     if (e.key === " " && keys.hold) {
       e.preventDefault();
       if (!e.repeat) keys.hold.start();
@@ -286,6 +296,7 @@
       const right = options[i] === answer;
       buttons.forEach((b) => { b.disabled = true; });
       buttons[i].classList.add(right ? "right" : "wrong");
+      noteResult({ picked: options[i], correct: answer, right });
       if (!right) buttons[options.indexOf(answer)].classList.add("right");
       feedback.className = "verdict " + (right ? "good" : "off");
       feedback.textContent = (right ? "Right." : "Not quite.") + (explain ? " " + explain : "");
@@ -316,6 +327,79 @@
     return el("p", { class: "heard-line" }, prefix, el("span", { lang: "ja", text: heard }), extra || null);
   }
 
+  // ---------- ask ----------
+  // What the current screen is about; frame() sets it, results add to it.
+  let askContext = null;
+  function noteResult(result) {
+    if (askContext) askContext = { ...askContext, result };
+  }
+
+  const askPanel = (() => {
+    const list = el("div", { class: "ask-list" });
+    const about = el("p", { class: "ask-about" });
+    const input = el("input", { type: "text", maxlength: "500", placeholder: "Ask anything about this" });
+    const quick = (label, key) => el("button", { type: "button", class: "secondary", onclick: () => send("", key) }, label);
+    const wrongBtn = quick("What did I get wrong?", "wrong");
+    const panel = el("aside", { class: "ask-panel", hidden: true, "aria-label": "Ask" },
+      el("div", { class: "ask-head" },
+        el("span", { class: "ask-title", text: "Ask" }),
+        el("button", { type: "button", class: "secondary", onclick: () => close() }, "Close", kbd("Esc"))),
+      about,
+      el("div", { class: "ask-quick" }, quick("Break this down", "breakdown"), quick("Why?", "why"), wrongBtn),
+      el("form", { class: "ask-form", onsubmit: (e) => { e.preventDefault(); send(input.value, ""); } },
+        input, el("button", { type: "submit" }, "Ask")),
+      list);
+    document.body.append(panel);
+
+    function refresh() {
+      if (!askContext) return close();
+      about.textContent = askContext.jp || askContext.title || "";
+      about.lang = askContext.jp ? "ja" : "";
+      wrongBtn.hidden = !askContext.result;
+    }
+    function open() {
+      if (!askContext) return;
+      refresh();
+      panel.hidden = false;
+      input.focus();
+    }
+    function close() {
+      panel.hidden = true;
+      if (document.activeElement && panel.contains(document.activeElement)) document.activeElement.blur();
+    }
+    async function send(question, key) {
+      if (!askContext || (!key && !question.trim())) return;
+      const entry = el("div", { class: "ask-entry" },
+        el("p", { class: "ask-q", text: key ? { breakdown: "Break this down", why: "Why?", wrong: "What did I get wrong?" }[key] : question }),
+        el("p", { class: "pending", text: "Thinking…" }));
+      list.prepend(entry);
+      input.value = "";
+      try {
+        const r = await postJson("/api/course/ask", { question, quick: key, context: askContext });
+        entry.replaceChildren(entry.firstChild, ...renderAnswer(r));
+      } catch (err) {
+        entry.replaceChildren(entry.firstChild, el("p", { class: "verdict off", text: String(err.message || err) }));
+      }
+    }
+    function renderAnswer(r) {
+      const parts = [el("p", { class: "ask-a", text: r.answer })];
+      if (r.unsure) parts.push(el("p", { class: "ask-unsure", text: "Not certain. Double-check this one." }));
+      if (r.breakdown.length) {
+        parts.push(el("table", { class: "ask-breakdown" }, el("tbody", {}, r.breakdown.map((b) =>
+          el("tr", {}, el("td", { lang: "ja", text: b.jp }), el("td", { text: b.en }))))));
+      }
+      for (const ex of r.examples) {
+        parts.push(el("div", { class: "ask-example" },
+          el("button", { class: "secondary line-play", type: "button", "aria-label": "Play", onclick: () => play(ex.jp) }, "▶"),
+          el("span", { lang: "ja", text: ex.jp }),
+          el("span", { class: "ask-example-en", text: ex.en })));
+      }
+      if (r.more) parts.push(el("details", { class: "ask-more" }, el("summary", {}, "More"), el("p", { text: r.more })));
+      return parts;
+    }
+    return { open, close, refresh, toggle: () => (panel.hidden ? open() : close()), isOpen: () => !panel.hidden };
+  })();
+
   // ---------- frame ----------
   /** One screen of a lesson: top bar, optional sequence bar, content, action footer. */
   let screenId = 0;
@@ -324,9 +408,10 @@
     const id = screenId;
     return () => id === screenId;
   }
-  function frame({ title, index, total, body, actions = [], primary = null, hold = null }) {
+  function frame({ title, index, total, body, actions = [], primary = null, hold = null, ask = null }) {
     stopAudio();
     screenId += 1;
+    askContext = { title, ...(ask || {}) };
     keys.primary = primary;
     keys.hold = hold ? hold.holdApi : null;
     keys.replay = null;
@@ -336,6 +421,8 @@
       el("button", { class: "secondary lesson-exit", type: "button", onclick: () => showHome() }, "Exit"),
       el("h2", { class: "lesson-title", text: title }),
       total ? el("span", { class: "lesson-count", text: `${index + 1} of ${total}` }) : null,
+      el("button", { class: "secondary lesson-ask", type: "button", onclick: () => askPanel.toggle(),
+        "data-tip": "Ask a question about this screen" }, "Ask", kbd("?")),
     );
     const steps = total
       ? el("div", { class: "lesson-steps", "aria-hidden": "true" },
@@ -351,6 +438,7 @@
         actions.length ? el("div", { class: "lesson-actions" }, actions) : null,
       ),
     );
+    askPanel.refresh();
   }
   function primaryButton(label, onclick, { disabled = false } = {}) {
     return el("button", { type: "button", class: "lesson-primary", disabled, onclick }, label, kbd("Enter"));
@@ -394,6 +482,8 @@
   async function showHome() {
     stopAudio();
     screenId += 1;
+    askContext = null;
+    askPanel.close();
     keys.primary = keys.hold = keys.replay = keys.choice = null;
     try {
       await refresh();
@@ -410,10 +500,13 @@
     // The next step is started by the main button, so its row gets no button of its own.
     const open = (key, fn) => (key === steps[0] ? null : fn);
     const rows = [];
-    if (today.review_total) {
-      rows.push(planRow("Review", `${today.review_total} phrase${today.review_total === 1 ? "" : "s"} due`, false, open("review", () => runReview(today.review))));
+    if (today.review.length) {
+      // Only today's share is shown: the rest waits for later days, never piles up here.
+      const secs = today.review.reduce((n, c) => n + ({ kana: 4, word: 4, listen: 8, speak: 12 }[c.kind === "phrase" ? c.skill : c.kind] || 8), 0);
+      const n = today.review.length;
+      rows.push(planRow("Review", `${n} card${n === 1 ? "" : "s"}, about ${Math.max(1, Math.round(secs / 60))} min`, false, open("review", () => runReview(today.review))));
     } else if (s.phrases_learned) {
-      rows.push(planRow("Review", "Nothing due today", false, null));
+      rows.push(planRow("Review", "Nothing left today", false, null));
     }
     const kp = today.kana_progress;
     if (today.kana) {
@@ -550,7 +643,8 @@
         result,
       );
       function advance() { keys.primary = null; gradeCard(card, lastRight); }
-      frame({ title: "Review", index: Math.min(index, queue.length - 1), total: queue.length, body, actions: [nextBtn] });
+      frame({ title: "Review", index: Math.min(index, queue.length - 1), total: queue.length, body, actions: [nextBtn],
+        ask: { screen: "review " + card.kind, jp: card.word ? card.word.jp : card.kana ? card.kana.char : "", answer } });
       keys.primary = null;
       if (audio) keys.replay = () => play(audio);
     }
@@ -586,7 +680,8 @@
         root.querySelector(".lesson-actions").replaceChildren(...buttons);
         keys.primary = primary;
       }
-      frame({ title: "Review", index: Math.min(index, queue.length - 1), total: queue.length, body, actions: [showBtn], primary: reveal });
+      frame({ title: "Review", index: Math.min(index, queue.length - 1), total: queue.length, body, actions: [showBtn], primary: reveal,
+        ask: { screen: "review listen", jp: p.jp, en: p.en, note: p.note } });
       keys.replay = () => play(p.jp);
       play(p.jp);
     }
@@ -608,6 +703,7 @@
         try {
           const r = await api("/api/course/check", { method: "POST", body: audioForm(blob, ext, { phrase_id: p.id }) });
           result.replaceChildren(verdictLine(r.band), heardLine("Sounded like ", r.heard), r.tip ? el("p", { class: "tip", text: r.tip }) : null);
+          noteResult({ said: r.heard, band: r.band, tip: r.tip });
           showAnswer(r.band === "good");
           if (r.band !== "good") play(p.jp);
         } catch (err) {
@@ -623,7 +719,8 @@
         answer,
       );
       const giveUp = el("button", { type: "button", class: "secondary", onclick: () => { showAnswer(false); play(p.jp); } }, "Show me");
-      frame({ title: "Review", index: Math.min(index, queue.length - 1), total: queue.length, body, actions: [giveUp], hold });
+      frame({ title: "Review", index: Math.min(index, queue.length - 1), total: queue.length, body, actions: [giveUp], hold,
+        ask: { screen: "review speak", jp: p.jp, en: p.en, note: p.note } });
     }
 
     function finish() {
@@ -656,6 +753,7 @@
         try {
           const r = await api("/api/course/check", { method: "POST", body: audioForm(blob, ext, { phrase_id: p.id }) });
           result.replaceChildren(verdictLine(r.band), heardLine("Sounded like ", r.heard), r.tip ? el("p", { class: "tip", text: r.tip }) : null);
+          noteResult({ said: r.heard, band: r.band, tip: r.tip });
           if (r.band !== "good") play(p.jp);
         } catch (err) {
           result.replaceChildren(el("p", { class: "verdict off", text: String(err.message || err) }));
@@ -673,6 +771,7 @@
         actions,
         primary: next,
         hold,
+        ask: { screen: "new phrase", jp: p.jp, en: p.en, note: p.note },
       });
       keys.replay = () => play(p.jp);
       play(p.jp);
@@ -800,6 +899,7 @@
     renderLines();
     frame({
       title,
+      ask: { screen: "listening", scene: d.scene, lines: d.lines.map((l) => `${l.who}: ${l.jp} (${l.en})`), questions: qs.map((q) => q.q) },
       body: el("div", { class: "card-body" },
         el("p", { class: "prompt", text: d.scene || "Listen before showing the text." }),
         el("div", { class: "lesson-play" }, playAllBtn, toggleJp, toggleEn),
@@ -836,6 +936,7 @@
           playRow(k.char),
           i === 0 ? el("p", { class: "phrase-note", text: lesson.note }) : null),
         actions, primary: go,
+        ask: { screen: "kana", jp: k.char, reading: k.ro, note: lesson.note },
       });
       keys.replay = () => play(k.char);
       play(k.char);
@@ -884,6 +985,7 @@
         }
         frame({
           title: `${title}: practice`, index: Math.min(n, total - 1), total,
+          ask: { screen: "kana drill", jp: mode === "read" ? k.char : "", note: lesson.note },
           body: el("div", { class: "card-body" },
             el("p", { class: "prompt", text: mode === "read" ? "How do you read this?" : "Which one did you hear?" }),
             mode === "read"
@@ -916,6 +1018,7 @@
         const options = shuffle([w.ro, ...near, ...others].slice(0, 4));
         frame({
           title: `${title}: read words`, index: n, total: list.length,
+          ask: { screen: "kana reading", jp: w.jp, reading: w.ro, en: w.en },
           body: el("div", { class: "card-body" },
             el("p", { class: "prompt", text: "Read this word." }),
             el("p", { class: "kana-big kana-word", lang: "ja", text: w.jp }),
@@ -972,6 +1075,7 @@
       actions.push(primaryButton(last ? "Practice" : "Next", go));
       frame({
         title: `Words, unit ${unit.number}`, index: page, total: pages,
+        ask: { screen: "word list", words: slice.map((w) => `${w.jp} = ${w.en}`) },
         body: el("div", { class: "card-body" },
           el("table", { class: "word-table" },
             el("tbody", {}, slice.map((w) => el("tr", {},
@@ -996,6 +1100,7 @@
         function advance() { n += 1; ask(); }
         frame({
           title: `Words, unit ${unit.number}`, index: Math.min(n, total - 1), total,
+          ask: { screen: "word quiz", jp: w.jp, en: w.en },
           body: el("div", { class: "card-body" },
             el("p", { class: "prompt", text: "What does it mean?" }),
             el("p", { class: "kana-big kana-word", lang: "ja", text: w.jp }),
@@ -1042,6 +1147,7 @@
       actions.push(primaryButton(last ? "Practice" : "Next", go));
       frame({
         title: `Grammar, unit ${unit.number}`, index: gi, total: points.length,
+        ask: { screen: "grammar", title: g.title, explanation: g.explain, examples: g.examples },
         body: el("div", { class: "card-body grammar" },
           el("h3", { class: "grammar-title", text: g.title }),
           g.explain.map((para) => el("p", { class: "grammar-text", text: para })),
@@ -1067,6 +1173,7 @@
         const answer = q.choices[q.answer];
         frame({
           title: `Grammar practice, unit ${unit.number}`, index: n, total: qs.length,
+          ask: { screen: "grammar question", question: q.q, choices: q.choices, correct: answer, explain: q.explain },
           body: el("div", { class: "card-body" },
             el("p", { class: "question-q", text: q.q }),
             choiceBlock({
@@ -1128,6 +1235,7 @@
         }
       }
       function renderVerdict(r) {
+        noteResult({ said: r.heard, verdict: r.verdict, model: r.model, tip: r.tip });
         const label = { great: "Great answer.", ok: "Understood. One thing to fix.", retry: "Try that again." }[r.verdict] || "";
         const cls = { great: "good", ok: "close", retry: "off" }[r.verdict] || "off";
         result.replaceChildren(...[
@@ -1158,6 +1266,7 @@
         title: `Speak, unit ${unit.number}`,
         index: t,
         total: tasks.length,
+        ask: { screen: "speaking task", jp: task.say, situation: task.situation, model_answer: task.hint },
         body: el("div", { class: "card-body" },
           el("p", { class: "situation", text: task.situation }),
           el("div", { class: "says" },

@@ -51,8 +51,22 @@ def _today() -> date:
     return date.today()
 
 
+MAX_QUESTIONS_KEPT = 200
+
+# Daily review budget, in rough "seconds/3" units: a kana or word card takes a
+# few seconds, hearing a phrase a little longer, saying one longest. 30 ≈ five
+# minutes. Due cards beyond it wait for later days instead of piling up, so a
+# missed week never turns into a wall of reviews.
+DAILY_REVIEW_BUDGET = 30
+CARD_COST = {"kana": 1, "word": 1, "listen": 2, "speak": 3}
+
+
+def card_cost(kind: str, skill: str) -> int:
+    return CARD_COST.get(kind if kind != "phrase" else skill, 2)
+
+
 def _empty() -> dict[str, Any]:
-    return {"version": 1, "units": {}, "cards": {}, "days": [], "kana": {}}
+    return {"version": 1, "units": {}, "cards": {}, "days": [], "kana": {}, "questions": [], "reviewed": {}}
 
 
 def load_state(path: Path | None = None) -> dict[str, Any]:
@@ -68,7 +82,25 @@ def load_state(path: Path | None = None) -> dict[str, Any]:
         state["days"] = [str(d) for d in raw["days"]][-MAX_DAYS_KEPT:]
     if isinstance(raw.get("kana"), dict):
         state["kana"] = {k: str(v) for k, v in raw["kana"].items() if k in LESSON_BY_ID}
+    if isinstance(raw.get("reviewed"), dict):
+        state["reviewed"] = {str(k): int(v) for k, v in raw["reviewed"].items() if str(v).isdigit()}
+    if isinstance(raw.get("questions"), list):
+        state["questions"] = [q for q in raw["questions"] if isinstance(q, dict)][-MAX_QUESTIONS_KEPT:]
     return state
+
+
+def log_question(question: str, context: dict[str, Any], *, path: Path | None = None) -> None:
+    """Keep what the learner asks about: repeated confusion marks a weak spot."""
+
+    def apply(state: dict[str, Any]) -> None:
+        state["questions"] = (state["questions"] + [{
+            "q": question[:300],
+            "screen": str(context.get("screen") or "")[:40],
+            "item": str(context.get("jp") or context.get("title") or "")[:120],
+            "at": datetime.now(timezone.utc).isoformat(),
+        }])[-MAX_QUESTIONS_KEPT:]
+
+    _with_state(apply, path)
 
 
 def save_state(state: dict[str, Any], path: Path | None = None) -> None:
@@ -189,10 +221,14 @@ def _card_kind(card_id: str) -> tuple[str, str, str] | None:
 
 
 def grade(card_id: str, good: bool, *, path: Path | None = None) -> dict[str, Any]:
-    if _card_kind(card_id) is None:
+    kind = _card_kind(card_id)
+    if kind is None:
         raise KeyError(f"unknown card: {card_id}")
 
     def apply(state: dict[str, Any]) -> dict[str, Any]:
+        today = _today().isoformat()
+        spent = state["reviewed"].get(today, 0) + card_cost(kind[0], kind[2])
+        state["reviewed"] = {today: spent}  # only today's spend matters
         card = state["cards"].setdefault(
             card_id, {"box": 1, "due": "", "reps": 0, "lapses": 0, "last": ""}
         )
@@ -220,17 +256,30 @@ def _card_payload(kind: str, item: str) -> dict[str, Any]:
     return {"kana": {"char": item, "ro": KANA_ROMAJI[item]}}
 
 
-def due_cards(state: dict[str, Any], *, limit: int = 20) -> list[dict[str, Any]]:
-    """Cards due today or earlier, oldest first; a phrase's two sides never adjacent."""
+def due_cards(state: dict[str, Any], *, limit: int = 20, budget: int | None = None) -> list[dict[str, Any]]:
+    """Due cards, most-forgotten first (lowest box, then oldest), within `budget` if given.
+
+    A phrase's two sides are never back to back.
+    """
     today = _today().isoformat()
     rows = []
     for card_id, card in state["cards"].items():
         kind = _card_kind(card_id)
         if kind is None or str(card.get("due") or "") > today:
             continue
-        rows.append((str(card.get("due") or ""), int(card.get("box") or 1), card_id, kind))
+        rows.append((int(card.get("box") or 1), str(card.get("due") or ""), card_id, kind))
     rows.sort(key=lambda r: (r[0], r[1]))
-    picked = rows[:limit]
+    picked = []
+    left = budget
+    for row in rows:
+        if len(picked) >= limit:
+            break
+        if left is not None:
+            cost = card_cost(row[3][0], row[3][2])
+            if cost > left:
+                continue
+            left -= cost
+        picked.append(row)
     ordered: list[tuple] = []
     pending = list(picked)
     while pending:
@@ -238,9 +287,15 @@ def due_cards(state: dict[str, Any], *, limit: int = 20) -> list[dict[str, Any]]
         idx = next((i for i, r in enumerate(pending) if r[3][1] != last), 0)
         ordered.append(pending.pop(idx))
     return [
-        {"card_id": r[2], "kind": r[3][0], "skill": r[3][2], "box": r[1], **_card_payload(r[3][0], r[3][1])}
+        {"card_id": r[2], "kind": r[3][0], "skill": r[3][2], "box": r[0], **_card_payload(r[3][0], r[3][1])}
         for r in ordered
     ]
+
+
+def todays_reviews(state: dict[str, Any]) -> list[dict[str, Any]]:
+    """Today's share of due cards: what fits in the budget left after today's reviews."""
+    spent = state["reviewed"].get(_today().isoformat(), 0)
+    return due_cards(state, limit=60, budget=max(0, DAILY_REVIEW_BUDGET - spent))
 
 
 def next_unit(state: dict[str, Any]) -> dict[str, Any] | None:
@@ -335,10 +390,10 @@ def stats(state: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def today_payload(*, review_limit: int = 20, path: Path | None = None) -> dict[str, Any]:
+def today_payload(*, path: Path | None = None) -> dict[str, Any]:
     state = load_state(path)
     unit = next_unit(state)
-    due = due_cards(state, limit=review_limit)
+    due = todays_reviews(state)
     all_due = len(due_cards(state, limit=10_000))
     kana = next_kana_lesson(state)
     today = _today().isoformat()

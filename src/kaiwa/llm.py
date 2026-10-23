@@ -93,13 +93,14 @@ def complete_json(
     user: str,
     *,
     client: OpenAI | None = None,
+    model: str | None = None,
 ) -> dict | None:
-    """One JSON-mode Flash call. None on any failure (callers fall back)."""
+    """One JSON-mode call (Flash unless `model` says otherwise). None on any failure."""
     import json
 
     try:
         raw = _completion(
-            settings, system, [{"role": "user", "content": user}], client=client, json_mode=True
+            settings, system, [{"role": "user", "content": user}], client=client, model=model, json_mode=True
         )
         data = json.loads(raw)
     except Exception:

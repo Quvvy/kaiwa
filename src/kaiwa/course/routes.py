@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 
 from kaiwa import stt, tts
 from kaiwa.config import get_settings
-from kaiwa.course import coach, kana_judge, prerender, state, stories
+from kaiwa.course import ask, coach, kana_judge, prerender, state, stories
 from kaiwa.course.speech_check import check_phrase, normalize
 from kaiwa.secrets_store import user_data_dir
 
@@ -42,6 +42,12 @@ class GradeBody(BaseModel):
 
 class KanaBody(BaseModel):
     lesson_id: str
+
+
+class AskBody(BaseModel):
+    question: str = Field(default="", max_length=500)
+    quick: str = ""
+    context: dict[str, Any] = Field(default_factory=dict)
 
 
 @router.get("/today")
@@ -180,6 +186,25 @@ def step(body: StepBody) -> dict[str, Any]:
     except (KeyError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"unit": row, "stats": state.stats(state.load_state())}
+
+
+@router.post("/ask")
+async def ask_question(body: AskBody) -> dict[str, Any]:
+    """Short English explanation of whatever is on the lesson screen."""
+    settings = get_settings()
+    if not settings.deepseek_api_key:
+        raise HTTPException(status_code=400, detail="Ask needs your DeepSeek key (Settings → General).")
+    known = await asyncio.to_thread(state.known_phrases_for_chat)
+    try:
+        result = await asyncio.to_thread(
+            ask.ask, settings, question=body.question, quick=body.quick, context=body.context, known=known
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    await asyncio.to_thread(state.log_question, result["question"], body.context)
+    return result
 
 
 @router.post("/kana")

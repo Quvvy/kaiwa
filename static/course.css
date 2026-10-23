@@ -717,3 +717,144 @@
     grid-column: 2;
   }
 }
+
+/* ---------- ask panel ---------- */
+.ask-panel {
+  position: fixed;
+  top: 41px;
+  right: 0;
+  bottom: 0;
+  width: min(380px, 100%);
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 14px;
+  background: var(--surface);
+  border-left: 1px solid var(--line-strong);
+  box-shadow: var(--shadow);
+  overflow-y: auto;
+}
+
+body:not([data-mode="learn"]) .ask-panel {
+  display: none;
+}
+
+/* Make room so the lesson isn't hidden under the panel on wide windows. */
+@media (min-width: 1000px) {
+  body:has(.ask-panel:not([hidden])) #course {
+    padding-right: 380px;
+  }
+}
+
+.ask-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ask-title {
+  font-weight: 600;
+}
+
+.ask-about {
+  font-size: 15px;
+  color: var(--ink-2);
+}
+
+.ask-quick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.ask-quick button {
+  min-height: 26px;
+  font-size: 12.5px;
+  padding: 0 8px;
+}
+
+.ask-form {
+  display: flex;
+  gap: 6px;
+}
+
+.ask-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ask-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.ask-q {
+  font-weight: 600;
+  font-size: 13.5px;
+}
+
+.ask-a {
+  font-size: 14.5px;
+  line-height: 1.55;
+}
+
+.ask-unsure {
+  font-size: 12.5px;
+  color: var(--warn);
+}
+
+.ask-breakdown {
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+
+.ask-breakdown td {
+  padding: 3px 8px 3px 0;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+
+.ask-breakdown td:first-child {
+  font-family: var(--font-jp);
+  font-size: 16px;
+  white-space: nowrap;
+}
+
+.ask-example {
+  display: grid;
+  grid-template-columns: 32px 1fr;
+  gap: 2px 8px;
+  align-items: center;
+}
+
+.ask-example [lang="ja"] {
+  font-size: 16px;
+}
+
+.ask-example-en {
+  grid-column: 2;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+.ask-more summary {
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+.ask-more p {
+  font-size: 13.5px;
+  line-height: 1.55;
+  margin-top: 4px;
+}
+
+.lesson-ask {
+  min-height: 28px;
+  font-size: 13px;
+}

@@ -125,7 +125,13 @@ def srs() -> None:
             good = course_state.grade("u1.ohayou:listen", True, path=path)
             _check(good["box"] == 2 and good["due"] == (real_today() + timedelta(days=1 + 3)).isoformat(),
                    "good answer → box 2, due in 3 days")
+            todays = course_state.todays_reviews(st)
+            cost = sum(course_state.card_cost(c["kind"], c["skill"]) for c in todays)
+            _check(0 < cost <= course_state.DAILY_REVIEW_BUDGET, "today's reviews fit the daily budget")
+            _check(len(todays) < len(course_state.due_cards(st, limit=100)), "the rest of the backlog waits")
             _check(course_state.grade("kana.あ:read", True, path=path)["box"] == 2, "kana cards grade")
+            after = course_state.load_state(path)
+            _check(after["reviewed"][course_state._today().isoformat()] == 3, "reviewing spends today's budget (listen 2 + kana 1)")
             _check(course_state.grade("u1w.asa:mean", True, path=path)["box"] == 2, "word cards grade")
             bad = course_state.grade("u1.ohayou:speak", False, path=path)
             _check(bad["box"] == 1 and bad["lapses"] == 1, "miss → box 1 with a lapse")
