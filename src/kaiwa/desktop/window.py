@@ -6,13 +6,26 @@ import json
 KAIWA_URL = "http://127.0.0.1:8787"
 
 _SPLASH_CSS = """
+/* Same palette as static/app.css. */
 :root {
-  --bg: #12141a;
-  --fg: #e8eaef;
-  --muted: #9aa3b2;
-  --accent: #3d9b8f;
-  --danger: #e8a0a0;
-  --track: #2a2f3a;
+  color-scheme: light;
+  --bg: #ffffff;
+  --fg: #16181b;
+  --muted: #565a60;
+  --accent: #2d4f8e;
+  --danger: #b42318;
+  --track: #dde0e3;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --bg: #1a1d21;
+    --fg: #e8eaed;
+    --muted: #a3a8af;
+    --accent: #93acdf;
+    --danger: #f08b81;
+    --track: #2c3136;
+  }
 }
 * { box-sizing: border-box; }
 html, body {
@@ -31,10 +44,9 @@ html, body {
   gap: 0.75rem;
 }
 .brand {
-  font-size: 2rem;
+  font-size: 1.75rem;
   font-weight: 600;
-  letter-spacing: 0.04em;
-  color: var(--accent);
+  color: var(--fg);
 }
 .status {
   color: var(--muted);
@@ -52,9 +64,9 @@ html, body {
 }
 .bar {
   width: min(22rem, 80vw);
-  height: 0.45rem;
+  height: 4px;
   background: var(--track);
-  border-radius: 999px;
+  border-radius: 2px;
   overflow: hidden;
   margin-top: 0.35rem;
 }
@@ -63,8 +75,6 @@ html, body {
   height: 100%;
   width: var(--pct, 0%);
   background: var(--accent);
-  border-radius: 999px;
-  transition: width 0.2s ease;
 }
 .bar[hidden] { display: none !important; }
 """
