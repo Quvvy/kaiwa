@@ -59,6 +59,9 @@ LEECH_LAPSES = 4
 LEECH_STABLE_DAYS = 3
 # Review log for retention stats: one small row per real review.
 LOG_KEPT = 3000
+UNDO_KEPT = 20       # answers Ctrl+Z can take back (survives a refresh)
+OVERRIDES_KEPT = 500  # "Kaiwa picked X, I chose Y": for tuning the auto-grader later
+DAILY_KEPT = 400
 RETENTION_DAYS = 30
 RETENTION_MIN_REVIEWS = 20
 
@@ -75,7 +78,8 @@ def card_cost(kind: str, skill: str) -> int:
 
 
 def _empty() -> dict[str, Any]:
-    return {"version": 2, "units": {}, "cards": {}, "days": [], "kana": {}, "questions": [], "reviewed": {}, "timing": {}, "log": []}
+    return {"version": 2, "units": {}, "cards": {}, "days": [], "kana": {}, "questions": [], "reviewed": {}, "timing": {}, "log": [],
+            "undo": [], "overrides": [], "daily": {}, "seq": 0}
 
 
 def load_state(path: Path | None = None) -> dict[str, Any]:
@@ -88,6 +92,12 @@ def load_state(path: Path | None = None) -> dict[str, Any]:
     if isinstance(raw.get("cards"), dict):
         # Leitner cards from before FSRS convert here, keeping their progress.
         state["cards"] = {k: srs.ensure(v) for k, v in raw["cards"].items() if isinstance(v, dict)}
+    for key in ("undo", "overrides"):
+        if isinstance(raw.get(key), list):
+            state[key] = [r for r in raw[key] if isinstance(r, dict)][-(UNDO_KEPT if key == "undo" else OVERRIDES_KEPT):]
+    if isinstance(raw.get("daily"), dict):
+        state["daily"] = {k: v for k, v in raw["daily"].items() if isinstance(v, dict)}
+    state["seq"] = int(raw.get("seq") or 0)
     if isinstance(raw.get("log"), list):
         state["log"] = [r for r in raw["log"] if isinstance(r, dict)][-LOG_KEPT:]
     if isinstance(raw.get("timing"), dict):
@@ -243,42 +253,136 @@ def grade(
     guessed: bool = False,
     band: str = "",
     fmt: str = "",
+    rating: int | None = None,
     path: Path | None = None,
 ) -> dict[str, Any]:
-    """Apply one answer. The FSRS grade is worked out here (srs.rating_for).
+    """Apply one answer. The grade is worked out here unless `rating` is given.
 
-    Returns the card plus `rating` and `again_soon` (due within the session:
-    the client shows it again a few cards later).
+    Returns the card, the `rating` used, `intervals` (seconds until the next
+    review for each grade, for the grade buttons), `learning` and `again_soon`.
+    Everything the answer changes is recorded so `undo` can put it back.
     """
     kind = _card_kind(card_id)
     if kind is None:
         raise KeyError(f"unknown card: {card_id}")
     fmt = fmt or f"{kind[0]}:{kind[2]}"
+    outcome = {"correct": correct, "ms": ms, "helped": helped, "guessed": guessed, "band": band, "fmt": fmt}
 
     def apply(state: dict[str, Any]) -> dict[str, Any]:
-        card = state["cards"].get(card_id) or _new_card()  # lessons may grade before the step finishes
-        if not srs.is_learning(card):
-            # Only real reviews spend the daily budget; learning steps are part of the lesson.
-            today = _today().isoformat()
-            spent = state["reviewed"].get(today, 0) + card_cost(kind[0], kind[2])
-            state["reviewed"] = {today: spent}
-        rating = srs.rating_for(
-            correct=correct, ms=ms, helped=helped, guessed=guessed, band=band,
-            reps=int(card.get("reps") or 0), times=state["timing"].get(fmt, []),
-        )
-        srs.record_time(state["timing"], fmt, ms, correct and not (helped or guessed))
-        if not srs.is_learning(card):
-            # Retention only counts real reviews: was a learned card still remembered?
-            state["log"] = (state["log"] + [{
-                "d": _today().isoformat(), "k": kind[0] if kind[0] != "phrase" else f"phrase:{kind[2]}",
-                "ok": rating != srs.AGAIN,
-            }])[-LOG_KEPT:]
-        extras = {k: v for k, v in card.items() if k == "hook"}
-        card = {**srs.review(card, rating), **extras}
-        state["cards"][card_id] = card
-        _mark_day(state)
-        soon = srs.due_at(card) - datetime.now(timezone.utc) < timedelta(minutes=30)
-        return {**card, "rating": rating, "again_soon": soon}
+        return _apply_grade(state, card_id, kind, outcome, rating)
+
+    return _with_state(apply, path)
+
+
+def _apply_grade(state: dict[str, Any], card_id: str, kind: tuple, outcome: dict[str, Any], forced: int | None) -> dict[str, Any]:
+    existed = card_id in state["cards"]
+    card = state["cards"].get(card_id) or _new_card()  # lessons may grade before the step finishes
+    before = dict(card) if existed else None
+    today = _today().isoformat()
+    was_review = not srs.is_learning(card)
+    intervals = srs.preview(card)
+    auto = srs.rating_for(
+        correct=outcome["correct"], ms=outcome["ms"], helped=outcome["helped"], guessed=outcome["guessed"],
+        band=outcome["band"], reps=int(card.get("reps") or 0), times=state["timing"].get(outcome["fmt"], []),
+    )
+    rating = forced if forced in (srs.AGAIN, srs.HARD, srs.GOOD, srs.EASY) else auto
+    state["seq"] += 1
+    entry: dict[str, Any] = {"seq": state["seq"], "card_id": card_id, "before": before, "outcome": outcome,
+                             "auto": auto, "rating": rating, "day": today, "cost": 0, "log": None, "time": None}
+    if was_review:
+        # Only real reviews spend the daily budget and count toward retention.
+        entry["cost"] = card_cost(kind[0], kind[2])
+        state["reviewed"] = {today: state["reviewed"].get(today, 0) + entry["cost"]}
+        row = {"seq": state["seq"], "d": today, "k": kind[0] if kind[0] != "phrase" else f"phrase:{kind[2]}",
+               "ok": rating != srs.AGAIN}
+        state["log"] = (state["log"] + [row])[-LOG_KEPT:]
+        entry["log"] = state["seq"]
+    clean = outcome["correct"] and not (outcome["helped"] or outcome["guessed"]) and forced is None
+    srs.record_time(state["timing"], outcome["fmt"], outcome["ms"], clean)
+    if clean and outcome["ms"] and outcome["ms"] < srs.TIMING_IGNORE_MS:  # record_time kept it
+        entry["time"] = [outcome["fmt"], int(outcome["ms"])]
+    day = state["daily"].setdefault(today, {"answers": 0, "right": 0, "ms": 0})
+    day["answers"] += 1
+    day["right"] += 1 if rating != srs.AGAIN else 0
+    day["ms"] += min(int(outcome["ms"] or 0), srs.TIMING_IGNORE_MS)
+    if len(state["daily"]) > DAILY_KEPT:
+        state["daily"] = dict(sorted(state["daily"].items())[-DAILY_KEPT:])
+    extras = {k: v for k, v in card.items() if k == "hook"}
+    card = {**srs.review(card, rating), **extras}
+    state["cards"][card_id] = card
+    state["undo"] = (state["undo"] + [entry])[-UNDO_KEPT:]
+    _mark_day(state)
+    soon = srs.due_at(card) - datetime.now(timezone.utc)
+    return {
+        **card, "card_id": card_id, "rating": rating, "auto_rating": auto, "intervals": intervals,
+        "learning": srs.is_learning(card), "was_review": was_review,
+        "seconds": max(0, int(soon.total_seconds())), "again_soon": soon < timedelta(minutes=30),
+    }
+
+
+def _undo_entry(state: dict[str, Any], entry: dict[str, Any]) -> None:
+    """Put back everything one answer changed."""
+    cid = entry["card_id"]
+    if entry["before"] is None:
+        state["cards"].pop(cid, None)
+    else:
+        state["cards"][cid] = entry["before"]
+    if entry["cost"]:
+        day = entry["day"]
+        if day in state["reviewed"]:
+            state["reviewed"][day] = max(0, state["reviewed"][day] - entry["cost"])
+    if entry["log"]:
+        state["log"] = [r for r in state["log"] if r.get("seq") != entry["log"]]
+    if entry["time"]:
+        fmt, ms = entry["time"]
+        times = state["timing"].get(fmt, [])
+        for i in range(len(times) - 1, -1, -1):
+            if times[i] == ms:
+                del times[i]
+                break
+    day = state["daily"].get(entry["day"])
+    if day:
+        day["answers"] = max(0, day["answers"] - 1)
+        day["right"] = max(0, day["right"] - (0 if entry.get("rating") == srs.AGAIN else 1))
+
+
+def undo(*, card_id: str | None = None, path: Path | None = None) -> dict[str, Any] | None:
+    """Take back the latest answer (or the latest answer for `card_id`).
+
+    Returns the restored card as a review row, ready to be asked again, or None.
+    """
+
+    def apply(state: dict[str, Any]) -> dict[str, Any] | None:
+        idx = next((i for i in range(len(state["undo"]) - 1, -1, -1)
+                    if card_id is None or state["undo"][i]["card_id"] == card_id), None)
+        if idx is None:
+            return None
+        entry = state["undo"].pop(idx)
+        _undo_entry(state, entry)
+        cid = entry["card_id"]
+        row = _card_row(cid, _card_kind(cid), state["cards"].get(cid) or _new_card())
+        return {"card": row, "outcome": entry["outcome"], "auto": entry["auto"]}
+
+    return _with_state(apply, path)
+
+
+def regrade(card_id: str, rating: int, *, path: Path | None = None) -> dict[str, Any]:
+    """The learner picked a different grade: undo their last answer on this card and reapply it."""
+    kind = _card_kind(card_id)
+    if kind is None:
+        raise KeyError(f"unknown card: {card_id}")
+
+    def apply(state: dict[str, Any]) -> dict[str, Any]:
+        idx = next((i for i in range(len(state["undo"]) - 1, -1, -1) if state["undo"][i]["card_id"] == card_id), None)
+        if idx is None:
+            raise KeyError(f"nothing to change for {card_id}")
+        entry = state["undo"].pop(idx)
+        _undo_entry(state, entry)
+        state["overrides"] = (state["overrides"] + [{
+            "fmt": entry["outcome"]["fmt"], "ms": entry["outcome"]["ms"], "auto": entry["auto"], "chosen": rating,
+            "d": entry["day"],
+        }])[-OVERRIDES_KEPT:]
+        return _apply_grade(state, card_id, kind, entry["outcome"], rating)
 
     return _with_state(apply, path)
 
@@ -649,6 +753,83 @@ def known_vocab(*, path: Path | None = None) -> tuple[list[str], list[str]]:
     words = [w["jp"] for wid, w in _WORDS.items() if f"{wid}:mean" in state["cards"]]
     phrases = [_PHRASES[p]["jp"] for p in learned_phrase_ids(state)]
     return words, phrases
+
+
+YOUNG_DAYS = 21  # Anki's line: memory lasting 3 weeks or more is "mature"
+INTERVAL_BUCKETS = [(1, "< 1 day"), (3, "1–3 days"), (7, "3–7 days"), (14, "1–2 weeks"), (30, "2–4 weeks"),
+                    (90, "1–3 months"), (10_000_000, "3+ months")]
+
+
+def course_stats(*, path: Path | None = None) -> dict[str, Any]:
+    """Everything the stats page shows, from the cards, the review log and daily counts."""
+    state = load_state(path)
+    today = _today()
+    iso = today.isoformat()
+
+    # Coming up: real reviews due on each of the next 30 days (overdue counts as today).
+    forecast = [0] * 30
+    for card in state["cards"].values():
+        if srs.is_learning(card):
+            continue
+        try:
+            offset = (date.fromisoformat(str(card.get("due"))[:10]) - today).days
+        except ValueError:
+            continue
+        if offset < 30:
+            forecast[max(0, offset)] += 1
+
+    # Your cards, by kind and stage.
+    kinds = {"kana": "Kana", "word": "Words", "phrase": "Phrases"}
+    stages = {k: {"new": 0, "learning": 0, "young": 0, "mature": 0} for k in kinds}
+    intervals = [0] * len(INTERVAL_BUCKETS)
+    for cid, card in state["cards"].items():
+        kind = _card_kind(cid)
+        if kind is None:
+            continue
+        row = stages[kind[0]]
+        if int(card.get("reps") or 0) == 0:
+            row["new"] += 1
+        elif srs.is_learning(card):
+            row["learning"] += 1
+        else:
+            s = srs.stability(card)
+            row["young" if s < YOUNG_DAYS else "mature"] += 1
+            intervals[next(i for i, (cap, _) in enumerate(INTERVAL_BUCKETS) if s < cap)] += 1
+
+    # Retention per week for the last 8 weeks (real reviews only).
+    weeks = []
+    for w in range(7, -1, -1):
+        start = (today - timedelta(days=7 * w + 6)).isoformat()
+        end = (today - timedelta(days=7 * w)).isoformat()
+        rows = [r for r in state["log"] if start <= str(r.get("d")) <= end]
+        weeks.append({"end": end, "reviews": len(rows),
+                      "percent": round(100 * sum(1 for r in rows if r.get("ok")) / len(rows)) if rows else None})
+
+    day = state["daily"].get(iso, {"answers": 0, "right": 0, "ms": 0})
+    activity = []
+    for d in range(111, -1, -1):
+        key = (today - timedelta(days=d)).isoformat()
+        activity.append({"d": key, "answers": state["daily"].get(key, {}).get("answers", 0), "studied": key in state["days"]})
+
+    leeches = []
+    for cid, card in state["cards"].items():
+        kind = _card_kind(cid)
+        if kind and is_leech(card):
+            leeches.append({**_card_row(cid, kind, card), "lapses": int(card.get("lapses") or 0)})
+    leeches.sort(key=lambda r: -r["lapses"])
+
+    return {
+        "today": {"answers": day["answers"], "right": day["right"], "minutes": round(day["ms"] / 60000, 1)},
+        "streak": streak(state),
+        "forecast": forecast,
+        "stages": {kinds[k]: v for k, v in stages.items()},
+        "intervals": [{"label": label, "count": n} for (_, label), n in zip(INTERVAL_BUCKETS, intervals)],
+        "retention": retention(state),
+        "weeks": weeks,
+        "activity": activity,
+        "leeches": leeches,
+        "target": round(100 * srs.SCHEDULER.desired_retention),
+    }
 
 
 def known_phrases_for_chat(*, limit: int = 40, path: Path | None = None) -> list[dict[str, str]]:

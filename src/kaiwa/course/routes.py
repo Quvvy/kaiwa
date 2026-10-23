@@ -47,6 +47,16 @@ class GradeBody(BaseModel):
     guessed: bool = False  # pressed "I guessed"
     band: str = ""         # speech check: good / close / off
     fmt: str = ""          # answer format, for per-format speed baselines
+    rating: int | None = Field(default=None, ge=1, le=4)  # set only when the learner chose the grade
+
+
+class UndoBody(BaseModel):
+    card_id: str | None = None
+
+
+class RegradeBody(BaseModel):
+    card_id: str
+    rating: int = Field(ge=1, le=4)
 
 
 class HookBody(BaseModel):
@@ -294,6 +304,29 @@ async def leech_hook(body: HookBody) -> dict[str, Any]:
     return {"hook": hook}
 
 
+@router.post("/undo")
+def undo_answer(body: UndoBody) -> dict[str, Any]:
+    """Ctrl+Z: take back the latest answer (optionally for one card)."""
+    result = state.undo(card_id=body.card_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Nothing to undo.")
+    return result
+
+
+@router.post("/regrade")
+def regrade_answer(body: RegradeBody) -> dict[str, Any]:
+    """The learner picked a different grade for their last answer on this card."""
+    try:
+        return {"card": state.regrade(body.card_id, body.rating)}
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get("/stats")
+def stats_page() -> dict[str, Any]:
+    return state.course_stats()
+
+
 @router.post("/kana")
 def kana_done(body: KanaBody) -> dict[str, Any]:
     try:
@@ -310,7 +343,7 @@ def grade(body: GradeBody) -> dict[str, Any]:
         correct = body.correct if body.correct is not None else bool(body.good)
         card = state.grade(
             body.card_id, correct=correct, ms=body.ms, helped=body.helped,
-            guessed=body.guessed, band=body.band, fmt=body.fmt,
+            guessed=body.guessed, band=body.band, fmt=body.fmt, rating=body.rating,
         )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc

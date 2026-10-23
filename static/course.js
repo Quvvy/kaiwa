@@ -10,7 +10,8 @@
 
   let today = null;
   let showRomaji = readPref("kaiwa_course_romaji", "1") === "1";
-  const keys = { primary: null, hold: null, replay: null, choice: null, meanings: null, text: null, guess: null, tab: null };
+  const keys = { primary: null, hold: null, replay: null, choice: null, meanings: null, text: null, tab: null,
+    grade: null, space: null, undo: null };
 
   // ---------- helpers ----------
   function readPref(key, fallback) {
@@ -52,7 +53,16 @@
 
   // ---------- keyboard ----------
   document.addEventListener("keydown", (e) => {
-    if (!learnVisible() || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (!learnVisible()) return;
+    if ((e.ctrlKey || e.metaKey) && (e.key === "z" || e.key === "Z") && !e.shiftKey) {
+      const tag = (e.target && e.target.tagName) || "";
+      if (tag === "INPUT" || tag === "TEXTAREA") return; // let text boxes undo their own typing
+      e.preventDefault();
+      if (keys.undo) keys.undo();
+      else undoFromHome();
+      return;
+    }
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
     if (e.key === "Escape" && askPanel.isOpen()) {
       e.preventDefault();
       askPanel.close();
@@ -65,7 +75,7 @@
       askPanel.toggle();
       return;
     }
-    if (e.key === " " && keys.hold) {
+    if (e.key === " " && keys.hold && !keys.space) {
       e.preventDefault();
       if (!e.repeat) keys.hold.start();
     } else if (e.key === "Enter" && keys.primary && !(tag === "BUTTON" && e.target.matches(":focus-visible"))) {
@@ -74,9 +84,6 @@
     } else if ((e.key === "r" || e.key === "R") && keys.replay && !e.repeat) {
       e.preventDefault();
       keys.replay();
-    } else if ((e.key === "g" || e.key === "G") && keys.guess && !e.repeat) {
-      e.preventDefault();
-      keys.guess();
     } else if (e.key === "Tab" && keys.tab && !e.shiftKey) {
       e.preventDefault();
       keys.tab();
@@ -89,6 +96,12 @@
     } else if (/^[1-9]$/.test(e.key) && keys.choice && !e.repeat) {
       e.preventDefault();
       keys.choice(Number(e.key) - 1);
+    } else if (/^[1-4]$/.test(e.key) && keys.grade && !e.repeat) {
+      e.preventDefault();
+      keys.grade(Number(e.key));
+    } else if (e.key === " " && keys.space && !keys.hold) {
+      e.preventDefault();
+      if (!e.repeat) keys.space();
     }
   });
   document.addEventListener("keyup", (e) => {
@@ -448,8 +461,10 @@
     keys.replay = null;
     keys.meanings = null;
     keys.text = null;
-    keys.guess = null;
     keys.tab = null;
+    keys.grade = null;
+    keys.space = null;
+    keys.undo = null;
     keys.choice = pendingChoice;
     pendingChoice = null;
     const top = el("div", { class: "lesson-top" },
@@ -597,8 +612,10 @@
         today.catching_up
           ? el("p", { class: "home-note", text: "Reviews only today: there's a backlog to clear first. New lessons are still one click away below." })
           : null,
-        s.phrases_learned
+        s.phrases_learned || (today.kana_progress && today.kana_progress.lessons_done)
           ? el("div", { class: "home-more" },
+              el("button", { type: "button", class: "secondary", onclick: runStats,
+                "data-tip": "Retention, what's coming up, your cards, and how scheduling works" }, "Stats"),
               el("button", { type: "button", class: "secondary", onclick: runExtraListening,
                 "data-tip": "A new short conversation using only phrases you've learned" }, "Extra listening"),
               el("button", { type: "button", class: "secondary", onclick: goChat,
@@ -628,6 +645,16 @@
         ? el("button", { class: "secondary", type: "button", onclick: onOpen }, openLabel || (isDone ? "Redo" : "Open"))
         : el("span"),
     );
+  }
+  async function undoFromHome() {
+    try {
+      const r = await postJson("/api/course/undo", {});
+      await showHome();
+      const what = r.card.word ? r.card.word.jp : r.card.phrase ? r.card.phrase.jp : r.card.kana ? r.card.kana.char : "";
+      root.querySelector(".home")?.prepend(el("p", { class: "undo-toast", text: `Undid your last answer${what ? ` (${what})` : ""}. It's due again.` }));
+    } catch (err) {
+      root.querySelector(".home")?.prepend(el("p", { class: "undo-toast", text: String(err.message || err) }));
+    }
   }
   function goChat() {
     const tab = document.querySelector('.tab[data-mode="chat"]');
@@ -736,17 +763,41 @@
   }
 
   // ---------- review ----------
+  const GRADE_NAMES = { 1: "Again", 2: "Hard", 3: "Good", 4: "Easy" };
+  function fmtInterval(seconds) {
+    const s = Math.max(0, seconds);
+    if (s < 3600) return `${Math.max(1, Math.round(s / 60))} min`;
+    if (s < 86400) return `${Math.round(s / 3600)} h`;
+    const d = Math.round(s / 86400);
+    if (d < 31) return d === 1 ? "1 day" : `${d} days`;
+    const m = Math.round(d / 30.4);
+    if (m < 12) return m === 1 ? "1 month" : `${m} months`;
+    const y = Math.round(d / 365 * 10) / 10;
+    return `${y} year${y === 1 ? "" : "s"}`;
+  }
+  /** "Good · next in 23 days", or for a short learning step "Again · back in 10 min (missed)". */
+  function gradeLabel(r) {
+    const name = GRADE_NAMES[r.rating];
+    if (!r.learning) return `${name} · next in ${fmtInterval(r.seconds)}`;
+    const why = r.rating === 1 ? " (missed)" : r.reps <= 2 ? " (new card)" : "";
+    return `${name} · back in ${fmtInterval(r.seconds)}${why}`;
+  }
+  function autoAdvance() {
+    return readPref("kaiwa_auto_advance", "0") === "1";
+  }
+
   /**
-   * Run a queue of cards. Grades are worked out on the server from what happened
-   * (right/wrong, time to answer, help, "I guessed", speech result); cards the
-   * scheduler wants to see again within minutes come back a few cards later.
+   * Run a queue of cards. Each answer is graded on the server straight away
+   * (the grade comes from what happened; see srs.rating_for) and a bar shows the
+   * grade and when the card comes back. 1–4 changes the grade, Enter continues,
+   * Ctrl+Z takes back the last answer. Cards due again within minutes come back
+   * a few cards later.
    */
   function runReview(cards, { title = "Review", planStep = "review" } = {}) {
     const queue = cards.map((c) => ({ ...c, repeat: 0 }));
     let index = 0;
-    let right = 0;
-    let firsts = 0;
-    let total = queue.length;
+    const firstTry = new Map(); // queue item → right on first try?
+    const history = [];         // answered items, for Ctrl+Z
     const MAX_REPEATS = 2;
     prefetch(queue.map((c) => [c.phrase ? c.phrase.jp : c.word ? c.word.jp : c.kana.char, {}]));
 
@@ -760,16 +811,17 @@
           for (const i of [...at].sort((a, b) => b - a)) queue.splice(i, 1);
           queue.splice(Math.min(...at), 0, { kind: "sentence", sentence: s, repeat: 0,
             covers: cards.filter((c) => s.card_ids.includes(c.card_id)) });
-          total -= s.card_ids.length - 1;
           prefetch([[s.jp, {}]]);
         }
       }).catch(() => {});
     }
 
     let shownAt = 0;
+    let current = null; // { item, answered, responses, bar } for the card on screen
     function next() {
       if (index >= queue.length) return finish();
       const card = queue[index];
+      current = { item: card, answered: false, responses: [] };
       shownAt = performance.now();
       if (card.kind === "sentence") sentenceCard(card);
       else if (card.kind === "phrase" && card.skill === "speak") speakCard(card);
@@ -777,107 +829,140 @@
       else if (card.format === "produce") produceCard(card);
       else if (card.kind === "kana") kanaChoice(card);
       else wordChoice(card);
+      keys.undo = undoLast; // after frame(), which clears per-screen keys
     }
     const elapsed = () => Math.round(performance.now() - shownAt);
+    const idsOf = (card) => (card.kind === "sentence" ? card.covers.map((c) => c.card_id) : [card.card_id]);
 
-    /** Send what happened; repeat the card a few cards later if it's due again soon. */
-    function grade(card, outcome) {
-      const ids = card.kind === "sentence" ? card.covers.map((c) => c.card_id) : [card.card_id];
-      if (!card.repeat) {
-        firsts += 1;
-        if (outcome.correct && !outcome.guessed) right += 1;
+    /**
+     * Record an answer: grade it now, show the result bar in `slot`, and wire
+     * 1–4 (change grade), Enter/Space (continue) and the optional auto-advance.
+     */
+    async function answered(card, outcome, slot, nextBtn) {
+      if (current.answered) return;
+      current.answered = true;
+      if (!card.repeat && !firstTry.has(card)) firstTry.set(card, outcome.correct);
+      keys.hold = null; // Space continues from here on
+      const bar = el("div", { class: "grade-bar" }, el("span", { class: "grade-label", text: "Saving…" }));
+      slot.replaceChildren(bar);
+      nextBtn.hidden = false;
+      keys.primary = keys.space = advance;
+      const here = onThisScreen();
+      try {
+        current.responses = await Promise.all(idsOf(card).map((id) =>
+          postJson("/api/course/grade", { card_id: id, ...outcome }).then((d) => d.card)));
+      } catch (err) {
+        bar.replaceChildren(el("span", { class: "grade-label off", text: String(err.message || err) }));
+        return;
       }
-      for (const id of ids) {
-        postJson("/api/course/grade", { card_id: id, ...outcome }).then(({ card: saved }) => {
-          if (!saved || !saved.again_soon) return;
-          const base = card.kind === "sentence" ? card.covers.find((c) => c.card_id === id) : card;
-          if (!base || card.repeat >= MAX_REPEATS) return;
-          queue.splice(Math.min(queue.length, index + 4), 0, { ...base, repeat: card.repeat + 1 });
-        }).catch(() => {});
+      if (!here()) return;
+      drawBar(bar);
+      if (autoAdvance() && current.responses[0].rating >= 3) {
+        let hovered = false;
+        bar.addEventListener("mouseenter", () => { hovered = true; });
+        await wait(2500);
+        if (here() && !hovered && !current.changed) advance();
       }
+    }
+    function drawBar(bar) {
+      const r = current.responses[0];
+      const chips = [1, 2, 3, 4].map((g) => el("button", {
+        type: "button", class: "grade-chip" + (g === r.rating ? " on" : ""),
+        "data-tip": `${GRADE_NAMES[g]} · ${fmtInterval(r.intervals[g])}`,
+        onclick: () => changeGrade(g, bar),
+      }, el("span", { class: "choice-key", text: String(g) }), GRADE_NAMES[g]));
+      bar.replaceChildren(...[
+        el("span", { class: "grade-label", text: gradeLabel(r) }),
+        el("span", { class: "grade-chips", "aria-label": "Change the grade" }, chips),
+        r.auto_rating !== r.rating ? el("span", { class: "grade-note", text: `(Kaiwa picked ${GRADE_NAMES[r.auto_rating]})` }) : null,
+      ].filter(Boolean));
+      keys.grade = (g) => changeGrade(g, bar);
+    }
+    async function changeGrade(g, bar) {
+      if (!current.responses.length || current.responses[0].rating === g) return;
+      current.changed = true;
+      try {
+        current.responses = await Promise.all(idsOf(current.item).map((id) =>
+          postJson("/api/course/regrade", { card_id: id, rating: g }).then((d) => d.card)));
+        drawBar(bar);
+      } catch (err) {
+        bar.append(el("span", { class: "grade-note off", text: String(err.message || err) }));
+      }
+    }
+    function advance() {
+      if (!current || !current.answered || !current.responses.length) return;
+      keys.primary = keys.space = keys.grade = null;
+      const card = current.item;
+      const responses = current.responses;
+      let requeued = null;
+      // Due again within minutes: bring it back a few cards later this session.
+      const soon = responses.filter((r) => r.again_soon);
+      if (soon.length && card.repeat < MAX_REPEATS) {
+        const bases = card.kind === "sentence" ? card.covers.filter((c) => soon.some((r) => r.card_id === c.card_id)) : [card];
+        requeued = bases.map((b) => ({ ...b, repeat: card.repeat + 1 }));
+        queue.splice(Math.min(queue.length, index + 4), 0, ...requeued);
+      }
+      history.push({ card, at: index, requeued, ids: idsOf(card) });
       index += 1;
       if (card.leech && !card.repeat && card.kind !== "sentence") return leechHelp(card);
       next();
     }
 
-    /**
-     * After answering a card you keep forgetting: a new way in (its parts and a
-     * memory hook, written once by Flash and kept), then on with the review.
-     */
-    async function leechHelp(card) {
-      const item = card.word || card.phrase || (card.kana && { jp: card.kana.char, en: card.kana.ro });
-      const hookBox = el("div", { class: "leech-hook" }, el("p", { class: "pending", text: "Writing a memory hook…" }));
-      frame({
-        title, ...counter(),
-        body: el("div", { class: "card-body leech" },
-          el("p", { class: "leech-note", text: "This one keeps slipping. Here's another way in." }),
-          el("p", { class: "kana-big kana-word", lang: "ja", text: item.jp }),
-          el("p", { class: "phrase-en", text: item.en }),
-          playRow(item.jp),
-          hookBox),
-        actions: [primaryButton("Continue", next)],
-        primary: next,
-        ask: { screen: "leech help", jp: item.jp, en: item.en },
-      });
-      keys.replay = () => play(item.jp);
-      play(item.jp);
-      const here = onThisScreen();
-      let hook = card.hook;
-      if (!hook) {
-        try { hook = (await postJson("/api/course/hook", { card_id: card.card_id })).hook; } catch (_) { hook = null; }
+    /** Ctrl+Z: take back the answer on screen, or the previous one, and ask it again. */
+    async function undoLast() {
+      let target;
+      if (current && current.answered && current.responses.length) {
+        target = { card: current.item, at: index, requeued: null, ids: idsOf(current.item) };
+      } else {
+        target = history.pop();
       }
-      if (!here()) return;
-      hookBox.replaceChildren(...(hook ? [
-        el("p", { class: "leech-hook-text", text: hook.hook }),
-        hook.parts.length ? el("table", { class: "ask-breakdown" }, el("tbody", {}, hook.parts.map((b) =>
-          el("tr", {}, el("td", { lang: "ja", text: b.jp }), el("td", { text: b.en }))))) : null,
-      ].filter(Boolean) : [el("p", { class: "status", text: "No hook this time; the Ask box can explain it." })]));
+      if (!target) return toast("Nothing to undo.");
+      try {
+        for (const id of [...target.ids].reverse()) await postJson("/api/course/undo", { card_id: id });
+      } catch (err) {
+        return toast(String(err.message || err));
+      }
+      if (target.requeued) for (const r of target.requeued) {
+        const i = queue.indexOf(r);
+        if (i >= 0) queue.splice(i, 1);
+      }
+      firstTry.delete(target.card);
+      index = target.at;
+      next();
+      toast("Undone.");
     }
-    function counter() {
-      return { index: Math.min(index, queue.length - 1), total: queue.length };
+    function toast(text) {
+      const note = el("p", { class: "undo-toast", text });
+      root.querySelector(".lesson")?.prepend(note);
+      setTimeout(() => note.remove(), 1800);
     }
+    const counter = () => ({ index: Math.min(index, queue.length - 1), total: queue.length });
+    const repeatTag = (card) => (card.repeat ? el("span", { class: "repeat-tag", text: card.repeat === 1 ? "2nd look" : "3rd look" }) : null);
 
-    /** Multiple choice. A right answer moves on by itself; G during that moment = "I guessed". */
+    /** Multiple choice: answer, see the grade and when it's back, Enter to go on. */
     function choiceCard(card, { big, bigJp, answer, options, audio, after, extra = null, fmt, askJp }) {
       const result = el("div", { class: "result" });
+      const slot = el("div", { class: "grade-slot" });
       let helped = false;
-      let outcome = null;
-      const guessBtn = el("button", { class: "secondary guess", type: "button", hidden: true,
-        onclick: () => { outcome.guessed = true; advance(); } }, "I guessed", kbd("G"));
       const nextBtn = primaryButton("Next", () => advance());
       nextBtn.hidden = true;
       const body = el("div", { class: "card-body" },
+        repeatTag(card),
         big ? el("p", { class: bigJp ? "kana-big" : "prompt-en", lang: bigJp ? "ja" : null, text: big }) : null,
         audio ? playRow(audio) : null,
         typeof extra === "function" ? extra(() => { helped = true; }) : extra,
         choiceBlock({
           options, answer,
-          onAnswer: async (correct) => {
-            outcome = { correct, ms: elapsed(), helped, guessed: false, fmt };
+          onAnswer: (correct) => {
             if (after) result.replaceChildren(after());
             if (audio) play(audio);
-            if (correct) {
-              guessBtn.hidden = false;
-              keys.guess = () => guessBtn.click();
-              const here = onThisScreen();
-              await wait(1100);
-              if (here() && outcome && !outcome.sent) advance();
-            } else {
-              nextBtn.hidden = false;
-              keys.primary = advance;
-            }
+            answered(card, { correct, ms: elapsed(), helped, fmt }, slot, nextBtn);
           },
         }),
         result,
+        slot,
       );
-      function advance() {
-        if (!outcome || outcome.sent) return;
-        outcome.sent = true;
-        keys.primary = keys.guess = null;
-        const { sent, ...rest } = outcome;
-        grade(card, rest);
-      }
-      frame({ title, ...counter(), body, actions: [guessBtn, nextBtn],
+      frame({ title, ...counter(), body, actions: [nextBtn],
         ask: { screen: `${title.toLowerCase()} ${card.kind}`, jp: askJp || "", answer } });
       if (audio) keys.replay = () => play(audio);
     }
@@ -895,7 +980,6 @@
       play(w.jp);
     }
     function listenCard(card) {
-      // Hear the phrase, pick its meaning; the Japanese shows after answering.
       const p = card.phrase;
       const pool = (today.phrases_pool || []).map((x) => x.en);
       choiceCard(card, { answer: p.en, options: choicesFor(p.en, pool), audio: p.jp, fmt: "phrase:listen", askJp: p.jp,
@@ -927,20 +1011,19 @@
       const isKana = card.kind === "kana";
       const target = isKana ? card.kana.char : card.word.jp;
       const result = el("div", { class: "result" });
+      const slot = el("div", { class: "grade-slot" });
       const nextBtn = primaryButton("Next", () => advance());
       nextBtn.hidden = true;
-      let outcome = null;
       let startedAt = 0;
       function settle(o, shown) {
-        if (outcome) return;
-        outcome = { ...o, fmt: `${card.kind}:produce:${o.spoken ? "say" : "type"}` };
-        delete outcome.spoken;
+        if (current.answered) return;
         result.replaceChildren(...shown);
         play(target);
         dontKnow.hidden = true;
-        nextBtn.hidden = false;
-        keys.primary = advance;
         keys.replay = () => play(target);
+        const outcome = { ...o, fmt: `${card.kind}:produce:${o.spoken ? "say" : "type"}` };
+        delete outcome.spoken;
+        answered(card, outcome, slot, nextBtn);
       }
       function reveal(correct, band) {
         return [
@@ -987,21 +1070,15 @@
       box.hold.addEventListener("pointerdown", () => { startedAt = performance.now(); }, true);
       const dontKnow = el("button", { type: "button", class: "secondary", onclick: () =>
         settle({ correct: false, ms: elapsed() }, reveal(false, "")) }, "Show me");
-      function advance() {
-        if (!outcome || outcome.sent) return;
-        outcome.sent = true;
-        keys.primary = null;
-        const { sent, ...rest } = outcome;
-        grade(card, rest);
-      }
       frame({
         title, ...counter(),
         body: el("div", { class: "card-body" },
+          repeatTag(card),
           isKana
             ? el("p", { class: "kana-big", lang: "ja", text: target })
             : el("p", { class: "prompt-en", text: card.word.en }),
           el("p", { class: "prompt", text: isKana ? "Say or type its sound." : "Say it in Japanese, or type it." }),
-          box, micRow(), result),
+          box, micRow(), result, slot),
         actions: [dontKnow, nextBtn],
         hold: box.hold,
         ask: { screen: `${title.toLowerCase()} produce ${card.kind}`, jp: isKana ? target : "", en: isKana ? "" : card.word.en },
@@ -1012,20 +1089,18 @@
     function speakCard(card) {
       const p = card.phrase;
       const result = el("div", { class: "result" });
+      const slot = el("div", { class: "grade-slot" });
       const answer = el("div", { class: "reveal", hidden: true });
       const nextBtn = primaryButton("Next", () => advance());
       nextBtn.hidden = true;
-      let outcome = null;
       let startedAt = 0;
       function settle(o) {
-        if (outcome) return;
-        outcome = { ...o, fmt: "phrase:speak" };
+        if (current.answered) return;
         answer.hidden = false;
         answer.replaceChildren(phraseBlock(p), playRow(p.jp));
         keys.replay = () => play(p.jp);
         giveUp.hidden = true;
-        nextBtn.hidden = false;
-        keys.primary = advance;
+        answered(card, { ...o, fmt: "phrase:speak" }, slot, nextBtn);
       }
       const hold = holdControl("Hold to say it", async (blob, ext) => {
         const ms = Math.round(startedAt - shownAt);
@@ -1045,29 +1120,61 @@
       hold.holdApi.start = () => { startedAt = performance.now(); return holdStart(); };
       const giveUp = el("button", { type: "button", class: "secondary", onclick: () => {
         settle({ correct: false, ms: elapsed() }); play(p.jp); } }, "Show me");
-      function advance() {
-        if (!outcome || outcome.sent) return;
-        outcome.sent = true;
-        keys.primary = null;
-        const { sent, ...rest } = outcome;
-        grade(card, rest);
-      }
       frame({ title, ...counter(),
         body: el("div", { class: "card-body" },
+          repeatTag(card),
           el("p", { class: "prompt", text: "Say this in Japanese" }),
           el("p", { class: "prompt-en", text: p.en }),
-          hold, micRow(), result, answer),
+          hold, micRow(), result, answer, slot),
         actions: [giveUp, nextBtn], hold,
         ask: { screen: `${title.toLowerCase()} speak`, jp: p.jp, en: p.en, note: p.note } });
     }
 
+    /**
+     * After answering a card you keep forgetting: a new way in (its parts and a
+     * memory hook, written once by Flash and kept), then on with the review.
+     */
+    async function leechHelp(card) {
+      const item = card.word || card.phrase || (card.kana && { jp: card.kana.char, en: card.kana.ro });
+      const hookBox = el("div", { class: "leech-hook" }, el("p", { class: "pending", text: "Writing a memory hook…" }));
+      current = null;
+      frame({
+        title, ...counter(),
+        body: el("div", { class: "card-body leech" },
+          el("p", { class: "leech-note", text: "This one keeps slipping. Here's another way in." }),
+          el("p", { class: "kana-big kana-word", lang: "ja", text: item.jp }),
+          el("p", { class: "phrase-en", text: item.en }),
+          playRow(item.jp),
+          hookBox),
+        actions: [primaryButton("Continue", next)],
+        primary: next,
+        ask: { screen: "leech help", jp: item.jp, en: item.en },
+      });
+      keys.undo = undoLast;
+      keys.replay = () => play(item.jp);
+      play(item.jp);
+      const here = onThisScreen();
+      let hook = card.hook;
+      if (!hook) {
+        try { hook = (await postJson("/api/course/hook", { card_id: card.card_id })).hook; } catch (_) { hook = null; }
+      }
+      if (!here()) return;
+      hookBox.replaceChildren(...(hook ? [
+        el("p", { class: "leech-hook-text", text: hook.hook }),
+        hook.parts.length ? el("table", { class: "ask-breakdown" }, el("tbody", {}, hook.parts.map((b) =>
+          el("tr", {}, el("td", { lang: "ja", text: b.jp }), el("td", { text: b.en }))))) : null,
+      ].filter(Boolean) : [el("p", { class: "status", text: "No hook this time; the Ask box can explain it." })]));
+    }
+
     function finish() {
+      current = null;
       const go = async () => {
         await refresh();
-        // This step is done for now; what's still due waits for its time.
         today.plan = (today.plan || []).filter((s) => s !== planStep);
         runNext();
       };
+      const firsts = firstTry.size;
+      const right = [...firstTry.values()].filter(Boolean).length;
       frame({
         title,
         body: el("div", { class: "card-body" },
@@ -1078,10 +1185,143 @@
         actions: [primaryButton("Continue", go)],
         primary: go,
       });
+      keys.undo = undoLast;
     }
 
     if (!queue.length) return showHome();
     next();
+  }
+
+  // ---------- stats ----------
+  const SVG_NS = "http://www.w3.org/2000/svg";
+  function svg(tag, attrs, ...children) {
+    const node = document.createElementNS(SVG_NS, tag);
+    for (const [k, v] of Object.entries(attrs || {})) if (v != null) node.setAttribute(k, v);
+    for (const c of children.flat()) if (c) node.append(c);
+    return node;
+  }
+  /** Vertical bars with a value on hover; `labels` maps index → axis text. */
+  function barChart(values, { height = 110, labels = {}, title = (i, v) => String(v), line = null, max = null, min = 0 } = {}) {
+    const w = 640;
+    const top = Math.max(max ?? 0, ...values.map((v) => v ?? 0), line ?? 0, 1);
+    const gap = 3;
+    const bw = (w - gap * (values.length - 1)) / values.length;
+    const plotH = height - 18;
+    const scale = (v) => (Math.max(0, v - min) / Math.max(1, top - min)) * plotH;
+    const bars = values.map((v, i) => {
+      const h = v == null ? 0 : Math.max(v ? 2 : 0, scale(v));
+      return svg("rect", { x: (i * (bw + gap)).toFixed(1), y: (plotH - h).toFixed(1), width: bw.toFixed(1), height: h.toFixed(1),
+        rx: 2, class: v == null ? "bar empty" : "bar" }, svg("title", {}, document.createTextNode(title(i, v))));
+    });
+    const ticks = Object.entries(labels).map(([i, text]) => {
+      const n = Number(i);
+      // Keep the end labels inside the chart.
+      const anchor = n === 0 ? "start" : n === values.length - 1 ? "end" : "middle";
+      const x = anchor === "start" ? n * (bw + gap) : anchor === "end" ? n * (bw + gap) + bw : n * (bw + gap) + bw / 2;
+      return svg("text", { x: x.toFixed(1), y: height - 4, "text-anchor": anchor, class: "axis" }, document.createTextNode(text));
+    });
+    const target = line == null ? null : svg("line", { x1: 0, x2: w, y1: (plotH - scale(line)).toFixed(1),
+      y2: (plotH - scale(line)).toFixed(1), class: "target-line" });
+    return svg("svg", { viewBox: `0 0 ${w} ${height}`, class: "chart", role: "img" }, bars, target, ticks);
+  }
+
+  async function runStats() {
+    stopAudio();
+    screenId += 1;
+    askContext = null;
+    askPanel.refresh();
+    keys.primary = keys.hold = keys.replay = keys.choice = null;
+    root.replaceChildren(el("div", { class: "home" }, el("p", { class: "pending", text: "Loading…" })));
+    let s;
+    try {
+      s = await api("/api/course/stats");
+    } catch (err) {
+      root.replaceChildren(el("div", { class: "home" }, el("p", { class: "verdict off", text: String(err.message || err) })));
+      return;
+    }
+    const section = (name, ...body) => el("section", { class: "stats-section" }, el("h3", { class: "stats-h", text: name }), ...body);
+    const r = s.retention;
+
+    const today = section("Today",
+      el("div", { class: "stats-figures" },
+        figure(String(s.today.answers), "answers"),
+        figure(s.today.answers ? `${Math.round((100 * s.today.right) / s.today.answers)}%` : "–", "not Again"),
+        figure(`${s.today.minutes}`, "minutes answering"),
+        figure(String(s.streak), s.streak === 1 ? "day in a row" : "days in a row")));
+
+    const retention = section("Remembered in reviews",
+      r ? el("div", { class: "stats-figures" },
+            figure(`${r.percent}%`, `last ${r.days} days (${r.reviews} reviews)`),
+            ...Object.entries(r.by_kind).map(([k, v]) => figure(`${v}%`, k)))
+        : el("p", { class: "status", text: "Shows up once you've done 20 reviews of cards you've already learned." }),
+      el("p", { class: "stats-caption", text: `Per week (scale 50–100%), against the ${s.target}% target (dashed line):` }),
+      barChart(s.weeks.map((w) => w.percent), {
+        max: 100, min: 50, line: s.target, // 50–100%: the useful range, so differences show
+        labels: Object.fromEntries(s.weeks.map((w, i) => [i, i === s.weeks.length - 1 ? "this week" : `${s.weeks.length - 1 - i}w ago`])),
+        title: (i, v) => (v == null ? "No reviews that week" : `${v}% of ${s.weeks[i].reviews} reviews`),
+      }));
+
+    const forecast = section("Coming up",
+      el("p", { class: "stats-caption", text: `Reviews due each day for the next 30 days (${s.forecast.reduce((a, b) => a + b, 0)} in all).` }),
+      barChart(s.forecast, {
+        labels: { 0: "today", 7: "+7", 14: "+14", 21: "+21", 29: "+29" },
+        title: (i, v) => `${i === 0 ? "Today" : i === 1 ? "Tomorrow" : `In ${i} days`}: ${v} review${v === 1 ? "" : "s"}`,
+      }));
+
+    const stageNames = { new: "New", learning: "Learning", young: "Young", mature: "Mature" };
+    const cardsTable = section("Your cards",
+      el("table", { class: "stats-table" },
+        el("thead", {}, el("tr", {}, el("th"), Object.values(stageNames).map((n) => el("th", { text: n })))),
+        el("tbody", {}, Object.entries(s.stages).map(([kind, row]) => el("tr", {},
+          el("th", { text: kind }), Object.keys(stageNames).map((k) => el("td", { text: String(row[k]) })))))),
+      el("p", { class: "stats-caption", text: "Learning: in its first short steps. Young: remembered for under 3 weeks. Mature: 3 weeks or more." }));
+
+    const intervals = section("How long your cards last",
+      el("div", { class: "hbars" }, s.intervals.map((b) => {
+        const most = Math.max(1, ...s.intervals.map((x) => x.count));
+        return el("div", { class: "hbar" },
+          el("span", { class: "hbar-label", text: b.label }),
+          el("span", { class: "hbar-track" }, el("span", { class: "hbar-fill", style: `width:${(100 * b.count) / most}%` })),
+          el("span", { class: "hbar-n", text: String(b.count) }));
+      })));
+
+    const most = Math.max(1, ...s.activity.map((a) => a.answers));
+    const calendar = section("Activity",
+      el("div", { class: "calendar", role: "img", "aria-label": "Answers per day, last 16 weeks" },
+        s.activity.map((a) => el("span", {
+          class: "day" + (a.studied || a.answers ? " on" : ""),
+          style: a.answers ? `--level:${(0.25 + (0.75 * a.answers) / most).toFixed(2)}` : null,
+          title: `${a.d}: ${a.answers} answer${a.answers === 1 ? "" : "s"}`,
+        }))));
+
+    const tricky = section("Tricky cards",
+      s.leeches.length
+        ? [el("ul", { class: "leech-list" }, s.leeches.map((c) => {
+            const item = c.word || c.phrase || { jp: c.kana.char, en: c.kana.ro };
+            return el("li", {},
+              el("span", { class: "leech-jp", lang: "ja", text: item.jp }),
+              el("span", { class: "leech-en", text: item.en }),
+              el("span", { class: "leech-lapses", text: `forgotten ${c.lapses}×` }),
+              c.hook ? el("span", { class: "leech-hook-line", text: c.hook.hook }) : null);
+          })),
+          el("button", { type: "button", class: "secondary", onclick: () =>
+            runReview(s.leeches, { title: "Tricky cards", planStep: "tricky" }) }, "Practise these now")]
+        : el("p", { class: "status", text: "None. A card shows up here after you've forgotten it 4 times." }));
+
+    const how = section("How scheduling works",
+      el("p", { class: "stats-text", text: "Kaiwa estimates how long you'll remember each card and brings it back just before you'd forget, aiming for 90% recall." }),
+      el("p", { class: "stats-text", text: "New and missed cards come back within minutes, then the next day, then further apart each time you get them right. That's why you see some cards twice in a session." }),
+      el("p", { class: "stats-text", text: "The grade after each answer comes from how you did: wrong is Again; right but slow, close, or with help is Hard; right at your usual speed is Good; much faster than usual is Easy. Press 1–4 to change it, Ctrl+Z to undo an answer." }));
+
+    root.replaceChildren(el("div", { class: "home stats" },
+      el("div", { class: "lesson-top" },
+        el("button", { class: "secondary lesson-exit", type: "button", onclick: () => showHome() }, "Back"),
+        el("h2", { class: "lesson-title", text: "Stats" })),
+      today, retention, forecast, cardsTable, intervals, calendar, tricky, how));
+    keys.primary = showHome;
+  }
+  function figure(value, label) {
+    return el("div", { class: "figure" }, el("span", { class: "figure-value", text: value }), el("span", { class: "figure-label", text: label }));
   }
 
   // ---------- new phrases ----------
@@ -1766,6 +2006,11 @@
     });
   }
 
+  const autoBox = document.getElementById("autoAdvanceToggle");
+  if (autoBox) {
+    autoBox.checked = autoAdvance();
+    autoBox.addEventListener("change", () => writePref("kaiwa_auto_advance", autoBox.checked ? "1" : "0"));
+  }
   const answerSelect = document.getElementById("answerModeSelect");
   if (answerSelect) {
     answerSelect.value = answerMode();

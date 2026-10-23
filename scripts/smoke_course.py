@@ -264,6 +264,43 @@ def leeches_and_retention() -> None:
         _check(len(course_state.load_state(path)["log"]) == before, "learning-step misses don't count against retention")
 
 
+def undo_and_regrade() -> None:
+    with tempfile.TemporaryDirectory() as raw:
+        path = Path(raw) / "course_state.json"
+        cid = "u1w.asa:mean"
+        st = course_state.load_state(path)
+        st["cards"][cid] = srs.from_legacy({"box": 3, "due": course_state._today().isoformat(), "reps": 3})
+        course_state.save_state(st, path)
+        before = course_state.load_state(path)
+        r = course_state.grade(cid, correct=True, ms=2500, fmt="word:produce:type", path=path)
+        _check(set(r["intervals"]) == {1, 2, 3, 4} and r["intervals"][1] < r["intervals"][3] < r["intervals"][4],
+               "a grade reports the interval each button would give")
+        _check(not r["learning"] and r["seconds"] > 86400, "a Good review is days away")
+        mid = course_state.load_state(path)
+        _check(mid["reviewed"] and mid["log"] and mid["daily"], "the answer was counted")
+        u = course_state.undo(path=path)
+        after = course_state.load_state(path)
+        _check(u and u["card"]["card_id"] == cid, "undo hands back the card to ask again")
+        _check(after["cards"][cid] == before["cards"][cid], "undo restores the card exactly")
+        _check(not after["log"] and after["reviewed"].get(course_state._today().isoformat(), 0) == 0,
+               "undo removes the retention row and refunds the review budget")
+        _check(course_state.undo(path=path) is None, "nothing left to undo")
+
+        course_state.grade(cid, correct=True, ms=2500, path=path)
+        again = course_state.regrade(cid, srs.AGAIN, path=path)
+        _check(again["rating"] == srs.AGAIN and again["learning"], "choosing Again re-applies the answer as Again")
+        st = course_state.load_state(path)
+        _check(len(st["log"]) == 1 and st["log"][0]["ok"] is False, "the regrade replaced the first log row")
+        _check(st["overrides"][-1]["auto"] == srs.GOOD and st["overrides"][-1]["chosen"] == srs.AGAIN,
+               "the correction is kept for tuning the auto-grader")
+
+        stats = course_state.course_stats(path=path)
+        _check(len(stats["forecast"]) == 30 and len(stats["activity"]) == 112 and len(stats["weeks"]) == 8,
+               "stats: 30-day forecast, 16-week calendar, 8-week retention")
+        _check(stats["stages"]["Words"]["learning"] == 1 and stats["today"]["answers"] == 1,
+               "stats count the relearning card and today's answer")
+
+
 def pacing() -> None:
     real_today = course_state._today
     day = [real_today()]
@@ -319,6 +356,7 @@ def main() -> None:
     spaced_review()
     auto_grades()
     leeches_and_retention()
+    undo_and_regrade()
     pacing()
     story_checks()
     sentence_checks()

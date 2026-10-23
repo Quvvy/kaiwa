@@ -24,7 +24,10 @@ SCHEDULER = Scheduler(
     desired_retention=0.9,
     learning_steps=(timedelta(minutes=1), timedelta(minutes=10)),
     relearning_steps=(timedelta(minutes=10),),
-    enable_fuzzing=True,
+    # No random spread: the interval shown on each grade button is exactly what
+    # that grade gives (with fuzz, Hard could land after Good). One learner's
+    # cards bunching on a day is handled by the daily review budget anyway.
+    enable_fuzzing=False,
 )
 
 AGAIN, HARD, GOOD, EASY = 1, 2, 3, 4
@@ -97,6 +100,17 @@ def review(stored: dict[str, Any], rating: int, *, now: datetime | None = None) 
     reps = int(stored.get("reps") or 0) + 1
     lapses = int(stored.get("lapses") or 0) + (1 if rating == AGAIN and stored["fsrs"].get("state") == State.Review.value else 0)
     return _store(card, reps=reps, lapses=lapses)
+
+
+def preview(stored: dict[str, Any], *, now: datetime | None = None) -> dict[int, int]:
+    """Seconds until the next review for each possible grade (shown on the grade buttons)."""
+    now = now or _now()
+    card = _card(stored)
+    out = {}
+    for rating in (AGAIN, HARD, GOOD, EASY):
+        nxt, _log = SCHEDULER.review_card(Card.from_dict(card.to_dict()), Rating(rating), now)
+        out[rating] = max(0, int((nxt.due - now).total_seconds()))
+    return out
 
 
 def is_learning(stored: dict[str, Any]) -> bool:

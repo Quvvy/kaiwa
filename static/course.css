@@ -1225,3 +1225,272 @@ body:not([data-mode="learn"]) .ask-dock {
 .home-retention strong {
   color: var(--ink);
 }
+
+/* ---------- result bar: grade, next interval, change it ---------- */
+.grade-slot:empty {
+  display: none;
+}
+
+.grade-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  padding: 8px 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+}
+
+.grade-label {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.grade-chips {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.grade-chip {
+  min-height: 26px;
+  padding: 0 8px;
+  font-size: 12.5px;
+  font-weight: 400;
+  background: linear-gradient(var(--btn-top), var(--btn-bottom));
+  border: 1px solid var(--line-strong);
+  color: var(--ink);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.grade-chip:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.grade-chip.on {
+  background: var(--accent);
+  border-color: var(--accent-press);
+  color: var(--accent-ink);
+  font-weight: 600;
+}
+
+.grade-chip.on .choice-key {
+  color: inherit;
+  border-color: currentColor;
+}
+
+.grade-note {
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+
+.repeat-tag {
+  align-self: flex-start;
+  font-size: 12px;
+  padding: 1px 8px;
+  border-radius: 10px;
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+.undo-toast {
+  margin: 0 0 8px;
+  padding: 6px 10px;
+  font-size: 13px;
+  background: var(--accent-soft);
+  border-radius: var(--radius);
+}
+
+/* ---------- stats ---------- */
+.stats {
+  gap: 18px;
+}
+
+.stats-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.stats-h {
+  font-size: 15px;
+}
+
+.stats-caption,
+.stats-text {
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+.stats-text {
+  max-width: 62ch;
+  line-height: 1.55;
+}
+
+.stats-figures {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 28px;
+}
+
+.figure {
+  display: flex;
+  flex-direction: column;
+}
+
+.figure-value {
+  font-size: 22px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.figure-label {
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+
+.chart {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.chart .bar {
+  fill: var(--accent);
+}
+
+.chart .bar:hover {
+  fill: var(--accent-press);
+}
+
+.chart .axis {
+  font: 11px var(--font-ui);
+  fill: var(--ink-3);
+}
+
+.chart .target-line {
+  stroke: var(--ok);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 3;
+}
+
+.stats-table {
+  border-collapse: collapse;
+  font-size: 13.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.stats-table th,
+.stats-table td {
+  padding: 4px 14px 4px 0;
+  text-align: left;
+  border-bottom: 1px solid var(--line);
+}
+
+.stats-table thead th {
+  color: var(--ink-2);
+  font-weight: 400;
+}
+
+.hbars {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.hbar {
+  display: grid;
+  grid-template-columns: 90px minmax(0, 1fr) 40px;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.hbar-label {
+  color: var(--ink-2);
+}
+
+.hbar-track {
+  height: 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.hbar-fill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+
+.hbar-n {
+  font-variant-numeric: tabular-nums;
+}
+
+/* 16 weeks × 7 days, oldest first, filled column by column. */
+.calendar {
+  display: grid;
+  grid-template-rows: repeat(7, 12px);
+  grid-auto-flow: column;
+  grid-auto-columns: 12px;
+  gap: 3px;
+}
+
+.calendar .day {
+  border-radius: 2px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+}
+
+.calendar .day.on {
+  background: color-mix(in srgb, var(--accent) calc(var(--level, 0.3) * 100%), var(--surface-2));
+  border-color: transparent;
+}
+
+.leech-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.leech-list li {
+  display: grid;
+  grid-template-columns: minmax(0, auto) 1fr auto;
+  gap: 2px 14px;
+  align-items: baseline;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.leech-jp {
+  font-family: var(--font-jp);
+  font-size: 17px;
+}
+
+.leech-en {
+  color: var(--ink-2);
+  font-size: 13.5px;
+}
+
+.leech-lapses {
+  font-size: 12.5px;
+  color: var(--warn);
+}
+
+.leech-hook-line {
+  grid-column: 1 / -1;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+.stats-section > button {
+  align-self: flex-start;
+}
