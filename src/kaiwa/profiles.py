@@ -1,9 +1,14 @@
+"""One learner per install, stored under profiles/<active id>/.
+
+The registry and per-id folders predate the single-learner cut: older installs
+may hold extra profile folders, which are left on disk untouched (not shown).
+Folders starting with "_" (backups) are never treated as profiles.
+"""
+
 from __future__ import annotations
 
 import json
-import re
 import shutil
-import uuid
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -24,7 +29,7 @@ BUNDLE_FORMAT = "kaiwa-profile"
 BUNDLE_VERSION = 1
 
 _FLAT_FILES = (PREFS_FILE, PROFILE_FILE, MEMORY_FILE, PERSONALITIES_FILE)
-_SLUG_RE = re.compile(r"[^a-z0-9_]+")
+BACKUPS_SUBDIR = "_backups"
 _migrated = False
 
 
@@ -65,12 +70,6 @@ class ProfileRegistry:
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
-
-
-def _slugify_label(label: str) -> str:
-    base = label.strip().lower().replace(" ", "_").replace("-", "_")
-    base = _SLUG_RE.sub("", base).strip("_") or "profile"
-    return base[:40]
 
 
 def _write_json(path: Path, data: Any) -> None:
@@ -250,7 +249,7 @@ def ensure_migrated() -> None:
     if not any(p.id == reg.active for p in reg.profiles):
         reg.active = reg.profiles[0].id if reg.profiles else "default"
     for child in pdir.iterdir():
-        if not child.is_dir():
+        if not child.is_dir() or child.name.startswith("_"):
             continue
         if child.name not in {p.id for p in reg.profiles}:
             now = _now_iso()
@@ -316,89 +315,43 @@ def get_meta(profile_id: str) -> ProfileMeta | None:
 
 
 def list_profiles() -> dict[str, Any]:
+    """The one active learner (kept as a list for older clients)."""
     ensure_migrated()
     reg = _load_registry_raw()
+    active = next((p for p in reg.profiles if p.id == reg.active), None)
     return {
         "active_id": reg.active,
-        "profiles": [p.to_dict() for p in reg.profiles],
+        "profiles": [active.to_dict()] if active else [],
     }
 
 
-def create_profile(label: str, *, activate: bool = False) -> ProfileMeta:
+def backup_active(reason: str) -> Path:
+    """Copy the active profile folder to profiles/_backups/ before overwriting it."""
     ensure_migrated()
-    label = (label or "").strip()
-    if not label:
-        raise ValueError("label is required")
-    if len(label) > 60:
-        raise ValueError("label must be ≤ 60 characters")
-
-    reg = _load_registry_raw()
-    base = _slugify_label(label)
-    profile_id = base
-    n = 2
-    used = {p.id for p in reg.profiles}
-    pdir = profiles_dir()
-    while profile_id in used or (pdir / profile_id).exists():
-        profile_id = f"{base}_{n}"
-        n += 1
-        if n > 1000:
-            profile_id = f"{base}_{uuid.uuid4().hex[:8]}"
-            break
-
-    now = _now_iso()
-    meta = ProfileMeta(id=profile_id, label=label, created_at=now, updated_at=now)
-    _write_fresh_profile_files(pdir / profile_id)
-    reg.profiles.append(meta)
-    if activate:
-        reg.active = profile_id
-    _save_registry(reg)
-    return meta
+    pid = active_profile_id()
+    src = profiles_dir() / pid
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    dest = profiles_dir() / BACKUPS_SUBDIR / f"{pid}-{reason}-{stamp}"
+    with jsonio.STATE_LOCK:
+        if src.is_dir():
+            shutil.copytree(src, dest)
+        else:
+            dest.mkdir(parents=True, exist_ok=True)
+    return dest
 
 
-def switch_profile(profile_id: str) -> ProfileMeta:
+def reset_active() -> tuple[ProfileMeta, Path]:
+    """Back up, then reset prefs, level, memory, and custom personalities."""
     ensure_migrated()
+    backup = backup_active("reset")
     reg = _load_registry_raw()
-    meta = next((p for p in reg.profiles if p.id == profile_id), None)
-    if meta is None:
-        raise KeyError(f"profile not found: {profile_id}")
-    if not (profiles_dir() / profile_id).is_dir():
-        raise KeyError(f"profile directory missing: {profile_id}")
-    reg.active = profile_id
-    _touch_meta(reg, profile_id)
+    with jsonio.STATE_LOCK:
+        _write_fresh_profile_files(profiles_dir() / reg.active)
+    _touch_meta(reg, reg.active)
     _save_registry(reg)
-    return meta
-
-
-def delete_profile(profile_id: str) -> str:
-    """Delete profile. Returns new active id. Refuses if last profile."""
-    ensure_migrated()
-    reg = _load_registry_raw()
-    if len(reg.profiles) <= 1:
-        raise ValueError("cannot delete the last profile")
-    if not any(p.id == profile_id for p in reg.profiles):
-        raise KeyError(f"profile not found: {profile_id}")
-
-    reg.profiles = [p for p in reg.profiles if p.id != profile_id]
-    if reg.active == profile_id:
-        reg.active = reg.profiles[0].id
-
-    target = profiles_dir() / profile_id
-    if target.exists():
-        shutil.rmtree(target)
-    _save_registry(reg)
-    return reg.active
-
-
-def reset_profile(profile_id: str) -> ProfileMeta:
-    ensure_migrated()
-    reg = _load_registry_raw()
-    meta = next((p for p in reg.profiles if p.id == profile_id), None)
-    if meta is None:
-        raise KeyError(f"profile not found: {profile_id}")
-    _write_fresh_profile_files(profiles_dir() / profile_id)
-    _touch_meta(reg, profile_id)
-    _save_registry(reg)
-    return meta
+    meta = get_meta(reg.active)
+    assert meta is not None
+    return meta, backup
 
 
 def _load_bundle_file(profile_id: str, filename: str) -> dict[str, Any]:
@@ -419,8 +372,10 @@ def _load_bundle_file(profile_id: str, filename: str) -> dict[str, Any]:
     return raw if isinstance(raw, dict) else {}
 
 
-def export_bundle(profile_id: str) -> dict[str, Any]:
+def export_bundle() -> dict[str, Any]:
+    """Backup bundle of the active learner."""
     ensure_migrated()
+    profile_id = active_profile_id()
     meta = get_meta(profile_id)
     if meta is None:
         raise KeyError(f"profile not found: {profile_id}")
@@ -436,8 +391,8 @@ def export_bundle(profile_id: str) -> dict[str, Any]:
     }
 
 
-def import_bundle(bundle: dict[str, Any], *, label: str | None = None) -> ProfileMeta:
-    """Validate and create a new profile from an export bundle."""
+def import_bundle(bundle: dict[str, Any]) -> tuple[ProfileMeta, Path]:
+    """Validate a backup bundle, back up the current learner, then restore over it."""
     ensure_migrated()
     if not isinstance(bundle, dict):
         raise ValueError("bundle must be a JSON object")
@@ -511,14 +466,17 @@ def import_bundle(bundle: dict[str, Any], *, label: str | None = None) -> Profil
             }
         )
 
-    bundle_label = (label or str(bundle.get("label") or "Imported")).strip() or "Imported"
-    meta = create_profile(bundle_label, activate=False)
-    dest = profiles_dir() / meta.id
-    save_prefs(prefs, dest / PREFS_FILE)
-    save_profile(learner, dest / PROFILE_FILE)
-    save_memory(memory, dest / MEMORY_FILE)
-    _save_raw(valid_presets, dest / PERSONALITIES_FILE)
+    # Everything validated — only now touch the active learner.
+    backup = backup_active("import")
     reg = _load_registry_raw()
-    _touch_meta(reg, meta.id)
+    dest = profiles_dir() / reg.active
+    with jsonio.STATE_LOCK:
+        save_prefs(prefs, dest / PREFS_FILE)
+        save_profile(learner, dest / PROFILE_FILE)
+        save_memory(memory, dest / MEMORY_FILE)
+        _save_raw(valid_presets, dest / PERSONALITIES_FILE)
+    _touch_meta(reg, reg.active)
     _save_registry(reg)
-    return get_meta(meta.id) or meta
+    meta = get_meta(reg.active)
+    assert meta is not None
+    return meta, backup

@@ -310,11 +310,6 @@ class PersonalityUpdate(BaseModel):
     prompt_blurb: str = Field(min_length=1, max_length=2000)
 
 
-class ProfileCreateBody(BaseModel):
-    label: str = Field(min_length=1, max_length=60)
-    activate: bool = False
-
-
 class TextTurnRequest(BaseModel):
     text: str = Field(min_length=1, max_length=500)
     session_id: str = ""
@@ -739,60 +734,13 @@ def get_profiles() -> dict[str, Any]:
     return profiles.list_profiles()
 
 
-@app.post("/api/profiles")
-def post_profile(body: ProfileCreateBody) -> dict[str, Any]:
+@app.get("/api/profiles/export")
+def export_user_profile() -> Response:
     try:
-        meta = profiles.create_profile(body.label, activate=body.activate)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    payload = profiles.list_profiles()
-    if body.activate:
-        return {**_active_state_payload(), "created": meta.to_dict()}
-    return {**payload, "created": meta.to_dict()}
-
-
-@app.post("/api/profiles/{profile_id}/activate")
-def activate_profile(profile_id: str) -> dict[str, Any]:
-    try:
-        meta = profiles.switch_profile(profile_id)
+        bundle = profiles.export_bundle()
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return {**_active_state_payload(), "activated": meta.to_dict()}
-
-
-@app.delete("/api/profiles/{profile_id}")
-def remove_user_profile(profile_id: str) -> dict[str, Any]:
-    try:
-        new_active = profiles.delete_profile(profile_id)
-    except KeyError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return {
-        **_active_state_payload(),
-        "deleted": profile_id,
-        "active_id": new_active,
-    }
-
-
-@app.post("/api/profiles/{profile_id}/reset")
-def reset_user_profile(profile_id: str) -> dict[str, Any]:
-    try:
-        meta = profiles.reset_profile(profile_id)
-    except KeyError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    if profile_id == profiles.active_profile_id():
-        return {**_active_state_payload(), "reset": meta.to_dict()}
-    return {**profiles.list_profiles(), "reset": meta.to_dict()}
-
-
-@app.get("/api/profiles/{profile_id}/export")
-def export_user_profile(profile_id: str) -> Response:
-    try:
-        bundle = profiles.export_bundle(profile_id)
-    except KeyError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    filename = _export_filename(str(bundle.get("label") or profile_id))
+    filename = _export_filename(str(bundle.get("label") or "kaiwa"))
     body = json.dumps(bundle, ensure_ascii=False, indent=2) + "\n"
     return Response(
         content=body.encode("utf-8"),
@@ -803,66 +751,32 @@ def export_user_profile(profile_id: str) -> Response:
 
 @app.post("/api/profiles/import")
 async def import_user_profile(request: Request) -> dict[str, Any]:
+    """Restore a backup over the current learner (the current one is backed up first)."""
     content_type = (request.headers.get("content-type") or "").lower()
-    bundle: dict[str, Any] | None = None
-    use_label: str | None = None
-    use_activate = False
-
-    if "multipart/form-data" in content_type:
-        form = await request.form()
-        upload = form.get("file")
-        if upload is None or not hasattr(upload, "read"):
-            raise HTTPException(status_code=400, detail="multipart import requires a file field")
-        raw_bytes = await upload.read()
-        try:
-            parsed = json.loads(raw_bytes.decode("utf-8"))
-        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-            raise HTTPException(status_code=400, detail="invalid JSON file") from exc
-        if not isinstance(parsed, dict):
-            raise HTTPException(status_code=400, detail="bundle must be a JSON object")
-        bundle = parsed
-        label_val = form.get("label")
-        if isinstance(label_val, str) and label_val.strip():
-            use_label = label_val.strip()
-        act_val = form.get("activate")
-        if isinstance(act_val, str):
-            use_activate = act_val.strip().lower() in {"1", "true", "yes", "on"}
-        elif isinstance(act_val, bool):
-            use_activate = act_val
-    else:
-        try:
-            data = await request.json()
-        except Exception as exc:
-            raise HTTPException(status_code=400, detail="invalid JSON body") from exc
-        if not isinstance(data, dict):
-            raise HTTPException(status_code=400, detail="body must be a JSON object")
-        # Accept either wrapped {bundle, label, activate} or a raw export bundle
-        if data.get("format") == profiles.BUNDLE_FORMAT or (
-            "prefs" in data and "learner_profile" in data
-        ):
-            bundle = data
-            use_label = str(data.get("label") or "").strip() or None
-        else:
-            raw_bundle = data.get("bundle")
-            if not isinstance(raw_bundle, dict):
-                raise HTTPException(status_code=400, detail="provide bundle object or raw export JSON")
-            bundle = raw_bundle
-            if data.get("label"):
-                use_label = str(data["label"]).strip() or None
-            use_activate = bool(data.get("activate", False))
-
     try:
-        meta = profiles.import_bundle(bundle, label=use_label)
-        if use_activate:
-            profiles.switch_profile(meta.id)
+        if "multipart/form-data" in content_type:
+            form = await request.form()
+            upload = form.get("file")
+            if upload is None or not hasattr(upload, "read"):
+                raise HTTPException(status_code=400, detail="multipart import requires a file field")
+            bundle = json.loads((await upload.read()).decode("utf-8"))
+        else:
+            bundle = await request.json()
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=400, detail="invalid JSON file") from exc
+    if not isinstance(bundle, dict):
+        raise HTTPException(status_code=400, detail="backup must be a JSON object")
+    try:
+        meta, backup = profiles.import_bundle(bundle)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except KeyError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {**_active_state_payload(), "imported": meta.to_dict(), "backup": backup.name}
 
-    if use_activate:
-        return {**_active_state_payload(), "imported": meta.to_dict()}
-    return {**profiles.list_profiles(), "imported": meta.to_dict()}
+
+@app.post("/api/profiles/reset")
+def reset_user_profile() -> dict[str, Any]:
+    meta, backup = profiles.reset_active()
+    return {**_active_state_payload(), "reset": meta.to_dict(), "backup": backup.name}
 
 
 class ChatNewBody(BaseModel):

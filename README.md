@@ -39,7 +39,7 @@ Quiz:     Self-assessment placement (stage / listening / speaking / pace) → pr
 ## Setup (developers / owners)
 
 1. **API key:** On first launch Kaiwa asks for a DeepSeek API key (AppData `secrets.json`). Optional for owners: copy `.env.example` → `.env` and set `DEEPSEEK_API_KEY` (migrates once into AppData). Process env overrides.
-2. **User data:** Profiles, prefs, memory, and session logs live under `%LocalAppData%\Kaiwa\`. Optional `KAIWA_DATA_DIR`. First launch also bootstraps Whisper + AivisSpeech into that folder.
+2. **User data:** Prefs, level, memory, and session logs live under `%LocalAppData%\Kaiwa\`. Optional `KAIWA_DATA_DIR`. First launch also bootstraps Whisper + AivisSpeech into that folder.
 3. Create venv and install:
 
 ```powershell
@@ -117,11 +117,10 @@ Extra AivisSpeech voices (from AivisHub):
 
 Open **http://127.0.0.1:8787**
 
-- **Chat** — hold to talk, free conversation; type a short line if Whisper misses you; **Replay** re-plays Kaiwa’s last line; **Simpler** on Kaiwa’s last bubble says it more easily; **Easy** / **Free** picks the gym lock (Easy is the default); a quiet turn count sits by the status; **New chat** starts a fresh thread (keeps memory; past chats stay on disk) and may show **From this chat** leftovers; **Chats** lists and reopens this profile’s threads; **Again** re-asks this thread’s questions as a new chat
-- **Practice** — **Today’s practice / Start**: a short sitting from something you struggled with in Chat, then back. **Why?** is a one-liner. **Things you can say** lists recently practiced lines (not tappable).
-- **Learn** — pick a line from your Chat struggles (or a starter if none), then the same Practice sitting, then Chat
-- **Place me** — Settings section; per-profile soft first-run (auto-open when new/reset; Skip anytime); expanded English self-ratings that shape how Kaiwa talks
-- **Settings** — Profiles, Appearance, Tutor, Learning, Place me, Memory, Speech (searchable); themes, goals, corrections, TTS/PTT, learner profile, long-term memory
+- **Chat** — hold to talk, free conversation; type a short line if Whisper misses you; **Hear that again** re-plays Kaiwa’s last line; **Simpler** on Kaiwa’s last bubble says it more easily; **Easy** / **Free** picks the gym lock (Easy is the default); a quiet turn count sits by the status; **New chat** starts a fresh thread (keeps memory; past chats stay on disk) and may show **From this chat** leftovers; **Chats** lists and reopens your threads; **Same questions** re-asks this thread’s questions as a new chat
+- **Practice** — **Start**: a short sitting from something you struggled with in Chat, then back. **Or pick a line** lists lines from your Chat struggles (or starters if none). **Why?** is a one-liner. **You’ve said** lists recently practiced lines.
+- **Place me** — Settings section; soft first-run (auto-opens when new/reset; Skip anytime); expanded English self-ratings that shape how Kaiwa talks
+- **Settings** — Your data, Appearance, Tutor, Learning, Place me, Memory, Speech (searchable). **Your data** exports/imports a backup or resets everything; Kaiwa saves a copy of the old data first.
 
 Default port is **8787** (8765 often used by Anki on this machine).
 

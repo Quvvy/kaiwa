@@ -1727,7 +1727,7 @@
             <p class="settings-search-meta" id="settingsSearchMeta" aria-live="polite"></p>
           </div>
           <nav class="settings-rail" aria-label="Settings sections">
-            <button type="button" class="active" data-settings-section="profiles">Profiles</button>
+            <button type="button" class="active" data-settings-section="profiles">Your data</button>
             <button type="button" data-settings-section="appearance">Appearance</button>
             <button type="button" data-settings-section="tutor">Tutor</button>
             <button type="button" data-settings-section="learning">Learning</button>
@@ -1740,25 +1740,15 @@
         <div class="settings-pane">
           <div class="settings-pane-scroll">
             <div class="settings-section" data-settings-section="profiles">
-              <h2 class="section-title">Profiles</h2>
-              <p class="disclaimer settings-searchable" data-settings-search="profile profiles switch export import backup account">
-                Each profile stores your settings, learner level, memory, and custom personalities.
-                Chat logs stay shared. Switching clears the current chat session.
+              <h2 class="section-title">Your data</h2>
+              <p class="disclaimer settings-searchable" data-settings-search="data backup export import restore reset profile account">
+                Your settings, level, memory, and custom personalities. Export a backup file any time.
+                Importing or resetting replaces what's here, and Kaiwa saves a copy of the old data first.
               </p>
-              <div class="field settings-searchable" data-settings-search="active profile select switch name">
-                <label for="profileSelect">Active profile</label>
-                <select id="profileSelect"></select>
-                <p class="preset-desc" id="profileActiveBadge"></p>
-              </div>
-              <div class="controls settings-searchable" data-settings-search="switch new reset delete profile">
-                <button id="switchProfileBtn" class="secondary" type="button">Switch</button>
-                <button id="newProfileBtn" type="button">New</button>
-                <button id="resetUserProfileBtn" class="secondary" type="button">Reset</button>
-                <button id="deleteProfileBtn" class="secondary" type="button">Delete</button>
-              </div>
-              <div class="controls settings-searchable" data-settings-search="export import backup json file" style="margin-top:0.6rem">
-                <button id="exportProfileBtn" class="secondary" type="button">Export</button>
-                <button id="importProfileBtn" class="secondary" type="button">Import</button>
+              <div class="controls settings-searchable" data-settings-search="export import backup restore reset json file">
+                <button id="exportProfileBtn" class="secondary" type="button">Export backup</button>
+                <button id="importProfileBtn" class="secondary" type="button">Import backup</button>
+                <button id="resetUserProfileBtn" class="secondary" type="button">Reset everything</button>
                 <input id="importProfileFile" type="file" accept="application/json,.json" hidden />
                 <span id="profilesStatus"></span>
               </div>
@@ -2092,8 +2082,6 @@
     const practiceStatusEl = document.getElementById("practiceStatus");
     const settingsStatusEl = document.getElementById("settingsStatus");
     const profilesStatusEl = document.getElementById("profilesStatus");
-    const profileSelect = document.getElementById("profileSelect");
-    const profileActiveBadge = document.getElementById("profileActiveBadge");
     const importProfileFile = document.getElementById("importProfileFile");
     const logEl = document.getElementById("log");
     const practiceHomeEl = document.getElementById("practiceHome");
@@ -3725,32 +3713,14 @@
       closeChatsDrawer();
     }
 
-    function fillProfilesSelect(listing) {
-      const profilesList = (listing && listing.profiles) || [];
-      const activeId = (listing && listing.active_id) || "";
-      profileSelect.innerHTML = "";
-      profilesList.forEach((p) => {
-        const opt = document.createElement("option");
-        opt.value = p.id;
-        opt.textContent = p.label + (p.id === activeId ? " (active)" : "");
-        profileSelect.appendChild(opt);
-      });
-      if (activeId) profileSelect.value = activeId;
-      const active = profilesList.find((p) => p.id === activeId);
-      profileActiveBadge.textContent = active
-        ? "Active: " + active.label + " · id " + active.id
-        : "No active profile";
-    }
-
     async function loadProfilesIntoForm() {
       const res = await fetch("/api/profiles");
       const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || "Failed to load profiles");
-      fillProfilesSelect(data);
+      if (!res.ok) throw new Error(data.detail || "Failed to load your data");
+      if (data.active_id) activeProfileId = data.active_id;
     }
 
     async function applyActiveProfileState(data, statusMsg) {
-      fillProfilesSelect(data);
       if (data.active_id) activeProfileId = data.active_id;
       if (data.prefs) {
         applyPrefsToForm(data.prefs);
@@ -3766,7 +3736,7 @@
       if (typeof profilePayload.placement_completed === "boolean") {
         placementCompleted = profilePayload.placement_completed;
       }
-      // New / reset / switch to incomplete profile → offer Place me (clear prior dismiss).
+      // Reset / import to an incomplete profile → offer Place me (clear prior dismiss).
       if (!placementCompleted) {
         clearPlacementDismiss(activeProfileId);
       }
@@ -3774,83 +3744,21 @@
       refreshChatList();
     }
 
-    async function switchSelectedProfile() {
-      const id = profileSelect.value;
-      if (!id) return;
-      profilesStatusEl.textContent = "Switching…";
-      const res = await fetch("/api/profiles/" + encodeURIComponent(id) + "/activate", {
-        method: "POST",
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || "Switch failed");
-      clearChatSessionLocal();
-      await applyActiveProfileState(data, "Switched to " + ((data.activated && data.activated.label) || id));
-    }
-
-    async function createNewProfile() {
-      const label = prompt("Name for the new profile:");
-      if (!label || !label.trim()) return;
-      const activate = confirm("Switch to the new profile now?");
-      profilesStatusEl.textContent = "Creating…";
-      const res = await fetch("/api/profiles", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ label: label.trim(), activate }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || "Create failed");
-      if (activate) {
-        clearChatSessionLocal();
-        await applyActiveProfileState(data, "Created and activated " + label.trim());
-      } else {
-        fillProfilesSelect(data);
-        profilesStatusEl.textContent = "Created " + label.trim();
-      }
-    }
-
-    async function resetSelectedUserProfile() {
-      const id = profileSelect.value;
-      const label = profileSelect.options[profileSelect.selectedIndex]
-        ? profileSelect.options[profileSelect.selectedIndex].textContent
-        : id;
-      if (!confirm("Reset profile “" + label + "” to defaults? Settings, level, memory, and custom personalities will be wiped.")) {
+    async function resetUserData() {
+      if (!confirm("Reset everything? Settings, level, memory, and custom personalities go back to defaults. Kaiwa saves a copy of your current data first.")) {
         return;
       }
       profilesStatusEl.textContent = "Resetting…";
-      const res = await fetch("/api/profiles/" + encodeURIComponent(id) + "/reset", {
-        method: "POST",
-      });
+      const res = await fetch("/api/profiles/reset", { method: "POST" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || "Reset failed");
-      if (data.prefs) {
-        clearChatSessionLocal();
-        await applyActiveProfileState(data, "Profile reset");
-      } else {
-        fillProfilesSelect(data);
-        profilesStatusEl.textContent = "Profile reset";
-      }
-    }
-
-    async function deleteSelectedProfile() {
-      const id = profileSelect.value;
-      if (!id) return;
-      const label = profileSelect.options[profileSelect.selectedIndex]
-        ? profileSelect.options[profileSelect.selectedIndex].textContent
-        : id;
-      if (!confirm("Delete profile “" + label + "”? This cannot be undone.")) return;
-      profilesStatusEl.textContent = "Deleting…";
-      const res = await fetch("/api/profiles/" + encodeURIComponent(id), { method: "DELETE" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || "Delete failed");
       clearChatSessionLocal();
-      await applyActiveProfileState(data, "Deleted " + id);
+      await applyActiveProfileState(data, "Reset. A copy of your old data was saved.");
     }
 
-    async function exportSelectedProfile() {
-      const id = profileSelect.value;
-      if (!id) return;
+    async function exportUserData() {
       profilesStatusEl.textContent = "Exporting…";
-      const res = await fetch("/api/profiles/" + encodeURIComponent(id) + "/export");
+      const res = await fetch("/api/profiles/export");
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.detail || "Export failed");
@@ -3858,7 +3766,7 @@
       const blob = await res.blob();
       const disp = res.headers.get("Content-Disposition") || "";
       const match = /filename=\"([^\"]+)\"/.exec(disp);
-      const filename = (match && match[1]) || ("kaiwa-profile-" + id + ".json");
+      const filename = (match && match[1]) || "kaiwa-backup.json";
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -3870,51 +3778,28 @@
       profilesStatusEl.textContent = "Exported " + filename;
     }
 
-    async function importProfileFromFile(file) {
+    async function importUserData(file) {
       if (!file) return;
-      const activate = confirm("Import “" + file.name + "” and switch to it now?");
+      if (!confirm("Replace your current data with “" + file.name + "”? Kaiwa saves a copy of what's here first.")) {
+        return;
+      }
       profilesStatusEl.textContent = "Importing…";
       const form = new FormData();
       form.append("file", file);
-      form.append("activate", activate ? "true" : "false");
       const res = await fetch("/api/profiles/import", { method: "POST", body: form });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || "Import failed");
-      if (activate) {
-        clearChatSessionLocal();
-        await applyActiveProfileState(
-          data,
-          "Imported " + ((data.imported && data.imported.label) || file.name)
-        );
-      } else {
-        fillProfilesSelect(data);
-        profilesStatusEl.textContent =
-          "Imported " + ((data.imported && data.imported.label) || file.name) + " (not active)";
-      }
+      clearChatSessionLocal();
+      await applyActiveProfileState(data, "Imported " + file.name + ". A copy of your old data was saved.");
     }
 
-    document.getElementById("switchProfileBtn").addEventListener("click", () => {
-      switchSelectedProfile().catch((err) => {
-        profilesStatusEl.textContent = String(err.message || err);
-      });
-    });
-    document.getElementById("newProfileBtn").addEventListener("click", () => {
-      createNewProfile().catch((err) => {
-        profilesStatusEl.textContent = String(err.message || err);
-      });
-    });
     document.getElementById("resetUserProfileBtn").addEventListener("click", () => {
-      resetSelectedUserProfile().catch((err) => {
-        profilesStatusEl.textContent = String(err.message || err);
-      });
-    });
-    document.getElementById("deleteProfileBtn").addEventListener("click", () => {
-      deleteSelectedProfile().catch((err) => {
+      resetUserData().catch((err) => {
         profilesStatusEl.textContent = String(err.message || err);
       });
     });
     document.getElementById("exportProfileBtn").addEventListener("click", () => {
-      exportSelectedProfile().catch((err) => {
+      exportUserData().catch((err) => {
         profilesStatusEl.textContent = String(err.message || err);
       });
     });
@@ -3924,7 +3809,7 @@
     importProfileFile.addEventListener("change", () => {
       const file = importProfileFile.files && importProfileFile.files[0];
       importProfileFile.value = "";
-      importProfileFromFile(file).catch((err) => {
+      importUserData(file).catch((err) => {
         profilesStatusEl.textContent = String(err.message || err);
       });
     });
