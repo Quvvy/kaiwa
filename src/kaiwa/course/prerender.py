@@ -34,15 +34,30 @@ def speaker_for(settings: Settings, voice: str) -> tuple[int, str]:
     return speaker, prefs.tts_engine
 
 
-def lesson_lines() -> list[tuple[str, str, float | None]]:
-    """(text, voice, speed) for everything Learn plays, in course order."""
+def lesson_lines(*, everything: bool = False) -> list[tuple[str, str, float | None]]:
+    """(text, voice, speed) Learn will play soon, in course order.
+
+    Everything up to one lesson past where the learner is: what's learned (it
+    comes back in reviews), the current unit and kana lesson, and the next of
+    each. Finishing a step moves the window on. `everything` lists the whole course.
+    """
+    from kaiwa.course import state as course_state
+
+    unit_limit, kana_limit = len(UNITS), len(KANA_LESSONS)
+    if not everything:
+        st = course_state.load_state()
+        nxt = course_state.next_unit(st)
+        unit_limit = (UNITS.index(nxt) + 2) if nxt else len(UNITS)
+        nk = course_state.next_kana_lesson(st)
+        kana_limit = (KANA_LESSONS.index(nk) + 2) if nk else len(KANA_LESSONS)
+    units = UNITS[:unit_limit]
     lines: list[tuple[str, str, float | None]] = []
-    for lesson in KANA_LESSONS:
+    for lesson in KANA_LESSONS[:kana_limit]:
         for ch, _ in lesson["kana"]:
             lines.append((ch, "a", None))
         for word in lesson["words"]:
             lines.append((word["jp"], "a", None))
-    for unit in UNITS:
+    for unit in units:
         for phrase in unit["phrases"]:
             lines.append((phrase["jp"], "a", None))
         for word in unit.get("words", []):
@@ -56,7 +71,7 @@ def lesson_lines() -> list[tuple[str, str, float | None]]:
         for task in unit["speak"]:
             lines.append((task["say"], "a", None))
         # Slow versions last: they are only played on request.
-    for unit in UNITS:
+    for unit in units:
         for phrase in unit["phrases"]:
             lines.append((phrase["jp"], "a", SLOW_SPEED))
     seen: set[tuple[str, str, float | None]] = set()

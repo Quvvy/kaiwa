@@ -189,6 +189,7 @@ def step(body: StepBody) -> dict[str, Any]:
         row = state.complete_step(body.unit_id, body.step)
     except (KeyError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    prerender.start(get_settings())  # the "next lesson" window may have moved
     return {"unit": row, "stats": state.stats(state.load_state())}
 
 
@@ -228,6 +229,7 @@ def kana_done(body: KanaBody) -> dict[str, Any]:
         progress = state.complete_kana(body.lesson_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    prerender.start(get_settings())
     return {"kana_progress": progress}
 
 
