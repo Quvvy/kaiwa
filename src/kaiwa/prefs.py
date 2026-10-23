@@ -10,46 +10,14 @@ LanguagePolicy = Literal["immerse", "adaptive"]
 SpeechRegister = Literal["formal", "casual"]
 GoalLevel = Literal["pre_n5", "n5", "n4"]
 TtsEngine = Literal["aivisspeech", "voicevox"]
-UiTheme = Literal[
-    "night",
-    "slate",
-    "graphite",
-    "dusk",
-    "sage",
-    "ink",
-    "indigo",
-    "amber",
-    "day",
-    "cloud",
-    "frost",
-    "blush",
-    "matcha",
-    "paper",
-    "wisteria",
-]
+UiTheme = Literal["night", "day", "sage"]
 ChatPace = Literal["easy", "free"]
 
 VALID_LANGUAGE_POLICY = {"immerse", "adaptive"}
 VALID_SPEECH_REGISTER = {"formal", "casual"}
 VALID_GOAL_LEVEL = {"pre_n5", "n5", "n4"}
 VALID_TTS_ENGINE = {"aivisspeech", "voicevox"}
-VALID_UI_THEME = {
-    "night",
-    "slate",
-    "graphite",
-    "dusk",
-    "sage",
-    "ink",
-    "indigo",
-    "amber",
-    "day",
-    "cloud",
-    "frost",
-    "blush",
-    "matcha",
-    "paper",
-    "wisteria",
-}
+VALID_UI_THEME = {"night", "day", "sage"}
 VALID_CHAT_PACE = {"easy", "free"}
 MAX_TOPIC_PREFS = 8
 MAX_TOPIC_LEN = 40
@@ -164,10 +132,7 @@ def validate_prefs_dict(raw: dict[str, Any]) -> UserPrefs:
 
     ui_theme = str(raw.get("ui_theme", "night") or "night").strip().lower()
     if ui_theme not in VALID_UI_THEME:
-        raise ValueError(
-            "ui_theme must be one of: night, slate, graphite, dusk, sage, ink, indigo, amber, "
-            "day, cloud, frost, blush, matcha, paper, wisteria"
-        )
+        ui_theme = "night"  # retired themes fall back instead of failing the whole file
 
     ptt_enabled = _as_bool(raw.get("ptt_enabled", False), False)
     from kaiwa.ptt_binding import canonicalize_binding
