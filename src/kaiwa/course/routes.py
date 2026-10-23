@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 
 from kaiwa import stt, tts
 from kaiwa.config import get_settings
-from kaiwa.course import ask, coach, hooks, kana_judge, prerender, sentences, state, stories
+from kaiwa.course import ask, coach, hooks, kana_judge, placement, prerender, sentences, state, stories
 from kaiwa.course.kana import KANA_ROMAJI
 from kaiwa.course.speech_check import check_phrase, normalize
 from kaiwa.secrets_store import user_data_dir
@@ -57,6 +57,23 @@ class UndoBody(BaseModel):
 class RegradeBody(BaseModel):
     card_id: str
     rating: int = Field(ge=1, le=4)
+
+
+class PlacementNextBody(BaseModel):
+    skill: str
+    history: list[dict[str, Any]] = Field(default_factory=list, max_length=20)
+
+
+class PlacementJudgeBody(BaseModel):
+    jp: str = Field(max_length=120)
+    expected: str = Field(max_length=300)
+    answer: str = Field(default="", max_length=300)
+    kind: str = "words"
+
+
+class PlacementSummaryBody(BaseModel):
+    histories: dict[str, list[dict[str, Any]]] = Field(default_factory=dict)
+    kana: list[dict[str, Any]] = Field(default_factory=list, max_length=40)
 
 
 class HookBody(BaseModel):
@@ -286,6 +303,42 @@ async def review_sentences(body: SentencesBody) -> dict[str, Any]:
         sentences.generate, get_settings(), targets=targets, known_words=known_words, known_phrases=known_phrases
     )
     return {"sentences": items}
+
+
+@router.get("/placement/kana")
+def placement_kana() -> dict[str, Any]:
+    return {"items": placement.kana_items()}
+
+
+@router.post("/placement/next")
+def placement_next(body: PlacementNextBody) -> dict[str, Any]:
+    """The next adaptive item for one skill (None once the skill is pinned down)."""
+    try:
+        item = placement.next_item(body.skill, body.history)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"item": item, "estimate": placement.estimate(body.history)}
+
+
+@router.post("/placement/judge")
+async def placement_judge(body: PlacementJudgeBody) -> dict[str, Any]:
+    score = await asyncio.to_thread(
+        placement.judge_meaning, get_settings(), jp=body.jp, expected=body.expected, answer=body.answer, kind=body.kind
+    )
+    return {"score": score}
+
+
+@router.post("/placement/summary")
+def placement_summary(body: PlacementSummaryBody) -> dict[str, Any]:
+    return placement.summarize(body.histories, body.kana)
+
+
+@router.post("/placement/apply")
+def placement_apply(body: PlacementSummaryBody) -> dict[str, Any]:
+    summary = placement.summarize(body.histories, body.kana)
+    applied = state.apply_placement(summary)
+    prerender.start(get_settings())
+    return {"summary": summary, "applied": applied}
 
 
 @router.post("/hook")

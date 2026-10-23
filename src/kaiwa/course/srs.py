@@ -85,6 +85,15 @@ def from_legacy(old: dict[str, Any]) -> dict[str, Any]:
     return _store(card, reps=reps, lapses=lapses)
 
 
+def placed_card(stability_days: float, due_day: date) -> dict[str, Any]:
+    """A card the placement test showed the learner already knows: a short review
+    memory, so the first review soon confirms it (or catches an overestimate)."""
+    due = datetime.combine(due_day, time(4, 0)).astimezone().astimezone(timezone.utc)
+    card = Card(state=State.Review, stability=float(stability_days), difficulty=5.0,
+                due=due, last_review=due - timedelta(days=stability_days))
+    return {**_store(card, reps=1, lapses=0), "placed": True}
+
+
 def ensure(card: dict[str, Any]) -> dict[str, Any]:
     """Cards saved before FSRS get converted on first touch."""
     return card if isinstance(card.get("fsrs"), dict) else from_legacy(card)

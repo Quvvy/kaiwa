@@ -9,6 +9,7 @@
   if (!root) return;
 
   let today = null;
+  let placementAfterHome = false; // Settings asked to open the placement test
   let showRomaji = readPref("kaiwa_course_romaji", "1") === "1";
   const keys = { primary: null, hold: null, replay: null, choice: null, meanings: null, text: null, tab: null,
     grade: null, space: null, undo: null };
@@ -518,8 +519,10 @@
     const next = planSteps()[0];
     return next ? runStep(next) : showHome();
   }
+  let UNIT_TITLES = [];
   async function refresh() {
     today = await api("/api/course/today");
+    if (today.unit_titles) UNIT_TITLES = today.unit_titles;
   }
 
   async function showHome() {
@@ -588,6 +591,10 @@
       ? `${s.phrases_learned} phrases and ${s.words_learned} words learned, ${s.phrases_strong} phrases remembered well.${kanaText} ${s.streak} day${s.streak === 1 ? "" : "s"} in a row.`
       : "About 15 minutes a day.";
 
+    if (placementAfterHome) {
+      placementAfterHome = false;
+      return runPlacement();
+    }
     if (steps.length) keys.primary = runNext;
     root.replaceChildren(
       el("div", { class: "home" },
@@ -608,6 +615,11 @@
               el("button", { type: "button", class: "lesson-primary", onclick: runNext },
                 s.studied_today ? "Continue" : "Start today's lesson", kbd("Enter")))
           : el("p", { class: "home-done", text: "Done for today. More tomorrow." }),
+        !today.placement && !s.phrases_learned && !(today.kana_progress && today.kana_progress.lessons_done)
+          ? el("div", { class: "home-placement" },
+              el("p", { text: "Already know some Japanese? A short test finds where to start." }),
+              el("button", { type: "button", class: "secondary", onclick: runPlacement }, "Take the placement test (about 8 min)"))
+          : null,
         today.retention ? retentionLine(today.retention) : null,
         today.catching_up
           ? el("p", { class: "home-note", text: "Reviews only today: there's a backlog to clear first. New lessons are still one click away below." })
@@ -1328,6 +1340,196 @@
     return el("div", { class: "figure" }, el("span", { class: "figure-value", text: value }), el("span", { class: "figure-label", text: label }));
   }
 
+  // ---------- placement test ----------
+  const SKILL_INFO = {
+    words: { title: "Words by ear", prompt: "Type what this word means, in English." },
+    sentences: { title: "Sentences by ear", prompt: "Type what this means, in English." },
+    imitate: { title: "Repeat after me", prompt: "Listen, then hold and say it back." },
+  };
+
+  /**
+   * Adaptive placement: a short kana check, then three skills that each home in
+   * on a course unit (see placement.py). No options to pick from: every answer
+   * is typed or spoken. Nothing is changed until the learner presses Apply.
+   */
+  function runPlacement() {
+    const histories = { words: [], sentences: [], imitate: [] };
+    const kanaAnswers = [];
+    const unitTitle = (n) => (n >= 1 && UNIT_TITLES[n - 1]) || "";
+
+    function intro() {
+      frame({
+        title: "Placement test",
+        body: el("div", { class: "card-body" },
+          el("h3", { class: "end-title", text: "Find your starting point" }),
+          el("p", { class: "lesson-note", text: "About 6–10 minutes. Each part adjusts to your answers and stops once it knows your level, so it won't drag on." }),
+          el("ul", { class: "stats-rules" },
+            el("li", { text: "Kana: type the sound of a few characters." }),
+            el("li", { text: "Words and sentences: listen, then type what they mean in English." }),
+            el("li", { text: "Repeat after me: say a few phrases back (skip it if you have no microphone)." })),
+          el("p", { class: "lesson-note", text: "Don't guess. If you don't know, press Enter with the box empty: that tells the test more than a guess does. Nothing changes until you press Apply at the end." })),
+        actions: [el("button", { type: "button", class: "secondary", onclick: showHome }, "Not now"), primaryButton("Start", kana)],
+        primary: kana,
+      });
+    }
+
+    // 1. Kana: see a character, type its romaji.
+    async function kana() {
+      let items;
+      try { items = (await api("/api/course/placement/kana")).items; } catch (err) { return fail(err); }
+      let i = 0;
+      function ask() {
+        if (i >= items.length) return skill("words");
+        const k = items[i];
+        const input = el("input", { type: "text", class: "produce-input", placeholder: "Its sound in romaji (empty = don't know)",
+          autocomplete: "off", spellcheck: "false" });
+        const submit = () => {
+          const typed = input.value.trim().toLowerCase().replace(/[^a-z]/g, "");
+          const want = k.ro.replace(/ \(.*\)/, "");
+          const correct = !!typed && (typed === want || kanaKey(toKana(typed, { final: true })) === kanaKey(k.char)
+            || (k.char === "を" && typed === "o") || (k.char === "ヲ" && typed === "o"));
+          kanaAnswers.push({ group: k.group, correct });
+          i += 1;
+          ask();
+        };
+        frame({
+          title: "Placement: kana", index: i, total: items.length,
+          body: el("div", { class: "card-body" },
+            el("p", { class: "kana-big", lang: "ja", text: k.char }),
+            el("form", { class: "produce-form", onsubmit: (e) => { e.preventDefault(); submit(); } }, input,
+              el("button", { type: "submit", class: "secondary" }, "Next"))),
+          actions: [],
+        });
+        setTimeout(() => input.focus(), 0);
+      }
+      ask();
+    }
+
+    // 2–4. The adaptive skills.
+    async function skill(name) {
+      let item;
+      try {
+        item = (await postJson("/api/course/placement/next", { skill: name, history: histories[name] })).item;
+      } catch (err) { return fail(err); }
+      if (!item) return name === "words" ? skill("sentences") : name === "sentences" ? imitateIntro() : results();
+      const info = SKILL_INFO[name];
+      const n = histories[name].length;
+      const voice = item.who === "b" ? { voice: "b" } : {};
+      const record = (score) => {
+        histories[name].push({ id: item.id, unit: item.unit, score });
+        skill(name);
+      };
+      const replay = el("button", { type: "button", class: "secondary", onclick: () => play(item.jp, voice) }, "Play again", kbd("R"));
+      let answerArea;
+      if (name === "imitate") {
+        const result = el("div", { class: "result" });
+        const hold = holdControl("Hold and say it", async (blob, ext) => {
+          result.replaceChildren(el("p", { class: "pending", text: "Checking…" }));
+          try {
+            const r = await api("/api/course/check_text", { method: "POST", body: audioForm(blob, ext, { target: item.jp }) });
+            record(r.band === "good" ? 1 : r.band === "close" ? 0.5 : 0);
+          } catch (err) {
+            result.replaceChildren(el("p", { class: "verdict off", text: String(err.message || err) }));
+          }
+        }, showProblem(result));
+        answerArea = [hold, micRow(), result];
+        frame({
+          title: `Placement: ${info.title}`, index: n, total: 8,
+          body: el("div", { class: "card-body" }, el("p", { class: "prompt", text: info.prompt }),
+            el("div", { class: "lesson-play" }, replay), ...answerArea),
+          actions: [el("button", { type: "button", class: "secondary", onclick: () => record(0) }, "Can't say it"),
+            el("button", { type: "button", class: "secondary", onclick: results }, "Skip this part")],
+          hold,
+        });
+      } else {
+        const input = el("input", { type: "text", class: "produce-input placement-input",
+          placeholder: "In English (empty = don't know)", autocomplete: "off", spellcheck: "true" });
+        const status = el("p", { class: "status" });
+        const submit = async () => {
+          const answer = input.value.trim();
+          input.disabled = true;
+          if (!answer) return record(0);
+          status.textContent = "…";
+          try {
+            const { score } = await postJson("/api/course/placement/judge", { jp: item.jp, expected: item.en, answer, kind: name });
+            record(score);
+          } catch (err) {
+            input.disabled = false;
+            status.textContent = String(err.message || err);
+          }
+        };
+        frame({
+          title: `Placement: ${info.title}`, index: n, total: 8,
+          body: el("div", { class: "card-body" }, el("p", { class: "prompt", text: info.prompt }),
+            el("div", { class: "lesson-play" }, replay),
+            el("form", { class: "produce-form", onsubmit: (e) => { e.preventDefault(); submit(); } }, input,
+              el("button", { type: "submit", class: "secondary" }, "Next")),
+            status),
+          actions: [],
+        });
+        setTimeout(() => input.focus(), 0);
+      }
+      keys.replay = () => play(item.jp, voice);
+      play(item.jp, voice);
+    }
+
+    function imitateIntro() {
+      frame({
+        title: "Placement: Repeat after me",
+        body: el("div", { class: "card-body" },
+          el("p", { class: "lesson-note", text: "Last part: hear a phrase, then hold the bar (or Space) and say it back. It measures how much you can take in and reproduce." }),
+          micRow()),
+        actions: [el("button", { type: "button", class: "secondary", onclick: results }, "Skip (no microphone)"),
+          primaryButton("Start", () => skill("imitate"))],
+        primary: () => skill("imitate"),
+      });
+    }
+
+    async function results() {
+      let r;
+      try {
+        r = await postJson("/api/course/placement/summary", { histories, kana: kanaAnswers });
+      } catch (err) { return fail(err); }
+      const describe = (e) => (e.level < 0.75 ? "before unit 1"
+        : `about unit ${Math.round(e.level)}${e.low !== e.high ? ` (range ${Math.max(0, e.low)}–${e.high})` : ""}`);
+      const rows = Object.entries(r.skills).map(([k, e]) => el("tr", {},
+        el("th", { text: SKILL_INFO[k].title }), el("td", { text: describe(e) })));
+      const kanaRows = Object.entries(r.kana).map(([g, k]) => el("tr", {},
+        el("th", { text: { hiragana: "Hiragana", "hiragana+": "Voiced and blended hiragana", katakana: "Katakana" }[g] }),
+        el("td", { text: `${k.right} of ${k.of}${k.passed ? " (lessons skipped)" : ""}` })));
+      const start = r.known_units
+        ? `Start at unit ${r.start_unit}${unitTitle(r.start_unit) ? `: ${unitTitle(r.start_unit)}` : ""}. Units 1–${r.known_units} are marked as known; their phrases and words come up in reviews over the next two weeks, so anything shaky gets caught.`
+        : "Start at unit 1. The early units are where your answers put you.";
+      const apply = async () => {
+        try {
+          await postJson("/api/course/placement/apply", { histories, kana: kanaAnswers });
+        } catch (err) { return fail(err); }
+        showHome();
+      };
+      frame({
+        title: "Placement result",
+        body: el("div", { class: "card-body" },
+          el("table", { class: "stats-table" }, el("tbody", {}, rows, kanaRows)),
+          el("p", { class: "lesson-note", text: start }),
+          el("p", { class: "status", text: "Chat's difficulty is set from these results too. You can retake the test any time from Settings → Level." })),
+        actions: [el("button", { type: "button", class: "secondary", onclick: showHome }, "Don't apply"), primaryButton("Apply", apply)],
+        primary: apply,
+      });
+    }
+
+    function fail(err) {
+      frame({
+        title: "Placement test",
+        body: el("p", { class: "verdict off", text: String(err.message || err) }),
+        actions: [primaryButton("Back", showHome)],
+        primary: showHome,
+      });
+    }
+
+    intro();
+  }
+  window.KaiwaPlacement = () => runPlacement();
+
   // ---------- new phrases ----------
   function runLearn(unit) {
     let i = 0;
@@ -2010,6 +2212,14 @@
     });
   }
 
+  // Settings → Level → Take the placement test: switch to Learn, then open the test
+  // once the home screen has loaded (otherwise the home render would cover it).
+  document.getElementById("placementOpen")?.addEventListener("click", () => {
+    placementAfterHome = true;
+    const tab = document.querySelector('.tab[data-mode="learn"]');
+    if (tab && document.body.dataset.mode !== "learn") tab.click();
+    else showHome();
+  });
   const autoBox = document.getElementById("autoAdvanceToggle");
   if (autoBox) {
     autoBox.checked = autoAdvance();

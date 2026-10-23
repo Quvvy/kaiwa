@@ -103,6 +103,8 @@ def load_state(path: Path | None = None) -> dict[str, Any]:
         state["grades"] = [r for r in raw["grades"] if isinstance(r, dict)][-grader.ROWS_KEPT:]
     if isinstance(raw.get("grader"), dict):
         state["grader"] = raw["grader"]
+    if isinstance(raw.get("placement"), dict):
+        state["placement"] = raw["placement"]
     if isinstance(raw.get("log"), list):
         state["log"] = [r for r in raw["log"] if isinstance(r, dict)][-LOG_KEPT:]
     if isinstance(raw.get("timing"), dict):
@@ -748,6 +750,8 @@ def today_payload(*, path: Path | None = None) -> dict[str, Any]:
         "phrases_pool": [{"jp": _PHRASES[i]["jp"], "en": _PHRASES[i]["en"]} for i in learned_phrase_ids(state)],
         "recap": recap_cards(state),
         "retention": retention(state),
+        "placement": state.get("placement"),
+        "unit_titles": [u["title"] for u in UNITS],
         **plan_today(state),
     }
 
@@ -847,6 +851,72 @@ def course_stats(*, path: Path | None = None) -> dict[str, Any]:
         "target": round(100 * srs.SCHEDULER.desired_retention),
         "grading": grader.describe(state["grader"] or grader.tune(state["grades"])),
     }
+
+
+PLACED_STABILITY = 4.0   # days: soon enough that the first review checks the placement
+PLACED_SPREAD_DAYS = 14  # first reviews of placed material spread over two weeks
+
+
+def apply_placement(result: dict[str, Any], *, path: Path | None = None) -> dict[str, Any]:
+    """Mark what the placement test showed as known. Only ever adds: existing cards and
+    progress are left alone, so retaking the test can't wipe anything."""
+    from kaiwa.course import placement as pl
+
+    known_units = max(0, min(len(UNITS), int(result.get("known_units") or 0)))
+    kana = result.get("kana") or {}
+    today = _today()
+    earlier = (today - timedelta(days=1)).isoformat()  # not "today", so today's plan still offers a kana lesson
+
+    def apply(state: dict[str, Any]) -> dict[str, Any]:
+        n = 0
+
+        def place(cid: str) -> None:
+            nonlocal n
+            if cid not in state["cards"]:
+                due = today + timedelta(days=1 + n % PLACED_SPREAD_DAYS)
+                state["cards"][cid] = srs.placed_card(PLACED_STABILITY, due)
+                n += 1
+
+        for unit in UNITS[:known_units]:
+            row = state["units"].setdefault(unit["id"], {})
+            for step in unit_steps(unit):
+                row.setdefault(step, True)
+                row.setdefault(f"{step}_on", earlier)
+            row.setdefault("done_at", datetime.now(timezone.utc).isoformat())
+            row["placed"] = True
+            for p in unit["phrases"]:
+                for skill in SKILLS:
+                    place(f"{p['id']}:{skill}")
+            for w in unit.get("words", []):
+                place(f"{w['id']}:mean")
+        skipped = []
+        for group in kana.values():
+            if group.get("passed"):
+                for lid in group.get("lessons", []):
+                    if lid not in state["kana"]:
+                        state["kana"][lid] = earlier
+                        skipped.append(lid)
+                        for ch, _ in LESSON_BY_ID[lid]["kana"]:
+                            place(f"kana.{ch}:read")
+        state["placement"] = {"date": today.isoformat(), "known_units": known_units,
+                              "skills": result.get("skills", {}), "kana_skipped": skipped}
+        return {"known_units": known_units, "cards_added": n, "kana_skipped": skipped}
+
+    summary = _with_state(apply, path)
+
+    # The chat side reads the learner profile: set its levels from the measured skills.
+    from kaiwa import learner_profile as lp
+
+    skills = result.get("skills") or {}
+    comp = min([skills[s]["level"] for s in ("words", "sentences") if s in skills] or [0])
+    speak = skills.get("imitate", {}).get("level", comp)
+    profile = lp.load_profile()
+    lp.apply_manual_override(profile, comprehension_level=pl.jlpt_level(comp), speaking_level=pl.jlpt_level(speak),
+                             confidence=0.75)
+    profile.placement_completed = True
+    profile.placement = {"source": "placement test", "units": round(comp, 1), "date": today.isoformat()}
+    lp.save_profile(profile)
+    return summary
 
 
 def known_phrases_for_chat(*, limit: int = 40, path: Path | None = None) -> list[dict[str, str]]:

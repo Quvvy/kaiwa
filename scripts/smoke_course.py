@@ -360,6 +360,48 @@ def HARD_RANGE_OK(x):
     return grader.HARD_RANGE[0] <= x <= grader.HARD_RANGE[1]
 
 
+def placement_test() -> None:
+    import random
+    import statistics
+
+    from kaiwa.course import placement as pl
+
+    _check(len(pl.BANK["words"]) > 300 and len(pl.BANK["sentences"]) > 80, "placement item banks come from the course")
+    rng = random.Random(3)
+    errors = []
+    for true in (0, 3, 8, 14, 19):
+        for _ in range(20):
+            h = []
+            while (it := pl.next_item("words", h, rng)) is not None:
+                h.append({"id": it["id"], "unit": it["unit"], "score": 1.0 if rng.random() < pl._p_correct(true, it["unit"]) else 0.0})
+            _check(len(h) <= pl.MAX_ITEMS, "each skill stops within its item limit")
+            errors.append(abs(pl.estimate(h)["level"] - true))
+    _check(statistics.mean(errors) < 1.2, f"simulated learners are placed within ~1 unit (mean error {statistics.mean(errors):.2f})")
+    _check(pl.judge_word_locally("I'm off (leaving home)", "im off") == 1.0 and pl.judge_word_locally("cat", "dog") is None,
+           "word meanings: clear matches are judged locally, unclear ones go to Flash")
+
+    summary = pl.summarize(
+        {"words": [{"id": "x", "unit": u, "score": 1.0 if u <= 4 else 0.0} for u in (2, 4, 5, 6, 3, 5)],
+         "sentences": [{"id": "y", "unit": u, "score": 1.0 if u <= 5 else 0.0} for u in (3, 5, 6, 7, 4, 6)]},
+        [{"group": "hiragana", "correct": True}] * 6 + [{"group": "katakana", "correct": False}] * 6)
+    _check(summary["known_units"] in (3, 4, 5) and summary["kana"]["hiragana"]["passed"] and not summary["kana"]["katakana"]["passed"],
+           f"summary: start from the lower comprehension estimate (known {summary['known_units']}), hiragana passed, katakana not")
+    with tempfile.TemporaryDirectory() as raw:
+        path = Path(raw) / "course_state.json"
+        course_state.complete_step("u1", "learn", path=path)
+        before = course_state.load_state(path)["cards"]["u1.ohayou:listen"]
+        applied = course_state.apply_placement(summary, path=path)
+        st = course_state.load_state(path)
+        _check(st["cards"]["u1.ohayou:listen"] == before, "placement never overwrites existing cards")
+        _check(all(course_state.unit_done(st, u) for u in UNITS[:summary["known_units"]]), "placed units are marked done")
+        _check(course_state.next_unit(st)["id"] == UNITS[summary["known_units"]]["id"], "the course starts after the placed units")
+        _check("h1" in st["kana"] and "k1" not in st["kana"], "passed kana lessons are skipped, failed ones aren't")
+        dues = sorted({c["due"] for cid, c in st["cards"].items() if c.get("placed")})
+        _check(applied["cards_added"] > 50 and len(dues) >= 10 and dues[0] > course_state._today().isoformat(),
+               "placed cards start as reviews spread over the next two weeks")
+        _check(st["placement"]["known_units"] == summary["known_units"], "the result is remembered")
+
+
 def pacing() -> None:
     real_today = course_state._today
     day = [real_today()]
@@ -417,6 +459,7 @@ def main() -> None:
     leeches_and_retention()
     undo_and_regrade()
     grader_tuning()
+    placement_test()
     pacing()
     story_checks()
     sentence_checks()

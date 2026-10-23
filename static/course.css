@@ -1501,3 +1501,19 @@ body:not([data-mode="learn"]) .ask-dock {
   font-size: 13.5px;
   line-height: 1.6;
 }
+
+.home-placement {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface-2);
+  font-size: 13.5px;
+}
+
+.placement-input {
+  max-width: 420px;
+}
