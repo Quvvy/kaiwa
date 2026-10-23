@@ -16,15 +16,16 @@ Effort: **S** = under an hour, **M** = an afternoon, **L** = a few sessions.
 
 ## P1 — Decide what Kaiwa is, then cut
 
-- [ ] **S** Write the product in one sentence at the top of the README. Every item below is judged against it.
-- [ ] **M** Merge Learn into Practice: one tab, one "Start", with the line picker as an option inside it. Fix starter lines leaking into "Things you can say" (flagged in `repro_bugs.py`).
-- [ ] **M** Cut the Tutor settings down to the knobs a learner understands. Six of them control the same thing today: Correction style, Language help, Help language, Register, Naturalness and Personality.
+- [x] **S** Write the product in one sentence at the top of the README. Every item below is judged against it.
+- [x] **M** Merge Learn into Practice: one tab, one "Start", with the line picker as an option inside it.
+  - The "starter leak" in `repro_bugs.py` was a wrong check (it expected a replaced, unfinished starter to count). Fixed the check; 9 known BUG lines now.
+- [x] **M** Cut the Tutor settings down to the knobs a learner understands. Six of them control the same thing today: Correction style, Language help, Help language, Register, Naturalness and Personality.
   - Suggested: keep Personality, Casual/Formal and English help on/off.
   - Fold the rest into the prompt's defaults.
-- [ ] **S** Remove Model routing (Flash/Pro) from the UI and keep it as an env var.
-- [ ] **S** Cut the themes from 15 to about 3 (one dark, one light, one extra).
-- [ ] **M** Decide on Profiles. In a single-user app, hide them behind Import/Export or drop them.
-- [ ] **M** Delete dead code:
+- [x] **S** Remove Model routing (Flash/Pro) from the UI and keep it as an env var (`MODEL_ROUTING`).
+- [x] **S** Cut the themes from 15 to 3: Night, Day, Sage. Retired themes fall back to Night.
+- [x] **M** Decide on Profiles: dropped. Settings → Your data keeps Export/Import/Reset, each backing up to `profiles/_backups/` first. Old extra profile folders stay on disk, hidden.
+- [x] **M** Delete dead code:
   - the Phase 1.5 score routes (`/api/practice`, `/api/practice/next`), `practice/scoring.py`, `practice/phrases.py` and `practice_tip`
   - the retired `TRY:` / `better_phrase` path
   - the hardcoded `memory_updated: False`
@@ -32,7 +33,7 @@ Effort: **S** = under an hour, **M** = an afternoon, **L** = a few sessions.
 ## P2 — Learning experience
 
 - [ ] **S** Fix the skip-Place-me trap. `governor_pitch` returns `"unknown"` whenever placement isn't done (`persona.py:752`), so Easy stays at the lowest level forever. Let chat evidence (flow streaks) raise the level without the quiz.
-- [ ] **S** Fix the default persona clash: "Patient tutor / やさしい先生" against the ため口 friend register. Default to Friend, or make the two agree.
+- [ ] **S** Fix the default persona clash (also seen live: Practice sittings speak です・ます even with Casual register): "Patient tutor / やさしい先生" against the ため口 friend register. Default to Friend, or make the two agree.
 - [ ] **L** Have the model judge understanding and corrections instead of regex. One structured reply per turn: the spoken text, then a short trailing tag (understood? / needs help? / one recast). This replaces:
   - the `infer_learner_state` / `infer_help_type` regexes (which misfire on 意味, help, ゆっくり and short answers like 犬)
   - the two hardcoded recast families in `wo_ga.py` (を好き→が好き and 眠り→眠い), so recasts and Practice cards work for any mistake
@@ -54,7 +55,7 @@ Effort: **S** = under an hour, **M** = an afternoon, **L** = a few sessions.
 - [ ] **S** Trim the Chat empty state to a single hint line.
 - [ ] **M** Hide internals in Settings: `pre_n5` → "Beginner", no raw ISO timestamps, no "confidence 83%", "Extracts: 3", "id eli" or "Flash assessments".
 - [ ] **M** One save model: autosave everything, or one Save per page. Today there are four Save buttons plus a "Loaded" status line.
-- [ ] **S** Rename the Chat actions so they're obvious: Replay → "Hear again", Again → "Redo this chat", and keep Simpler.
+- [x] **S** Rename the Chat actions so they're obvious. Already done in the August WIP: "Hear that again" and "Same questions", plus Simpler.
 - [ ] **S** Fix the defaults: the PTT key is F24 (most keyboards don't have it), so prompt for a bind on first enable. Blip volume defaults to 350%; set it to 100%.
 
 ## P4 — Code health
@@ -64,6 +65,7 @@ Effort: **S** = under an hour, **M** = an afternoon, **L** = a few sessions.
 - [ ] **L** Split `static/index.html` (6,257 lines) into `app.css` plus a few JS modules (chat, practice, settings). No build step needed.
 - [ ] **M** Turn the smoke scripts into pytest. They already pass and already fail loudly on a broken check. Make `repro_bugs.py` fail when a bug fires (10 known BUG lines today).
 - [ ] **S** Make `KAIWA_DATA_DIR` fully isolated. It still copies the repo `.env` key and `data/profiles` into whatever folder it points at.
+- [ ] **S** Stop polling `/api/ptt/events` and `/api/ptt/state` every few hundred ms when running in a plain browser, where global PTT can't work.
 - [ ] **M** Speed up cold start (about 53 s in the last log: TTS 29 s, API 20 s). Start the API and the TTS engine in parallel, and open the window before Whisper finishes loading.
 - [ ] **M** Shrink the docs.
   - Rewrite the README Notes section in plain English.
