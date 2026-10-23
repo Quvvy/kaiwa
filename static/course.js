@@ -593,6 +593,7 @@
               el("button", { type: "button", class: "lesson-primary", onclick: runNext },
                 s.studied_today ? "Continue" : "Start today's lesson", kbd("Enter")))
           : el("p", { class: "home-done", text: "Done for today. More tomorrow." }),
+        today.retention ? retentionLine(today.retention) : null,
         today.catching_up
           ? el("p", { class: "home-note", text: "Reviews only today: there's a backlog to clear first. New lessons are still one click away below." })
           : null,
@@ -608,6 +609,16 @@
           " Show romaji for kana you haven't learned"),
       ),
     );
+  }
+  /** "You remember 88% of reviews" with a per-kind breakdown in the tooltip. */
+  function retentionLine(r) {
+    const parts = Object.entries(r.by_kind).map(([k, v]) => `${k} ${v}%`).join(", ");
+    const tip = `Out of ${r.reviews} reviews in the last ${r.days} days. Kaiwa aims for ${r.target}%: `
+      + `higher means reviews could be spread further, lower means more help is due.`
+      + (parts ? ` By kind: ${parts}.` : "")
+      + (r.leeches ? ` ${r.leeches} card${r.leeches === 1 ? " is" : "s are"} getting extra help.` : "");
+    return el("p", { class: "home-retention", "data-tip": tip },
+      el("strong", { text: `${r.percent}%` }), ` remembered in reviews (last ${r.days} days)`);
   }
   function planRow(name, detail, isDone, onOpen, openLabel) {
     return el("li", { class: "plan-row" + (isDone ? " done" : "") },
@@ -785,7 +796,42 @@
         }).catch(() => {});
       }
       index += 1;
+      if (card.leech && !card.repeat && card.kind !== "sentence") return leechHelp(card);
       next();
+    }
+
+    /**
+     * After answering a card you keep forgetting: a new way in (its parts and a
+     * memory hook, written once by Flash and kept), then on with the review.
+     */
+    async function leechHelp(card) {
+      const item = card.word || card.phrase || (card.kana && { jp: card.kana.char, en: card.kana.ro });
+      const hookBox = el("div", { class: "leech-hook" }, el("p", { class: "pending", text: "Writing a memory hook…" }));
+      frame({
+        title, ...counter(),
+        body: el("div", { class: "card-body leech" },
+          el("p", { class: "leech-note", text: "This one keeps slipping. Here's another way in." }),
+          el("p", { class: "kana-big kana-word", lang: "ja", text: item.jp }),
+          el("p", { class: "phrase-en", text: item.en }),
+          playRow(item.jp),
+          hookBox),
+        actions: [primaryButton("Continue", next)],
+        primary: next,
+        ask: { screen: "leech help", jp: item.jp, en: item.en },
+      });
+      keys.replay = () => play(item.jp);
+      play(item.jp);
+      const here = onThisScreen();
+      let hook = card.hook;
+      if (!hook) {
+        try { hook = (await postJson("/api/course/hook", { card_id: card.card_id })).hook; } catch (_) { hook = null; }
+      }
+      if (!here()) return;
+      hookBox.replaceChildren(...(hook ? [
+        el("p", { class: "leech-hook-text", text: hook.hook }),
+        hook.parts.length ? el("table", { class: "ask-breakdown" }, el("tbody", {}, hook.parts.map((b) =>
+          el("tr", {}, el("td", { lang: "ja", text: b.jp }), el("td", { text: b.en }))))) : null,
+      ].filter(Boolean) : [el("p", { class: "status", text: "No hook this time; the Ask box can explain it." })]));
     }
     function counter() {
       return { index: Math.min(index, queue.length - 1), total: queue.length };

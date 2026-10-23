@@ -53,6 +53,15 @@ def _today() -> date:
 
 MAX_QUESTIONS_KEPT = 200
 
+# Leeches: cards forgotten this many times after being learned get extra help
+# (a breakdown and a memory hook) and go back to recognition until stable.
+LEECH_LAPSES = 4
+LEECH_STABLE_DAYS = 3
+# Review log for retention stats: one small row per real review.
+LOG_KEPT = 3000
+RETENTION_DAYS = 30
+RETENTION_MIN_REVIEWS = 20
+
 # Daily review budget, in rough "seconds/3" units: a kana or word card takes a
 # few seconds, hearing a phrase a little longer, saying one longest. 30 ≈ five
 # minutes. Due cards beyond it wait for later days instead of piling up, so a
@@ -66,7 +75,7 @@ def card_cost(kind: str, skill: str) -> int:
 
 
 def _empty() -> dict[str, Any]:
-    return {"version": 2, "units": {}, "cards": {}, "days": [], "kana": {}, "questions": [], "reviewed": {}, "timing": {}}
+    return {"version": 2, "units": {}, "cards": {}, "days": [], "kana": {}, "questions": [], "reviewed": {}, "timing": {}, "log": []}
 
 
 def load_state(path: Path | None = None) -> dict[str, Any]:
@@ -79,6 +88,8 @@ def load_state(path: Path | None = None) -> dict[str, Any]:
     if isinstance(raw.get("cards"), dict):
         # Leitner cards from before FSRS convert here, keeping their progress.
         state["cards"] = {k: srs.ensure(v) for k, v in raw["cards"].items() if isinstance(v, dict)}
+    if isinstance(raw.get("log"), list):
+        state["log"] = [r for r in raw["log"] if isinstance(r, dict)][-LOG_KEPT:]
     if isinstance(raw.get("timing"), dict):
         state["timing"] = {str(k): [int(x) for x in v if str(x).isdigit()] for k, v in raw["timing"].items() if isinstance(v, list)}
     if isinstance(raw.get("days"), list):
@@ -256,7 +267,14 @@ def grade(
             reps=int(card.get("reps") or 0), times=state["timing"].get(fmt, []),
         )
         srs.record_time(state["timing"], fmt, ms, correct and not (helped or guessed))
-        card = srs.review(card, rating)
+        if not srs.is_learning(card):
+            # Retention only counts real reviews: was a learned card still remembered?
+            state["log"] = (state["log"] + [{
+                "d": _today().isoformat(), "k": kind[0] if kind[0] != "phrase" else f"phrase:{kind[2]}",
+                "ok": rating != srs.AGAIN,
+            }])[-LOG_KEPT:]
+        extras = {k: v for k, v in card.items() if k == "hook"}
+        card = {**srs.review(card, rating), **extras}
         state["cards"][card_id] = card
         _mark_day(state)
         soon = srs.due_at(card) - datetime.now(timezone.utc) < timedelta(minutes=30)
@@ -282,7 +300,60 @@ def answer_format(kind: str, skill: str, card: dict[str, Any]) -> str:
     """
     if kind == "phrase":
         return "speak" if skill == "speak" else "choice"
+    if is_leech(card) and srs.stability(card) < LEECH_STABLE_DAYS:
+        return "choice"  # a leech goes back to recognition until it holds again
     return "produce" if srs.known(card) else "choice"
+
+
+def is_leech(card: dict[str, Any]) -> bool:
+    return int(card.get("lapses") or 0) >= LEECH_LAPSES
+
+
+def save_hook(card_id: str, hook: dict[str, Any], *, path: Path | None = None) -> None:
+    """Keep a leech's memory hook so it's written once, not on every review."""
+
+    def apply(state: dict[str, Any]) -> None:
+        if card_id in state["cards"]:
+            state["cards"][card_id]["hook"] = hook
+
+    _with_state(apply, path)
+
+
+def card_item(card_id: str) -> dict[str, Any] | None:
+    """What a card is about (for writing its hook): kind, Japanese, meaning or reading."""
+    kind = _card_kind(card_id)
+    if kind is None:
+        return None
+    payload = _card_payload(kind[0], kind[1])
+    if kind[0] == "kana":
+        return {"kind": "kana", "jp": payload["kana"]["char"], "en": payload["kana"]["ro"]}
+    item = payload.get("phrase") or payload.get("word")
+    return {"kind": kind[0], "jp": item["jp"], "en": item["en"], "note": item.get("note", "")}
+
+
+def retention(state: dict[str, Any], *, days: int = RETENTION_DAYS) -> dict[str, Any] | None:
+    """Share of real reviews (learned cards) still remembered, overall and by kind.
+
+    None until there are enough reviews to mean something. FSRS aims for 90%.
+    """
+    since = (_today() - timedelta(days=days)).isoformat()
+    rows = [r for r in state["log"] if str(r.get("d")) >= since]
+    if len(rows) < RETENTION_MIN_REVIEWS:
+        return None
+    groups = {"kana": "kana", "word": "words", "phrase:listen": "phrases heard", "phrase:speak": "phrases said"}
+    by_kind = {}
+    for key, label in groups.items():
+        part = [r for r in rows if r.get("k") == key]
+        if len(part) >= 5:
+            by_kind[label] = round(100 * sum(1 for r in part if r.get("ok")) / len(part))
+    return {
+        "percent": round(100 * sum(1 for r in rows if r.get("ok")) / len(rows)),
+        "reviews": len(rows),
+        "days": days,
+        "target": round(100 * srs.SCHEDULER.desired_retention),
+        "by_kind": by_kind,
+        "leeches": sum(1 for c in state["cards"].values() if is_leech(c)),
+    }
 
 
 def _card_row(card_id: str, kind: tuple[str, str, str], card: dict[str, Any]) -> dict[str, Any]:
@@ -290,6 +361,8 @@ def _card_row(card_id: str, kind: tuple[str, str, str], card: dict[str, Any]) ->
         "card_id": card_id, "kind": kind[0], "skill": kind[2],
         "format": answer_format(kind[0], kind[2], card),
         "stability": round(srs.stability(card), 1),
+        "leech": is_leech(card),
+        "hook": card.get("hook"),
         **_card_payload(kind[0], kind[1]),
     }
 
@@ -554,6 +627,7 @@ def today_payload(*, path: Path | None = None) -> dict[str, Any]:
         "words_pool": [{"jp": w["jp"], "en": w["en"]} for wid, w in _WORDS.items() if f"{wid}:mean" in state["cards"]],
         "phrases_pool": [{"jp": _PHRASES[i]["jp"], "en": _PHRASES[i]["en"]} for i in learned_phrase_ids(state)],
         "recap": recap_cards(state),
+        "retention": retention(state),
         **plan_today(state),
     }
 

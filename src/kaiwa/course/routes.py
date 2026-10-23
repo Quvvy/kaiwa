@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 
 from kaiwa import stt, tts
 from kaiwa.config import get_settings
-from kaiwa.course import ask, coach, kana_judge, prerender, sentences, state, stories
+from kaiwa.course import ask, coach, hooks, kana_judge, prerender, sentences, state, stories
 from kaiwa.course.kana import KANA_ROMAJI
 from kaiwa.course.speech_check import check_phrase, normalize
 from kaiwa.secrets_store import user_data_dir
@@ -47,6 +47,10 @@ class GradeBody(BaseModel):
     guessed: bool = False  # pressed "I guessed"
     band: str = ""         # speech check: good / close / off
     fmt: str = ""          # answer format, for per-format speed baselines
+
+
+class HookBody(BaseModel):
+    card_id: str
 
 
 class KanaBody(BaseModel):
@@ -272,6 +276,22 @@ async def review_sentences(body: SentencesBody) -> dict[str, Any]:
         sentences.generate, get_settings(), targets=targets, known_words=known_words, known_phrases=known_phrases
     )
     return {"sentences": items}
+
+
+@router.post("/hook")
+async def leech_hook(body: HookBody) -> dict[str, Any]:
+    """A memory hook and breakdown for a card the learner keeps forgetting (cached)."""
+    item = state.card_item(body.card_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="Unknown card")
+    cached = (state.load_state()["cards"].get(body.card_id) or {}).get("hook")
+    if cached:
+        return {"hook": cached}
+    hook = await asyncio.to_thread(hooks.write_hook, get_settings(), item)
+    if hook is None:
+        raise HTTPException(status_code=502, detail="Couldn't write a memory hook this time.")
+    await asyncio.to_thread(state.save_hook, body.card_id, hook)
+    return {"hook": hook}
 
 
 @router.post("/kana")

@@ -1193,3 +1193,35 @@ body:not([data-mode="learn"]) .ask-dock {
   min-height: 30px;
   font-size: 13px;
 }
+
+/* ---------- leeches and retention ---------- */
+.leech-note {
+  color: var(--warn);
+  font-weight: 600;
+}
+
+.leech-hook {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border-left: 3px solid var(--warn);
+  background: var(--warn-soft);
+  border-radius: 0 var(--radius) var(--radius) 0;
+}
+
+.leech-hook-text {
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.home-retention {
+  font-size: 13.5px;
+  color: var(--ink-2);
+  width: max-content;
+  cursor: help;
+}
+
+.home-retention strong {
+  color: var(--ink);
+}

@@ -233,6 +233,37 @@ def auto_grades() -> None:
     _check(r(ms=9000, times=[3000] * 3) == srs.GOOD, "speed is ignored until there's a baseline")
 
 
+def leeches_and_retention() -> None:
+    with tempfile.TemporaryDirectory() as raw:
+        path = Path(raw) / "course_state.json"
+        course_state.complete_step("u1", "words", path=path)
+        cid = "u1w.asa:mean"
+        st = course_state.load_state(path)
+        st["cards"][cid] = srs.from_legacy({"box": 3, "due": "2000-01-01", "reps": 6, "lapses": 3})
+        course_state.save_state(st, path)
+        _check(not course_state.is_leech(course_state.load_state(path)["cards"][cid]), "three lapses: not a leech yet")
+        course_state.grade(cid, correct=False, path=path)  # a fourth lapse on a learned card
+        card = course_state.load_state(path)["cards"][cid]
+        _check(course_state.is_leech(card), "a fourth lapse makes it a leech")
+        _check(course_state.answer_format("word", "mean", card) == "choice", "a weak leech goes back to multiple choice")
+        course_state.save_hook(cid, {"hook": "Asa: a sunrise.", "parts": []}, path=path)
+        course_state.grade(cid, correct=True, ms=2000, path=path)
+        _check(course_state.load_state(path)["cards"][cid].get("hook", {}).get("hook") == "Asa: a sunrise.",
+               "a saved hook survives the next review")
+
+        st = course_state.load_state(path)
+        _check(course_state.retention(st) is None, "no retention figure until there are enough reviews")
+        today = course_state._today().isoformat()
+        st["log"] = [{"d": today, "k": "word", "ok": i % 10 != 0} for i in range(30)] + [{"d": "2000-01-01", "k": "word", "ok": False}] * 50
+        r = course_state.retention(st)
+        _check(r is not None and r["percent"] == 90 and r["reviews"] == 30, "retention: 27 of 30 recent reviews = 90% (old ones ignored)")
+        _check(r["by_kind"].get("words") == 90 and r["target"] == 90 and r["leeches"] == 1, "per-kind figures, the target, and the leech count")
+        # Learning-step answers don't count toward retention.
+        before = len(course_state.load_state(path)["log"])
+        course_state.grade("u1w.hiru:mean", correct=False, path=path)  # still a new card
+        _check(len(course_state.load_state(path)["log"]) == before, "learning-step misses don't count against retention")
+
+
 def pacing() -> None:
     real_today = course_state._today
     day = [real_today()]
@@ -287,6 +318,7 @@ def main() -> None:
     speech()
     spaced_review()
     auto_grades()
+    leeches_and_retention()
     pacing()
     story_checks()
     sentence_checks()
