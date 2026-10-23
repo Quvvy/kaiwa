@@ -897,7 +897,10 @@
    * appear after that first listen too, and a miss offers another listen, not text.
    */
   function listenView({ title, dialogue: d, questions: qs, doneLabel, onDone }) {
-    const voice = (line) => ({ voice: line.who === "b" ? "b" : "a" });
+    // Up to four speakers: A and C on the left, B and D on the right, each its own voice.
+    const who = (line) => ("abcd".includes(line.who) && line.who ? line.who : "a");
+    const side = (line) => ("bd".includes(who(line)) ? "right" : "left");
+    const voice = (line) => ({ voice: who(line) });
     prefetch(d.lines.map((line) => [line.jp, voice(line)]));
     const here = () => thread.isConnected;
     let playing = false;
@@ -930,12 +933,12 @@
         el("span", { class: "bubble-icon", "aria-hidden": "true" }),
         waveform(line.jp),
         textBox);
-      const row = el("div", { class: `msg msg-${line.who === "b" ? "b" : "a"}`, hidden: true },
-        el("span", { class: "msg-avatar", text: line.who === "b" ? "B" : "A" }),
+      const row = el("div", { class: `msg msg-${side(line)} who-${who(line)}`, hidden: true },
+        el("span", { class: "msg-avatar", text: who(line).toUpperCase() }),
         bubble, peek);
       return { row, bubble, peek };
     });
-    const typing = el("div", { class: "msg msg-a typing", hidden: true },
+    const typing = el("div", { class: "msg msg-left typing", hidden: true },
       el("span", { class: "msg-avatar" }), el("span", { class: "typing-dots" }, el("i"), el("i"), el("i")));
     thread.append(...bubbles.map((b) => b.row), typing);
 
@@ -967,7 +970,7 @@
         const b = bubbles[idx];
         if (idx >= revealed) {
           // Lines arrive as they're spoken, like a conversation happening now.
-          typing.className = `msg msg-${d.lines[idx].who === "b" ? "b" : "a"} typing`;
+          typing.className = `msg msg-${side(d.lines[idx])} typing`;
           typing.hidden = false;
           thread.append(typing);
           await wait(450);

@@ -238,7 +238,7 @@ def resolve_speaker_id(
 _CACHE_MAX = 300
 _cache: OrderedDict[tuple, bytes] = OrderedDict()
 _cache_lock = threading.Lock()
-_alt_speaker: dict[tuple[str, int], int] = {}
+_alt_speaker: dict[tuple[str, int, int], int] = {}
 
 
 def _disk_path(key: tuple):
@@ -296,18 +296,42 @@ def synthesize_cached(
     return wav
 
 
-def alternate_speaker(settings: Settings, *, engine: str, primary: int) -> int:
-    """A second voice for dialogues: another character if possible, else another style."""
+# Dialogue cast, clearest first. Measured on the bundled AivisSpeech voices
+# (harmonics-to-noise ratio and spectral flatness of the same sentence):
+# 阿井田 茂 is the clearest male voice; 凛音エル and 桜音 the clearest female.
+# fumifumi (breathy), コハク (airy) and にせ (rough) are left out on purpose.
+DIALOGUE_CAST = {
+    "aivisspeech": [1310138980, 1388823424, 376644064, 1325133120, 888753760],
+}
+# Styles that are hard to understand for a learner, whatever the engine.
+_UNCLEAR_STYLE = ("ささやき", "囁", "ひそひそ", "ヒソヒソ", "ウィスパー", "whisper", "ねむ", "せつな", "あまあま", "Far")
+
+
+def dialogue_speaker(settings: Settings, *, engine: str, primary: int, slot: int) -> int:
+    """Voice for speaker `slot` (1 = B, 2 = C…) in a dialogue whose speaker A is `primary`.
+
+    Each slot gets a different character from A and from the earlier slots, taken
+    from the curated clear cast when the engine has one, else the first clear-
+    sounding style of another character.
+    """
     eng = normalize_engine(engine, settings.tts_engine)
-    key = (eng, primary)
+    key = (eng, primary, slot)
     if key in _alt_speaker:
         return _alt_speaker[key]
     try:
         voices = flatten_speaker_styles(list_speakers(settings, engine=eng))
     except Exception:
         return primary
-    primary_name = next((v["name"] for v in voices if v["id"] == primary), None)
-    other = next((v for v in voices if v["name"] != primary_name), None)
-    other = other or next((v for v in voices if v["id"] != primary), None)
-    _alt_speaker[key] = int(other["id"]) if other else primary
+    name_of = {int(v["id"]): v["name"] for v in voices}
+    taken = [name_of.get(primary)]
+    picks: list[int] = []
+    cast = [i for i in DIALOGUE_CAST.get(eng, []) if i in name_of]
+    others = [int(v["id"]) for v in voices if not any(w in str(v.get("style", "")) for w in _UNCLEAR_STYLE)]
+    for candidate in cast + others:
+        if name_of.get(candidate) not in taken:
+            picks.append(candidate)
+            taken.append(name_of.get(candidate))
+        if len(picks) >= slot:
+            break
+    _alt_speaker[key] = picks[slot - 1] if len(picks) >= slot else primary
     return _alt_speaker[key]

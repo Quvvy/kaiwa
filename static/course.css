@@ -492,11 +492,11 @@
   max-width: 85%;
 }
 
-.msg-a {
+.msg-left {
   align-self: flex-start;
 }
 
-.msg-b {
+.msg-right {
   align-self: flex-end;
   flex-direction: row-reverse;
 }
@@ -514,9 +514,20 @@
   color: var(--ink-2);
 }
 
-.msg-b .msg-avatar {
+.msg-right .msg-avatar {
   background: var(--accent);
   color: var(--accent-ink);
+}
+
+/* Third and fourth speakers keep their side but get their own avatar colour. */
+.who-c .msg-avatar {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+
+.who-d .msg-avatar {
+  background: var(--warn-soft);
+  color: var(--warn);
 }
 
 .bubble-voice {
@@ -532,7 +543,7 @@
   cursor: pointer;
 }
 
-.msg-b .bubble-voice {
+.msg-right .bubble-voice {
   border-radius: 14px 14px 4px 14px;
   background: var(--accent-soft);
   border-color: color-mix(in srgb, var(--accent) 30%, transparent);

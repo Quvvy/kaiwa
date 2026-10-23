@@ -21,12 +21,16 @@ SLOW_SPEED = 0.75
 _running = threading.Lock()
 
 
+VOICE_SLOTS = "abcd"
+
+
 def speaker_for(settings: Settings, voice: str) -> tuple[int, str]:
-    """(speaker id, engine) for lesson voice "a" (your chosen voice) or "b" (the other speaker)."""
+    """(speaker id, engine) for a dialogue voice: "a" is your chosen voice, "b"–"d" the others."""
     prefs = load_prefs()
     speaker = prefs.voicevox_speaker_id
-    if voice == "b":
-        speaker = tts.alternate_speaker(settings, engine=prefs.tts_engine, primary=speaker)
+    slot = VOICE_SLOTS.find(voice)
+    if slot > 0:
+        speaker = tts.dialogue_speaker(settings, engine=prefs.tts_engine, primary=speaker, slot=slot)
     return speaker, prefs.tts_engine
 
 
@@ -47,7 +51,8 @@ def lesson_lines() -> list[tuple[str, str, float | None]]:
             for ex in point["examples"]:
                 lines.append((ex["jp"], "a", None))
         for line in unit["dialogue"]["lines"]:
-            lines.append((line["jp"], "b" if line.get("who") == "b" else "a", None))
+            who = line.get("who")
+            lines.append((line["jp"], who if who in VOICE_SLOTS else "a", None))
         for task in unit["speak"]:
             lines.append((task["say"], "a", None))
         # Slow versions last: they are only played on request.
