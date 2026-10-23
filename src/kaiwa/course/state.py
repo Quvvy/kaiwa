@@ -269,6 +269,17 @@ def due_cards(state: dict[str, Any], *, limit: int = 20, budget: int | None = No
             continue
         rows.append((int(card.get("box") or 1), str(card.get("due") or ""), card_id, kind))
     rows.sort(key=lambda r: (r[0], r[1]))
+    if budget is not None:
+        # Take turns between kana, words and phrases so one kind never fills the day.
+        lanes: dict[str, list[tuple]] = {}
+        for row in rows:
+            lanes.setdefault(row[3][0], []).append(row)
+        mixed: list[tuple] = []
+        while any(lanes.values()):
+            for lane in lanes.values():
+                if lane:
+                    mixed.append(lane.pop(0))
+        rows = mixed
     picked = []
     left = budget
     for row in rows:
@@ -410,8 +421,28 @@ def today_payload(*, path: Path | None = None) -> dict[str, Any]:
         "kana_known": "".join(sorted(known_chars(state))),
         "kana_pool": [{"char": ch, "ro": KANA_ROMAJI[ch]} for l in KANA_LESSONS if l["id"] in state["kana"]
                       for ch, _ in l["kana"]],
-        "words_pool": [{"jp": w["jp"], "en": w["en"]} for wid, w in _WORDS.items() if f"{wid}:mean" in state["cards"]],
+        "words_pool": [{"jp": w["jp"], "en": w["en"], "pic": w.get("pic", "")} for wid, w in _WORDS.items()
+                       if f"{wid}:mean" in state["cards"]],
     }
+
+
+def word_targets(card_ids: list[str]) -> list[dict[str, str]]:
+    """Word cards → {card_id, jp, en} (other ids are ignored)."""
+    out = []
+    for card_id in card_ids:
+        kind = _card_kind(card_id)
+        if kind and kind[0] == "word":
+            w = _WORDS[kind[1]]
+            out.append({"card_id": card_id, "jp": w["jp"], "en": w["en"]})
+    return out
+
+
+def known_vocab(*, path: Path | None = None) -> tuple[list[str], list[str]]:
+    """(learned words, learned phrases) in Japanese, for generating practice."""
+    state = load_state(path)
+    words = [w["jp"] for wid, w in _WORDS.items() if f"{wid}:mean" in state["cards"]]
+    phrases = [_PHRASES[p]["jp"] for p in learned_phrase_ids(state)]
+    return words, phrases
 
 
 def known_phrases_for_chat(*, limit: int = 40, path: Path | None = None) -> list[dict[str, str]]:

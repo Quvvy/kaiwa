@@ -178,12 +178,24 @@ def story_checks() -> None:
     _check(True, "shuffle keeps the right answer")
 
 
+def sentence_checks() -> None:
+    from kaiwa.course.sentences import contains_word, only_known
+
+    vocab = ["あさ", "いま", "せんせい", "ともだち", "おはようございます。", "おはようございます"]
+    _check(only_known("せんせい、おはようございます。", vocab), "known pieces pass")
+    _check(only_known("ユキさんはともだちです。", vocab), "katakana names and particles pass")
+    _check(not only_known("あさはさむいです。", vocab), "an untaught word (さむい) is rejected")
+    _check(not contains_word("おはようございます。", "いま", vocab), "いま inside ございます doesn't count")
+    _check(contains_word("いまはあさです。", "いま", vocab), "いま on its own counts")
+
+
 def main() -> None:
     content()
     kana_track()
     speech()
     srs()
     story_checks()
+    sentence_checks()
     coach_fallback()
     print("smoke_course ok")
 

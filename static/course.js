@@ -10,7 +10,7 @@
 
   let today = null;
   let showRomaji = readPref("kaiwa_course_romaji", "1") === "1";
-  const keys = { primary: null, hold: null, replay: null, choice: null };
+  const keys = { primary: null, hold: null, replay: null, choice: null, meanings: null, text: null };
 
   // ---------- helpers ----------
   function readPref(key, fallback) {
@@ -74,6 +74,12 @@
     } else if ((e.key === "r" || e.key === "R") && keys.replay && !e.repeat) {
       e.preventDefault();
       keys.replay();
+    } else if ((e.key === "t" || e.key === "T") && keys.text && !e.repeat) {
+      e.preventDefault();
+      keys.text();
+    } else if ((e.key === "m" || e.key === "M") && keys.meanings && !e.repeat) {
+      e.preventDefault();
+      keys.meanings();
     } else if (/^[1-9]$/.test(e.key) && keys.choice && !e.repeat) {
       e.preventDefault();
       keys.choice(Number(e.key) - 1);
@@ -283,11 +289,11 @@
    * One multiple-choice question. Calls onAnswer(right) after showing the result.
    * Number keys pick an option; a right answer moves on by itself.
    */
-  function choiceBlock({ options, answer, onAnswer, jp = false, explain = "" }) {
+  function choiceBlock({ options, answer, onAnswer, jp = false, explain = "", pics = false }) {
     const feedback = el("p", { class: "verdict" });
     let done = false;
     const buttons = options.map((opt, i) =>
-      el("button", { class: "secondary choice", type: "button", lang: jp ? "ja" : null, onclick: () => pick(i) },
+      el("button", { class: "secondary choice" + (pics ? " choice-pic" : ""), type: "button", lang: jp ? "ja" : null, onclick: () => pick(i) },
         el("span", { class: "choice-key", text: String(i + 1) }), String(opt)));
     function pick(i) {
       if (done || i >= options.length) return;
@@ -305,6 +311,15 @@
     pendingChoice = pick; // frame() hands it to the number keys once the screen is up
     return el("div", { class: "choice-block" }, el("div", { class: "choices" }, buttons), feedback);
   }
+  /** Picture choices when this word and at least three others have one; else English. */
+  function meaningChoices(word, pool) {
+    const pics = pool.filter((w) => w.pic && w.jp !== word.jp).map((w) => w.pic);
+    if (word.pic && new Set(pics).size >= 3) {
+      return { options: choicesFor(word.pic, pics), answer: word.pic, pics: true };
+    }
+    return { options: choicesFor(word.en, pool.map((w) => w.en)), answer: word.en, pics: false };
+  }
+
   let pendingChoice = null;
   function wait(ms) {
     return new Promise((r) => setTimeout(r, ms));
@@ -415,6 +430,8 @@
     keys.primary = primary;
     keys.hold = hold ? hold.holdApi : null;
     keys.replay = null;
+    keys.meanings = null;
+    keys.text = null;
     keys.choice = pendingChoice;
     pendingChoice = null;
     const top = el("div", { class: "lesson-top" },
@@ -587,18 +604,44 @@
     const queue = cards.map((c) => ({ ...c, retried: false }));
     let index = 0;
     let right = 0;
-    const total = queue.length;
+    let total = queue.length;
     prefetch(queue.map((c) => [c.phrase ? c.phrase.jp : c.word ? c.word.jp : c.kana.char, {}]));
+
+    // Word cards you haven't reached yet get swapped for short listening sentences
+    // built from them (fetched in the background; the plain cards stay if it fails).
+    const wordIds = queue.filter((c) => c.kind === "word").map((c) => c.card_id);
+    if (wordIds.length >= 2) {
+      postJson("/api/course/sentences", { card_ids: wordIds }).then(({ sentences }) => {
+        for (const s of sentences || []) {
+          const at = s.card_ids.map((id) => queue.findIndex((c, i) => i > index && c.card_id === id && !c.retried));
+          if (at.some((i) => i < 0)) continue; // one of its words is already done
+          for (const i of [...at].sort((a, b) => b - a)) queue.splice(i, 1);
+          queue.splice(Math.min(...at), 0, { kind: "sentence", sentence: s, retried: false,
+            covers: cards.filter((c) => s.card_ids.includes(c.card_id)) });
+          total -= s.card_ids.length - 1;
+          prefetch([[s.jp, {}]]);
+        }
+      }).catch(() => {});
+    }
 
     function next() {
       if (index >= queue.length) return finish();
       const card = queue[index];
-      if (card.kind === "kana") kanaCard(card);
+      if (card.kind === "sentence") sentenceCard(card);
+      else if (card.kind === "kana") kanaCard(card);
       else if (card.kind === "word") wordCard(card);
       else if (card.skill === "listen") listenCard(card);
       else speakCard(card);
     }
     function gradeCard(card, good) {
+      if (card.kind === "sentence") {
+        // One answer grades every word the sentence covered; misses come back as single cards.
+        for (const c of card.covers) postJson("/api/course/grade", { card_id: c.card_id, good }).catch(() => {});
+        if (good) right += 1;
+        else queue.push(...card.covers.map((c) => ({ ...c, retried: true })));
+        index += 1;
+        return next();
+      }
       if (!card.retried) {
         postJson("/api/course/grade", { card_id: card.card_id, good }).catch(() => {});
         if (good) right += 1;
@@ -614,18 +657,20 @@
     }
 
     /** Auto-graded cards (kana, words): answer, see the result, move on. */
-    function choiceCard(card, { prompt, big, bigJp, answer, pool, after, audio }) {
+    function choiceCard(card, { prompt, big, bigJp, answer, pool, options, pics = false, after, audio, extra = null }) {
       const result = el("div", { class: "result" });
       const nextBtn = primaryButton("Next", () => gradeCard(card, lastRight));
       nextBtn.hidden = true;
       let lastRight = false;
       const body = el("div", { class: "card-body" },
-        el("p", { class: "prompt", text: prompt }),
-        el("p", { class: bigJp ? "kana-big" : "prompt-en", lang: bigJp ? "ja" : null, text: big }),
+        prompt ? el("p", { class: "prompt", text: prompt }) : null,
+        big ? el("p", { class: bigJp ? "kana-big" : "prompt-en", lang: bigJp ? "ja" : null, text: big }) : null,
         audio ? playRow(audio) : null,
+        extra,
         choiceBlock({
-          options: choicesFor(answer, pool),
+          options: options || choicesFor(answer, pool),
           answer,
+          pics,
           onAnswer: async (right) => {
             lastRight = right;
             if (after) result.replaceChildren(after());
@@ -644,20 +689,39 @@
       );
       function advance() { keys.primary = null; gradeCard(card, lastRight); }
       frame({ title: "Review", index: Math.min(index, queue.length - 1), total: queue.length, body, actions: [nextBtn],
-        ask: { screen: "review " + card.kind, jp: card.word ? card.word.jp : card.kana ? card.kana.char : "", answer } });
+        ask: { screen: "review " + card.kind, jp: card.word ? card.word.jp : card.kana ? card.kana.char : card.sentence ? card.sentence.jp : "", answer } });
+      if (audio && !card.retried && card.kind === "sentence") play(audio);
       keys.primary = null;
       if (audio) keys.replay = () => play(audio);
+    }
+    function sentenceCard(card) {
+      const s = card.sentence;
+      const text = el("p", { class: "sentence-jp", lang: "ja", hidden: true, text: s.jp });
+      const showText = el("button", { class: "secondary", type: "button", onclick: () => { text.hidden = false; showText.hidden = true; } },
+        "Show text", kbd("T"));
+      choiceCard(card, {
+        prompt: "", big: "", answer: s.en, options: s.choices,
+        audio: s.jp,
+        extra: [el("div", { class: "lesson-play" }, showText), text],
+        after: () => {
+          text.hidden = false;
+          showText.hidden = true;
+          return el("p", { class: "sentence-words" }, s.words.map((w) =>
+            el("span", {}, el("span", { lang: "ja", text: w.jp }), ` ${w.en}`)));
+        },
+      });
+      keys.text = () => showText.click();
     }
     function kanaCard(card) {
       const k = card.kana;
       const pool = (today.kana_pool || []).filter((x) => x.ro !== k.ro).map((x) => x.ro);
-      choiceCard(card, { prompt: "How do you read this?", big: k.char, bigJp: true, answer: k.ro, pool, audio: k.char });
+      choiceCard(card, { prompt: "", big: k.char, bigJp: true, answer: k.ro, pool, audio: k.char });
     }
     function wordCard(card) {
       const w = card.word;
-      const pool = (today.words_pool || []).map((x) => x.en);
+      const m = meaningChoices(w, today.words_pool || []);
       choiceCard(card, {
-        prompt: "What does this word mean?", big: w.jp, bigJp: true, answer: w.en, pool, audio: w.jp,
+        prompt: "", big: w.jp, bigJp: true, answer: m.answer, options: m.options, pics: m.pics, audio: w.jp,
         after: () => needsRomaji(w.jp) ? el("p", { class: "phrase-ro", text: w.ro }) : el("span"),
       });
     }
@@ -1082,6 +1146,7 @@
               el("td", {}, el("button", { class: "secondary line-play", type: "button", "aria-label": "Play", onclick: () => play(w.jp) }, "▶")),
               el("td", { class: "word-jp", lang: "ja", text: w.jp }),
               el("td", { class: "word-ro", text: needsRomaji(w.jp) ? w.ro : "" }),
+              el("td", { class: "word-pic", text: w.pic || "" }),
               el("td", { class: "word-en", text: w.en })))))),
         actions, primary: go,
       });
@@ -1102,13 +1167,12 @@
           title: `Words, unit ${unit.number}`, index: Math.min(n, total - 1), total,
           ask: { screen: "word quiz", jp: w.jp, en: w.en },
           body: el("div", { class: "card-body" },
-            el("p", { class: "prompt", text: "What does it mean?" }),
             el("p", { class: "kana-big kana-word", lang: "ja", text: w.jp }),
             needsRomaji(w.jp) ? el("p", { class: "phrase-ro", text: w.ro }) : null,
             playRow(w.jp),
             choiceBlock({
-              options: choicesFor(w.en, words.map((x) => x.en)),
-              answer: w.en,
+              ...meaningChoices(w, words),
+              explain: w.pic ? w.en : "",
               onAnswer: async (right) => {
                 if (!right && !queue[n].retried) queue.push({ w, retried: true });
                 if (right) { const here = onThisScreen(); await wait(600); if (here()) advance(); }
@@ -1145,18 +1209,44 @@
       const actions = [];
       if (gi > 0) actions.push(el("button", { type: "button", class: "secondary", onclick: () => { gi -= 1; explain(); } }, "Back"));
       actions.push(primaryButton(last ? "Practice" : "Next", go));
+      const list = el("ul", { class: "examples meanings-hidden" }, g.examples.map((ex) => el("li", {},
+        el("button", { class: "secondary line-play", type: "button", "aria-label": "Play", onclick: () => play(ex.jp) }, "▶"),
+        el("span", { class: "example-jp", lang: "ja", text: ex.jp }),
+        el("span", { class: "example-en", text: ex.en }))));
+      const explainBox = el("div", { class: "grammar-explain", hidden: true },
+        g.explain.map((para) => el("p", { class: "grammar-text", text: para })));
+      const meaningsBtn = el("button", { class: "secondary", type: "button", "aria-pressed": "false", onclick: () => {
+        const on = list.classList.toggle("meanings-hidden");
+        meaningsBtn.setAttribute("aria-pressed", String(!on));
+      } }, "Meanings", kbd("M"));
+      const explainBtn = el("button", { class: "secondary", type: "button", "aria-pressed": "false", onclick: () => {
+        explainBox.hidden = !explainBox.hidden;
+        explainBtn.setAttribute("aria-pressed", String(!explainBox.hidden));
+      } }, "Explain");
+      async function playAll() {
+        for (const ex of g.examples) {
+          if (!here()) return;
+          await play(ex.jp);
+          await wait(250);
+        }
+      }
       frame({
         title: `Grammar, unit ${unit.number}`, index: gi, total: points.length,
-        ask: { screen: "grammar", title: g.title, explanation: g.explain, examples: g.examples },
+        ask: { screen: "grammar", title: g.title, rule: g.rule, explanation: g.explain, examples: g.examples },
         body: el("div", { class: "card-body grammar" },
           el("h3", { class: "grammar-title", text: g.title }),
-          g.explain.map((para) => el("p", { class: "grammar-text", text: para })),
-          el("ul", { class: "examples" }, g.examples.map((ex) => el("li", {},
-            el("button", { class: "secondary line-play", type: "button", "aria-label": "Play", onclick: () => play(ex.jp) }, "▶"),
-            el("span", { class: "example-jp", lang: "ja", text: ex.jp }),
-            el("span", { class: "example-en", text: ex.en }))))),
+          list,
+          g.rule ? el("p", { class: "grammar-rule", text: g.rule }) : null,
+          el("div", { class: "lesson-play" },
+            el("button", { class: "secondary", type: "button", onclick: playAll }, "Play all", kbd("R")),
+            meaningsBtn, explainBtn),
+          explainBox),
         actions, primary: go,
       });
+      const here = onThisScreen();
+      keys.replay = playAll;
+      keys.meanings = () => meaningsBtn.click();
+      if (!g.rule) explainBox.hidden = false; // older content without a rule line
     }
 
     // 2. Practice questions with a one-line reason after each answer.
@@ -1175,7 +1265,12 @@
           title: `Grammar practice, unit ${unit.number}`, index: n, total: qs.length,
           ask: { screen: "grammar question", question: q.q, choices: q.choices, correct: answer, explain: q.explain },
           body: el("div", { class: "card-body" },
-            el("p", { class: "question-q", text: q.q }),
+            q.scene
+              ? el("p", { class: "scene", "data-tip": q.q, text: q.scene })
+              : el("p", { class: "question-q", text: q.q }),
+            q.say ? el("div", { class: "scene-line" },
+              el("button", { class: "secondary line-play", type: "button", "aria-label": "Play", onclick: () => play(q.say) }, "▶"),
+              el("span", { lang: "ja", text: q.say })) : null,
             choiceBlock({
               options: shuffle(q.choices), answer, jp: true, explain: q.explain,
               onAnswer: (ok) => {
@@ -1188,6 +1283,7 @@
           actions: [nextBtn],
         });
         keys.primary = null;
+        if (q.say) { keys.replay = () => play(q.say); play(q.say); }
       }
       async function finish() {
         await postJson("/api/course/step", { unit_id: unit.id, step: "grammar" });

@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 
 from kaiwa import stt, tts
 from kaiwa.config import get_settings
-from kaiwa.course import ask, coach, kana_judge, prerender, state, stories
+from kaiwa.course import ask, coach, kana_judge, prerender, sentences, state, stories
 from kaiwa.course.speech_check import check_phrase, normalize
 from kaiwa.secrets_store import user_data_dir
 
@@ -42,6 +42,10 @@ class GradeBody(BaseModel):
 
 class KanaBody(BaseModel):
     lesson_id: str
+
+
+class SentencesBody(BaseModel):
+    card_ids: list[str] = Field(default_factory=list, max_length=20)
 
 
 class AskBody(BaseModel):
@@ -205,6 +209,17 @@ async def ask_question(body: AskBody) -> dict[str, Any]:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     await asyncio.to_thread(state.log_question, result["question"], body.context)
     return result
+
+
+@router.post("/sentences")
+async def review_sentences(body: SentencesBody) -> dict[str, Any]:
+    """Short listening sentences that review several due word cards at once."""
+    targets = await asyncio.to_thread(state.word_targets, body.card_ids)
+    known_words, known_phrases = await asyncio.to_thread(state.known_vocab)
+    items = await asyncio.to_thread(
+        sentences.generate, get_settings(), targets=targets, known_words=known_words, known_phrases=known_phrases
+    )
+    return {"sentences": items}
 
 
 @router.post("/kana")

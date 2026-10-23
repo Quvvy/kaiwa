@@ -858,3 +858,69 @@ body:not([data-mode="learn"]) .ask-panel {
   min-height: 28px;
   font-size: 13px;
 }
+
+/* ---------- Japanese-first bits ---------- */
+.word-pic {
+  font-size: 22px;
+  width: 48px;
+  text-align: center;
+}
+
+.choice-pic {
+  justify-content: flex-start;
+  font-size: 30px;
+  min-height: 54px;
+}
+
+.grammar-rule {
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.grammar-explain {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--surface-2);
+  border-radius: var(--radius);
+}
+
+.examples.meanings-hidden .example-en {
+  visibility: hidden;
+}
+
+.scene {
+  font-size: 44px;
+  line-height: 1.2;
+  cursor: help;
+  width: max-content;
+}
+
+.scene-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-jp);
+  font-size: 22px;
+}
+
+.sentence-jp {
+  font-family: var(--font-jp);
+  font-size: 28px;
+  line-height: 1.4;
+}
+
+.sentence-words {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  color: var(--ink-2);
+  font-size: 13.5px;
+}
+
+.sentence-words [lang="ja"] {
+  font-size: 16px;
+  color: var(--ink);
+}
