@@ -196,11 +196,59 @@ def sentence_checks() -> None:
     _check(contains_word("いまはあさです。", "いま", vocab), "いま on its own counts")
 
 
+def pacing() -> None:
+    real_today = course_state._today
+    day = [real_today()]
+    course_state._today = lambda: day[0]
+
+    def plan(path):
+        return course_state.plan_today(course_state.load_state(path))
+
+    try:
+        with tempfile.TemporaryDirectory() as raw:
+            path = Path(raw) / "course_state.json"
+            _check(plan(path)["plan"] == ["kana", "learn", "words"], "day 1: a short kana lesson fits beside the unit's day one")
+            course_state.complete_kana("h1", path=path)
+            for s in ("learn", "words"):
+                course_state.complete_step("u1", s, path=path)
+            p1 = plan(path)
+            _check(p1["plan"] == [] and p1["day_two_tomorrow"], "grammar, listening and speaking wait for day 2")
+
+            day[0] = real_today() + timedelta(days=1)
+            p2 = plan(path)["plan"]
+            _check(p2[0] == "review" and p2[1:] == ["kana", "grammar", "listen", "speak"], "day 2: reviews, kana, then day two")
+            for s in ("grammar", "listen", "speak"):
+                course_state.complete_step("u1", s, path=path)
+            for lid in ("h2", "h3", "h4", "h5", "h6", "h7", "h8", "h9", "h10"):
+                course_state.complete_kana(lid, path=path)  # jump to h11: fifteen characters
+
+            day[0] = real_today() + timedelta(days=2)
+            st = course_state.load_state(path)
+            st["reviewed"] = {}
+            for card in st["cards"].values():
+                card["due"] = "2099-01-01"  # nothing due, so only the new-item rule decides
+            course_state.save_state(st, path)
+            p3 = plan(path)["plan"]
+            _check(p3 in (["kana"], ["learn", "words"]), "a long kana lesson and a unit's day one alternate")
+
+            st = course_state.load_state(path)
+            for card in st["cards"].values():
+                card["due"] = "2000-01-01"
+            course_state.save_state(st, path)
+            p4 = plan(path)
+            _check(p4["catching_up"] and p4["plan"] == ["review"], "a big backlog means a reviews-only day")
+            cost = sum(course_state.card_cost(c["kind"], c["skill"]) for c in course_state.todays_reviews(course_state.load_state(path)))
+            _check(course_state.DAILY_REVIEW_BUDGET < cost <= course_state.DAILY_REVIEW_BUDGET * 2, "catch-up days get a bigger review budget")
+    finally:
+        course_state._today = real_today
+
+
 def main() -> None:
     content()
     kana_track()
     speech()
     srs()
+    pacing()
     story_checks()
     sentence_checks()
     coach_fallback()

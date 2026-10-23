@@ -177,6 +177,7 @@ def complete_step(unit_id: str, step: str, *, path: Path | None = None) -> dict[
     def apply(state: dict[str, Any]) -> dict[str, Any]:
         row = state["units"].setdefault(unit_id, {})
         row[step] = True
+        row[f"{step}_on"] = _today().isoformat()  # day-two steps wait until after this day
         if step == "learn":
             for p in unit["phrases"]:
                 for skill in SKILLS:
@@ -303,10 +304,84 @@ def due_cards(state: dict[str, Any], *, limit: int = 20, budget: int | None = No
     ]
 
 
+# ---------- pacing ----------
+# New review cards a day can add. A unit's day one is 22-26 (6 phrases, 16-20
+# words) and day two adds none, so this averages ~16 a day. Kana lessons of up
+# to 6-10 characters fit beside a day one; longer ones alternate with units.
+NEW_ITEMS_PER_DAY = 32
+# When the due backlog is worth more than two days of reviews, that day is a
+# catch-up day: no new material is planned, and the review budget doubles.
+CATCH_UP_COST = DAILY_REVIEW_BUDGET * 2
+DAY_ONE_STEPS = ("learn", "words")
+
+
+def due_cost(state: dict[str, Any]) -> int:
+    return sum(card_cost(c["kind"], c["skill"]) for c in due_cards(state, limit=10_000))
+
+
+def catching_up(state: dict[str, Any]) -> bool:
+    return due_cost(state) > CATCH_UP_COST
+
+
 def todays_reviews(state: dict[str, Any]) -> list[dict[str, Any]]:
     """Today's share of due cards: what fits in the budget left after today's reviews."""
     spent = state["reviewed"].get(_today().isoformat(), 0)
-    return due_cards(state, limit=60, budget=max(0, DAILY_REVIEW_BUDGET - spent))
+    budget = DAILY_REVIEW_BUDGET * (2 if catching_up(state) else 1)
+    return due_cards(state, limit=80, budget=max(0, budget - spent))
+
+
+def _new_items(unit: dict[str, Any], step: str) -> int:
+    return {"learn": len(unit["phrases"]), "words": len(unit.get("words", []))}.get(step, 0)
+
+
+def plan_today(state: dict[str, Any]) -> dict[str, Any]:
+    """Which steps today's lesson should run, in order, and why some are held back.
+
+    Rules: reviews first; a unit's day-one steps (phrases, words) and day-two
+    steps (grammar, listening, speaking) fall on different days; new items stay
+    under NEW_ITEMS_PER_DAY, alternating with the kana lesson when both don't fit;
+    on a catch-up day only reviews are planned. Nothing here locks anything: the
+    home screen can still open any step.
+    """
+    today = _today()
+    iso = today.isoformat()
+    yesterday = (today - timedelta(days=1)).isoformat()
+    unit = next_unit(state)
+    kana = next_kana_lesson(state)
+    plan: list[str] = []
+    if todays_reviews(state):
+        plan.append("review")
+    if catching_up(state):
+        return {"plan": plan, "catching_up": True, "day_two_tomorrow": False}
+
+    kana_wanted = bool(kana) and iso not in state["kana"].values()
+    kana_new = len(kana["kana"]) if kana else 0
+    row = state["units"].get(unit["id"], {}) if unit else {}
+    steps = unit_steps(unit) if unit else []
+    day_one = [s for s in steps if s in DAY_ONE_STEPS and not row.get(s)]
+    day_two = [s for s in steps if s not in DAY_ONE_STEPS and not row.get(s)]
+    day_one_today = any(row.get(f"{s}_on") == iso for s in DAY_ONE_STEPS if s in steps)
+    unit_new = sum(_new_items(unit, s) for s in day_one) if unit else 0
+
+    unit_plan: list[str] = []
+    day_two_tomorrow = False
+    if day_one:
+        unit_plan = day_one
+    elif day_two and not day_one_today:
+        unit_plan = day_two
+    elif day_two:
+        day_two_tomorrow = True
+
+    if kana_wanted and unit_plan and unit_new and kana_new + unit_new > NEW_ITEMS_PER_DAY:
+        # Both don't fit: alternate, starting with whichever didn't happen yesterday.
+        if yesterday in state["kana"].values():
+            kana_wanted = False
+        else:
+            unit_plan = []
+    if kana_wanted:
+        plan.append("kana")
+    plan.extend(unit_plan)
+    return {"plan": plan, "catching_up": False, "day_two_tomorrow": day_two_tomorrow}
 
 
 def next_unit(state: dict[str, Any]) -> dict[str, Any] | None:
@@ -422,6 +497,7 @@ def today_payload(*, path: Path | None = None) -> dict[str, Any]:
         "kana_pool": [{"char": ch, "ro": KANA_ROMAJI[ch]} for l in KANA_LESSONS if l["id"] in state["kana"]
                       for ch, _ in l["kana"]],
         "words_pool": [{"jp": w["jp"], "en": w["en"]} for wid, w in _WORDS.items() if f"{wid}:mean" in state["cards"]],
+        **plan_today(state),
     }
 
 

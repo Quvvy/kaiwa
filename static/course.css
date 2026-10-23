@@ -1144,3 +1144,8 @@ body:not([data-mode="learn"]) .ask-dock {
   font-size: 16px;
   color: var(--ink);
 }
+
+.home-note {
+  font-size: 13.5px;
+  color: var(--ink-2);
+}

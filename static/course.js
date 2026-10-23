@@ -466,15 +466,9 @@
 
   // ---------- home ----------
   const STEP_NAMES = { learn: "New phrases", words: "Words", grammar: "Grammar", listen: "Listen", speak: "Speak" };
+  /** Today's steps, decided by the server's pacing (state.plan_today). */
   function planSteps() {
-    const steps = [];
-    if (today.review.length) steps.push("review");
-    if (today.kana && !today.kana_done_today) steps.push("kana");
-    if (today.unit) {
-      const done = today.unit_steps || {};
-      for (const s of today.unit.steps) if (!done[s]) steps.push(s);
-    }
-    return steps;
+    return [...(today.plan || [])];
   }
   function runStep(step) {
     if (step === "review") return runReview(today.review);
@@ -532,9 +526,12 @@
     if (today.kana) {
       const k = today.kana;
       const detail = `${k.title}: ${k.kana.map((x) => x.char).join(" ") || "reading practice"}`;
-      rows.push(planRow("Kana", today.kana_done_today ? "Done for today" : detail, today.kana_done_today,
-        today.kana_done_today ? () => runKana(k) : open("kana", () => runKana(k)),
-        today.kana_done_today ? "Next lesson" : null));
+      const planned = steps.includes("kana");
+      // Not planned today (done, or alternating with a unit): still one click away.
+      rows.push(planRow("Kana", today.kana_done_today ? "Done for today" : planned ? detail : `${detail} (tomorrow)`,
+        today.kana_done_today,
+        planned ? open("kana", () => runKana(k)) : () => runKana(k),
+        planned ? null : today.kana_done_today ? "Next lesson" : "Open"));
     }
     if (unit) {
       const details = {
@@ -546,7 +543,9 @@
       };
       for (const step of unit.steps) {
         const ready = step === "learn" || done.learn;
-        rows.push(planRow(STEP_NAMES[step], details[step], !!done[step], ready ? open(step, () => runStep(step)) : null));
+        const later = !done[step] && !steps.includes(step);
+        rows.push(planRow(STEP_NAMES[step], later ? `${details[step]} (tomorrow)` : details[step], !!done[step],
+          ready ? (later ? () => runStep(step) : open(step, () => runStep(step))) : null, later && ready ? "Open" : null));
       }
     }
 
@@ -574,7 +573,10 @@
           ? el("div", { class: "home-actions" },
               el("button", { type: "button", class: "lesson-primary", onclick: runNext },
                 s.studied_today ? "Continue" : "Start today's lesson", kbd("Enter")))
-          : el("p", { class: "home-done", text: "Done for today. Next review: tomorrow." }),
+          : el("p", { class: "home-done", text: "Done for today. More tomorrow." }),
+        today.catching_up
+          ? el("p", { class: "home-note", text: "Reviews only today: there's a backlog to clear first. New lessons are still one click away below." })
+          : null,
         s.phrases_learned
           ? el("div", { class: "home-more" },
               el("button", { type: "button", class: "secondary", onclick: runExtraListening,
@@ -790,7 +792,13 @@
     }
 
     function finish() {
-      const go = async () => { await refresh(); today.review = []; runNext(); };
+      const go = async () => {
+        await refresh();
+        // Today's share is done; anything still due waits for tomorrow's budget.
+        today.review = [];
+        today.plan = (today.plan || []).filter((s) => s !== "review");
+        runNext();
+      };
       frame({
         title: "Review",
         body: el("div", { class: "card-body" },
