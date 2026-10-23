@@ -115,7 +115,7 @@
     for (const [text, opts] of items) audioFor(text, opts).catch(() => {});
   }
   function setAudioProblem(err) {
-    audioProblem = err ? "No audio: the voice engine isn't running. Start it, or switch engines in Settings → Speech." : "";
+    audioProblem = err ? "No audio: the voice engine isn't running. Restart Kaiwa or switch engines in Settings → Speech." : "";
     const note = root.querySelector(".lesson-audio-note");
     if (note) {
       note.textContent = audioProblem;
@@ -157,7 +157,7 @@
       if (pressing || btn.disabled) return;
       pressing = true;
       stopAudio();
-      setLabel("Opening the microphone…");
+      setLabel("Opening microphone…");
       let handle;
       try {
         handle = await window.KaiwaMic.record();
@@ -171,12 +171,12 @@
         // Let go before the mic was ready: nothing usable was recorded.
         handle.stop();
         resetLabel();
-        onProblem("The microphone was still opening. Hold the bar until it turns red, then speak.");
+        onProblem("Released before the microphone opened. Hold until the bar turns red.");
         return;
       }
       rec = handle;
       btn.classList.add("recording");
-      setLabel("Listening… let go when you're done");
+      setLabel("Listening… release to check");
       meter();
     }
     async function stop() {
@@ -191,10 +191,10 @@
       resetLabel();
       const res = await handle.stop();
       if (res.ms < 400) {
-        onProblem("That was too short. Hold the bar the whole time you speak, then let go.");
+        onProblem("Too short. Hold the whole time you speak.");
       } else if (res.silent) {
         const mic = window.KaiwaMic.currentLabel() || "the selected microphone";
-        onProblem(`I didn't hear anything from ${mic}. Pick another microphone below and watch its level bar move when you talk.`);
+        onProblem(`No sound from ${mic}. Pick another microphone below.`);
       } else {
         onAudio(res.blob, res.ext);
       }
@@ -323,7 +323,7 @@
 
     const progressText = s.phrases_learned
       ? `${s.phrases_learned} of ${s.phrases_total} phrases learned, ${s.phrases_strong} remembered well. ${s.streak} day${s.streak === 1 ? "" : "s"} in a row.`
-      : "Start with unit 1. A lesson takes about ten minutes.";
+      : "About 10 minutes per lesson.";
 
     if (steps.length) keys.primary = runNext;
     root.replaceChildren(
@@ -335,7 +335,7 @@
               el("p", { class: "home-goal", text: unit.goal }))
           : el("div", { class: "home-unit" },
               el("h1", { class: "home-title", text: "You've finished all ten units" }),
-              el("p", { class: "home-goal", text: "Keep your reviews going and use extra listening and Chat." })),
+              el("p", { class: "home-goal", text: "Reviews continue daily. Use Extra listening and Chat for more practice." })),
         el("p", { class: "home-progress", text: progressText }),
         el("div", { class: "home-bar", role: "progressbar", "aria-valuenow": String(pct), "aria-valuemin": "0", "aria-valuemax": "100" },
           el("span", { style: `width:${pct}%` })),
@@ -344,17 +344,17 @@
           ? el("div", { class: "home-actions" },
               el("button", { type: "button", class: "lesson-primary", onclick: runNext },
                 s.studied_today ? "Continue" : "Start today's lesson", kbd("Enter")))
-          : el("p", { class: "home-done", text: "Done for today. Your reviews come back tomorrow." }),
+          : el("p", { class: "home-done", text: "Done for today. Next review: tomorrow." }),
         s.phrases_learned
           ? el("div", { class: "home-more" },
-              el("button", { type: "button", class: "secondary", onclick: runExtraListening }, "Extra listening"),
-              el("span", { text: "A new short conversation that uses only what you know." }),
-              el("button", { type: "button", class: "secondary", onclick: goChat }, "Open Chat"),
-              el("span", { text: "Talk freely. Kaiwa sticks to the phrases you've learned." }))
+              el("button", { type: "button", class: "secondary", onclick: runExtraListening,
+                "data-tip": "A new short conversation using only phrases you've learned" }, "Extra listening"),
+              el("button", { type: "button", class: "secondary", onclick: goChat,
+                "data-tip": "Free conversation. Kaiwa sticks to the phrases you've learned." }, "Open Chat"))
           : null,
         el("label", { class: "home-romaji" },
           el("input", { type: "checkbox", checked: showRomaji, onchange: (e) => { showRomaji = e.target.checked; writePref("kaiwa_course_romaji", showRomaji ? "1" : "0"); } }),
-          " Show romaji under Japanese"),
+          " Show romaji"),
       ),
     );
   }
@@ -465,7 +465,7 @@
         title: "Review",
         body: el("div", { class: "card-body" },
           el("h3", { class: "end-title", text: `${right} of ${total} on the first try` }),
-          el("p", { class: "prompt", text: "Missed phrases come back tomorrow. The ones you knew come back later and later." })),
+          el("p", { class: "prompt", text: "Missed phrases come back tomorrow." })),
         actions: [primaryButton("Continue", go)],
         primary: go,
       });
@@ -538,7 +538,7 @@
   }
 
   async function runExtraListening() {
-    frame({ title: "Extra listening", body: el("p", { class: "pending", text: "Writing a conversation from the phrases you know…" }) });
+    frame({ title: "Extra listening", body: el("p", { class: "pending", text: "Generating a conversation…" }) });
     let story;
     try {
       story = await api("/api/course/story", { method: "POST" });
@@ -636,7 +636,7 @@
     frame({
       title,
       body: el("div", { class: "card-body" },
-        el("p", { class: "prompt", text: (d.scene ? d.scene + " " : "") + "Listen first and try to follow before you show any text." }),
+        el("p", { class: "prompt", text: d.scene || "Listen before showing the text." }),
         el("div", { class: "lesson-play" }, playAllBtn, toggleJp, toggleEn),
         linesBox,
         el("h3", { class: "questions-title", text: "Did you catch it?" }),
@@ -665,7 +665,7 @@
         if (pending) return;
         pending = true;
         hold.disabled = true;
-        result.replaceChildren(el("p", { class: "pending", text: "Kaiwa is listening…" }));
+        result.replaceChildren(el("p", { class: "pending", text: "Checking…" }));
         try {
           const r = await api("/api/course/speak", { method: "POST", body: fields });
           renderVerdict(r);
@@ -744,7 +744,7 @@
       title: `Unit ${unit.number} done`,
       body: el("div", { class: "card-body" },
         el("h3", { class: "end-title", text: unit.title }),
-        el("p", { class: "prompt", text: `You learned ${unit.phrases.length} phrases. They come back in tomorrow's review so they stick.` })),
+        el("p", { class: "prompt", text: `${unit.phrases.length} phrases learned. They're in tomorrow's review.` })),
       actions: [
         el("button", { type: "button", class: "secondary", onclick: goChat }, "Use them in Chat"),
         primaryButton("Back to today", showHome),

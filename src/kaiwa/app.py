@@ -278,7 +278,7 @@ class PrefsUpdate(BaseModel):
     voicevox_speaker_id: int = 888753760
     goal_level: str = "pre_n5"
     topic_preferences: list[str] = Field(default_factory=list)
-    ui_theme: str = "night"
+    ui_theme: str = "system"
     ptt_enabled: bool = False
     ptt_binding: str = ""
     ptt_play_reply: bool = True
@@ -499,6 +499,20 @@ def get_prefs() -> dict[str, Any]:
         "placement_completed": profile.placement_completed,
         "active_id": listing.get("active_id") or listing.get("active") or "",
     }
+
+
+class ThemeBody(BaseModel):
+    theme: str = "system"
+
+
+@app.post("/api/prefs/theme")
+def put_theme(body: ThemeBody) -> dict[str, Any]:
+    """Save just the theme, so switching it applies at once without a Save click."""
+    with jsonio.STATE_LOCK:
+        prefs = load_prefs()
+        prefs.ui_theme = body.theme if body.theme in {"system", "light", "dark"} else "system"  # type: ignore[assignment]
+        save_prefs(prefs)
+    return {"ui_theme": prefs.ui_theme}
 
 
 class MicBody(BaseModel):

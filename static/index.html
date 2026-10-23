@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="night">
+<html lang="en" data-theme="system">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -7,22 +7,38 @@
   <link rel="icon" href="/static/icons/kaiwa.ico" sizes="any" />
   <link rel="icon" type="image/png" href="/static/icons/kaiwa-text-only.png" />
   <link rel="apple-touch-icon" href="/static/icons/kaiwa-text-only.png" />
+  <script>
+    // Theme before first paint (prefs from the server confirm it later).
+    window.kaiwaTheme = (() => {
+      const valid = ["system", "light", "dark"];
+      const set = (v) => {
+        const theme = valid.includes(v) ? v : "system";
+        document.documentElement.dataset.theme = theme;
+        try { localStorage.setItem("kaiwa_theme", theme); } catch (_) {}
+        return theme;
+      };
+      let saved = "system";
+      try { saved = localStorage.getItem("kaiwa_theme") || "system"; } catch (_) {}
+      set(saved);
+      return { set, get: () => document.documentElement.dataset.theme };
+    })();
+  </script>
   <link rel="stylesheet" href="/static/app.css" />
   <link rel="stylesheet" href="/static/course.css" />
 </head>
 <body data-mode="learn">
   <div id="apiKeyGate" hidden>
     <div class="api-key-gate-card" role="dialog" aria-modal="true" aria-labelledby="apiKeyGateTitle">
-      <h1 id="apiKeyGateTitle">Welcome to Kaiwa</h1>
+      <h1 id="apiKeyGateTitle">DeepSeek API key</h1>
       <p class="disclaimer">
-        Paste your <strong>DeepSeek API key</strong> to start chatting. Get one from
+        Chat and the lesson coach need a DeepSeek API key. Create one at
         <a href="https://platform.deepseek.com/api_keys" target="_blank" rel="noopener noreferrer">platform.deepseek.com</a>.
-        The key stays on this PC (not in the chat).
+        It is stored on this PC only.
       </p>
-      <label class="disclaimer" for="apiKeyGateInput">DeepSeek API key</label>
+      <label class="disclaimer" for="apiKeyGateInput">API key</label>
       <input id="apiKeyGateInput" type="password" autocomplete="off" spellcheck="false" placeholder="sk-…" />
       <div class="controls" style="margin-top:0.85rem">
-        <button id="apiKeyGateSave" type="button">Save and continue</button>
+        <button id="apiKeyGateSave" type="button">Save</button>
       </div>
       <p class="api-key-gate-status" id="apiKeyGateStatus"></p>
     </div>
@@ -32,13 +48,13 @@
       <div class="header-left">
         <h1 class="brand"><img class="brand-mark" src="/static/icons/kaiwa-text-only.png" width="48" height="48" alt="" />Kaiwa</h1>
         <div class="header-chats">
-          <button id="newChat" type="button" title="New chat (keeps memory)">
-            <svg class="header-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><path d="M6.5 9.5a.5.5 0 0 0 0 1h3v3a.5.5 0 0 0 1 0v-3h3a.5.5 0 0 0 0-1h-3v-3a.5.5 0 0 0-1 0v3zM18 10a8 8 0 1 0-16 0v.35l.03.38q.15 1.53.83 2.89l.06.12-.9 3.64-.02.08v.08c.03.3.31.52.62.45l3.65-.91.12.06A8 8 0 0 0 18 10M3 10a7 7 0 1 1 3.58 6.1l-.09-.03-.1-.02h-.18l-3.02.76.75-3.02.02-.1a.5.5 0 0 0-.07-.27A7 7 0 0 1 3 10"/></svg>
+          <button id="newChat" type="button" data-tip="Start a new chat. Kaiwa's memory of you is kept.">
+            <svg class="header-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3a.5.5 0 0 1 .5.5v6h6a.5.5 0 0 1 0 1h-6v6a.5.5 0 0 1-1 0v-6h-6a.5.5 0 0 1 0-1h6v-6A.5.5 0 0 1 10 3"/></svg>
             New chat
           </button>
-          <button id="chatsBtn" type="button" title="Past chats">
-            <svg class="header-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><path d="M8.54 2a6.5 6.5 0 0 0-5.68 9.67l-.8 2.08a1 1 0 0 0 1.21 1.32l2.49-.7q1.27.62 2.78.63a6.5 6.5 0 1 0 0-13m-5.5 6.5a5.5 5.5 0 1 1 3 4.9l-.18-.09-2.86.8.97-2.53-.13-.21a5.5 5.5 0 0 1-.8-2.87M11.5 18a6.5 6.5 0 0 1-4.93-2.26 8 8 0 0 0 1.76.26 5.5 5.5 0 0 0 5.67.4l.18-.09 2.86.8-.97-2.53.13-.21a5.5 5.5 0 0 0-.16-5.98q-.02-.91-.24-1.76a6.5 6.5 0 0 1 1.38 8.04l.8 2.08a1 1 0 0 1-1.21 1.32l-2.49-.7q-1.28.61-2.78.63"/></svg>
-            Chats
+          <button id="chatsBtn" type="button" data-tip="Open a previous chat">
+            <svg class="header-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><path d="M3 5.5a.5.5 0 0 1 .5-.5h13a.5.5 0 0 1 0 1h-13a.5.5 0 0 1-.5-.5m0 4.5a.5.5 0 0 1 .5-.5h13a.5.5 0 0 1 0 1h-13A.5.5 0 0 1 3 10m.5 4a.5.5 0 0 0 0 1h13a.5.5 0 0 0 0-1z"/></svg>
+            History
           </button>
         </div>
       </div>
@@ -58,7 +74,7 @@
     <div id="updateBanner" class="update-banner" hidden role="status">
       <div class="update-banner-body" id="updateBannerText"></div>
       <div class="update-banner-actions">
-        <button type="button" id="updateBannerInstall">Update now</button>
+        <button type="button" id="updateBannerInstall">Install update</button>
         <button type="button" id="updateBannerLater" class="secondary">Later</button>
       </div>
     </div>
@@ -70,18 +86,18 @@
     <section class="mode" id="modeChat">
       <div class="chat-stage">
         <div id="log" aria-live="polite">
-          <p class="chat-disclaimer" role="note">Hold the button (or the Space bar) and say anything. Kaiwa answers in easy Japanese built on the phrases you've learned. Type instead if the mic misses you.</p>
+          <p class="chat-disclaimer" role="note">Hold Talk (or Space) and speak, or type below.</p>
         </div>
         <aside id="chatsDrawer" class="chats-drawer" hidden>
           <div class="chats-drawer-head">
-            <span>Chats</span>
+            <span>History</span>
             <button type="button" id="chatsDrawerClose" class="secondary">Close</button>
           </div>
           <div id="chatsList" class="chats-list"></div>
         </aside>
         <aside id="leftoversDrawer" class="chats-drawer leftovers-drawer" hidden>
           <div class="chats-drawer-head">
-            <span>From this chat</span>
+            <span>Lines from this chat</span>
             <button type="button" id="leftoversDrawerClose" class="secondary">Close</button>
           </div>
           <div id="leftoversBody" class="chats-list leftovers-body"></div>
@@ -93,7 +109,7 @@
             <div class="composer-status" id="status">Ready</div>
             <span id="turnCount" class="turn-count" hidden></span>
           </div>
-          <div class="seg chat-pace-seg" id="chatPaceSeg" title="Easy: short and slow. Free: longer turns.">
+          <div class="seg chat-pace-seg" id="chatPaceSeg" data-tip="Easy: short, slow replies. Free: longer replies at normal pace.">
             <button type="button" data-pace="easy" class="on">Easy</button>
             <button type="button" data-pace="free">Free</button>
           </div>
@@ -103,13 +119,13 @@
         </div>
         <div id="chatMicRow"></div>
         <div class="chat-text-row" id="chatTextRow">
-          <input id="chatText" type="text" maxlength="500" placeholder="Or type what you meant" autocomplete="off" />
+          <input id="chatText" type="text" maxlength="500" placeholder="Type a message" autocomplete="off" />
           <button id="chatTextSend" class="secondary" type="button">Send</button>
         </div>
         <div class="composer-session">
-          <button id="replayLast" type="button" hidden disabled>Hear that again</button>
-          <button id="composerSimpler" type="button" title="I didn’t catch that — say it more simply" hidden disabled>Simpler</button>
-          <button id="againBtn" type="button" title="Start a new chat with the same questions Kaiwa just asked" hidden disabled>Same questions</button>
+          <button id="replayLast" type="button" hidden disabled data-tip="Play Kaiwa's last reply again">Replay</button>
+          <button id="composerSimpler" type="button" data-tip="Ask Kaiwa to say its last reply more simply" hidden disabled>Simpler</button>
+          <button id="againBtn" type="button" data-tip="Start a new chat with the same questions Kaiwa just asked" hidden disabled>Ask again</button>
         </div>
       </div>
     </section>
@@ -162,338 +178,394 @@
       <div class="settings-layout">
         <div class="settings-sidebar">
           <div class="settings-search-wrap">
-            <input
-              id="settingsSearch"
-              class="settings-search"
-              type="search"
-              placeholder="Search settings…"
-              autocomplete="off"
-              spellcheck="false"
-            />
+            <input id="settingsSearch" class="settings-search" type="search" placeholder="Search settings" autocomplete="off" spellcheck="false" />
             <p class="settings-search-meta" id="settingsSearchMeta" aria-live="polite"></p>
           </div>
           <nav class="settings-rail" aria-label="Settings sections">
-            <button type="button" class="active" data-settings-section="profiles">Your data</button>
-            <button type="button" data-settings-section="tutor">Tutor</button>
-            <button type="button" data-settings-section="learning">Learning</button>
-            <button type="button" data-settings-section="placement">Place me</button>
-            <button type="button" data-settings-section="memory">Memory</button>
+            <button type="button" class="active" data-settings-section="general">General</button>
             <button type="button" data-settings-section="speech">Speech</button>
-            <button type="button" data-settings-section="about">About</button>
+            <button type="button" data-settings-section="ptt">Push-to-talk</button>
+            <button type="button" data-settings-section="chat">Chat</button>
+            <button type="button" data-settings-section="level">Level</button>
+            <button type="button" data-settings-section="memory">Memory</button>
+            <button type="button" data-settings-section="data">Data</button>
           </nav>
         </div>
         <div class="settings-pane">
           <div class="settings-pane-scroll">
-            <div class="settings-section" data-settings-section="profiles">
-              <h2 class="section-title">Your data</h2>
-              <p class="disclaimer settings-searchable" data-settings-search="data backup export import restore reset profile account">
-                Your settings, level, memory, and custom personalities. Export a backup file any time.
-                Importing or resetting replaces what's here, and Kaiwa saves a copy of the old data first.
-              </p>
-              <div class="controls settings-searchable" data-settings-search="export import backup restore reset json file">
-                <button id="exportProfileBtn" class="secondary" type="button">Export backup</button>
-                <button id="importProfileBtn" class="secondary" type="button">Import backup</button>
-                <button id="resetUserProfileBtn" class="secondary" type="button">Reset everything</button>
-                <input id="importProfileFile" type="file" accept="application/json,.json" hidden />
-                <span id="profilesStatus"></span>
-              </div>
-              <div class="field settings-searchable" data-settings-search="api key deepseek secret llm openai token" style="margin-top:1.1rem">
-                <label for="deepseekKeyInput">DeepSeek API key</label>
-                <p class="disclaimer" id="deepseekKeyMasked">Not configured</p>
-                <input id="deepseekKeyInput" type="password" autocomplete="off" spellcheck="false" placeholder="Paste new key to update…" />
-                <div class="controls" style="margin-top:0.55rem">
-                  <button id="deepseekKeySave" class="secondary" type="button">Update API key</button>
-                  <span id="deepseekKeyStatus"></span>
+
+            <div class="settings-section" data-settings-section="general">
+              <h2 class="section-title">General</h2>
+              <fieldset class="group">
+                <legend>Appearance</legend>
+                <div class="field settings-searchable" data-settings-search="theme dark light mode appearance colors system">
+                  <label for="themeSelect">Theme</label>
+                  <select id="themeSelect">
+                    <option value="system">Same as Windows</option>
+                    <option value="light">Light</option>
+                    <option value="dark">Dark</option>
+                  </select>
                 </div>
-              </div>
+              </fieldset>
+              <fieldset class="group">
+                <legend>DeepSeek</legend>
+                <div class="field settings-searchable" data-settings-search="api key deepseek secret llm token">
+                  <label for="deepseekKeyInput" data-tip="Used for Chat and the lesson coach. Stored on this PC only.">API key</label>
+                  <div class="stack">
+                    <span class="value" id="deepseekKeyMasked">Not set</span>
+                    <div class="controls">
+                      <input id="deepseekKeyInput" type="password" autocomplete="off" spellcheck="false" placeholder="Paste a new key" />
+                      <button id="deepseekKeySave" class="secondary" type="button">Save key</button>
+                    </div>
+                    <span class="status" id="deepseekKeyStatus"></span>
+                  </div>
+                </div>
+              </fieldset>
+              <fieldset class="group">
+                <legend>Updates</legend>
+                <div class="field settings-searchable" data-settings-search="about version update github release installer setup">
+                  <label data-tip="Updates come from GitHub Releases. Installing downloads the setup file and runs it; Windows may ask for permission.">Version</label>
+                  <div class="stack">
+                    <span class="value" id="aboutVersionLabel">…</span>
+                    <div class="controls">
+                      <button id="aboutCheckUpdatesBtn" class="secondary" type="button">Check for updates</button>
+                      <button id="aboutInstallUpdateBtn" type="button" hidden>Install update</button>
+                    </div>
+                    <span class="status" id="aboutUpdateStatus"></span>
+                  </div>
+                </div>
+              </fieldset>
             </div>
 
-
-            <div class="settings-section" data-settings-section="tutor" hidden>
-              <h2 class="section-title">Tutor</h2>
-              <p class="disclaimer settings-searchable" data-settings-search="tutor conversation how kaiwa talks teaching style">
-                How Kaiwa teaches and sounds in chat — corrections, immersion, personality.
-              </p>
-              <div class="field settings-searchable" data-settings-search="language help adaptive immersion immerse japanese english">
-                <label>Language help</label>
-                <div class="seg" id="languageSeg">
-                  <button type="button" data-policy="adaptive" class="on">Adaptive</button>
-                  <button type="button" data-policy="immerse">Immersion</button>
+            <div class="settings-section" data-settings-section="speech" hidden>
+              <h2 class="section-title">Speech</h2>
+              <fieldset class="group">
+                <legend>Microphone</legend>
+                <div class="field settings-searchable" data-settings-search="microphone mic input device recording level headset">
+                  <label data-tip="Talk and watch the level bar. If it doesn't move, pick another device. Learn, Chat and push-to-talk all use this microphone.">Input device</label>
+                  <div id="settingsMicRow"></div>
                 </div>
-                <p class="disclaimer" id="languageHelp">Japanese by default; brief English corrections only when you're clearly struggling.</p>
-              </div>
-              <div class="field settings-searchable" data-settings-search="speech register casual formal polite tameguchi">
-                <label>Speech register</label>
-                <div class="seg" id="registerSeg">
-                  <button type="button" data-register="casual" class="on">Casual</button>
-                  <button type="button" data-register="formal">Formal</button>
+              </fieldset>
+              <fieldset class="group">
+                <legend>Voice</legend>
+                <div class="field settings-searchable" data-settings-search="tts engine aivisspeech voicevox speech synthesis">
+                  <label data-tip="AivisSpeech (port 10101) is the default. VOICEVOX (port 50021) is the fallback.">Engine</label>
+                  <div class="seg" id="ttsEngineSeg">
+                    <button type="button" data-engine="aivisspeech" class="on">AivisSpeech</button>
+                    <button type="button" data-engine="voicevox">VOICEVOX</button>
+                  </div>
+                  <span id="ttsEngineHelp" hidden></span>
                 </div>
-                <p class="disclaimer" id="registerHelp">Friend-level ため口. Personality vibe still applies on top.</p>
-              </div>
-              <div class="field settings-searchable" data-settings-search="personality persona preset character vibe tutor buddy">
-                <label for="personalitySelect">Personality</label>
-                <select id="personalitySelect"></select>
-                <p class="preset-desc" id="personalityDesc"></p>
-                <div class="controls" id="userPresetActions" hidden style="margin-top:0.6rem">
-                  <button id="editUserPreset" class="secondary" type="button">Edit preset</button>
-                  <button id="deleteUserPreset" class="secondary" type="button">Delete preset</button>
+                <div class="field settings-searchable" data-settings-search="voice speaker preview listen tts">
+                  <label for="voiceSelect">Voice</label>
+                  <div class="stack">
+                    <div class="controls">
+                      <select id="voiceSelect"></select>
+                      <button id="previewVoice" class="secondary" type="button">Preview</button>
+                    </div>
+                    <span class="status" id="voiceStatus"></span>
+                    <span class="status" id="voiceHelp"></span>
+                  </div>
                 </div>
-              </div>
-              <div class="field settings-searchable" data-settings-search="extra notes custom personality instructions call me">
-                <label for="personalityCustom">Extra notes (optional, any preset)</label>
-                <textarea id="personalityCustom" placeholder="e.g. Call me Alex. Prefer travel topics."></textarea>
-              </div>
-
-              <h3 class="settings-section-subhead settings-searchable" data-settings-search="preset presets create custom personality editor">Custom presets</h3>
-              <p class="disclaimer settings-searchable" data-settings-search="preset presets create named personality reuse">
-                Create a named personality you can reuse later.
-              </p>
-              <div class="field settings-searchable" data-settings-search="preset label name title">
-                <label for="newPresetLabel">Label</label>
-                <input id="newPresetLabel" type="text" maxlength="60" placeholder="e.g. Travel buddy" />
-              </div>
-              <div class="field settings-searchable" data-settings-search="preset description short ui">
-                <label for="newPresetDesc">Description</label>
-                <input id="newPresetDesc" type="text" maxlength="200" placeholder="Short UI description" />
-              </div>
-              <div class="field settings-searchable" data-settings-search="preset prompt instructions blurb personality japanese">
-                <label for="newPresetBlurb">Prompt instructions</label>
-                <textarea id="newPresetBlurb" placeholder="性格: … how Kaiwa should talk (Japanese ok)"></textarea>
-              </div>
-              <div class="controls settings-searchable" data-settings-search="save preset edit cancel">
-                <button id="saveUserPreset" type="button">Save as preset</button>
-                <button id="cancelEditPreset" class="secondary" type="button" hidden>Cancel edit</button>
-                <span id="presetEditorStatus"></span>
-              </div>
+              </fieldset>
             </div>
 
-            <div class="settings-section" data-settings-section="learning" hidden>
-              <h2 class="section-title">Learning</h2>
-              <p class="disclaimer settings-searchable" data-settings-search="learning level goal learner jlpt pace difficulty">
-                Goal ceiling and live estimates of how hard chat should feel.
-              </p>
-              <div class="field settings-searchable" data-settings-search="goal level pre-n5 n5 n4 jlpt target ceiling pace">
-                <label>Goal level</label>
-                <div class="seg" id="goalSeg">
-                  <button type="button" data-goal="pre_n5" class="on">Pre-N5</button>
-                  <button type="button" data-goal="n5">N5</button>
-                  <button type="button" data-goal="n4">N4</button>
+            <div class="settings-section" data-settings-section="ptt" hidden>
+              <h2 class="section-title">Push-to-talk</h2>
+              <fieldset class="group">
+                <legend>Global key</legend>
+                <div class="field settings-searchable" data-settings-search="push to talk ptt global hold key mouse desktop hook enable">
+                  <label data-tip="Hold a key or mouse button in any app to talk to Kaiwa while the desktop app runs in the background. Some games block this.">Push-to-talk</label>
+                  <div class="stack">
+                    <div class="seg" id="pttEnabledSeg">
+                      <button type="button" data-ptt="off" class="on">Off</button>
+                      <button type="button" data-ptt="on">On</button>
+                    </div>
+                    <span class="status" id="pttHookStatus">Checking…</span>
+                  </div>
                 </div>
-                <p class="disclaimer" id="goalHelp">Target ceiling for pacing. Kaiwa still adapts to your live profile.</p>
-              </div>
-              <div class="field settings-searchable" data-settings-search="topic preferences interests interests anime travel">
-                <label for="topicPrefs">Topic preferences</label>
-                <input id="topicPrefs" type="text" maxlength="200" placeholder="e.g. anime, travel, daily life" />
-                <p class="disclaimer">Comma-separated, up to 8 topics.</p>
-              </div>
-
-              <h3 class="settings-section-subhead settings-searchable" data-settings-search="learner profile estimate speaking comprehension">Live learner profile</h3>
-              <p class="disclaimer settings-searchable" data-settings-search="learner profile estimate auto update practice">
-                Updates from chat struggle signals, practice scores, and occasional Flash assessments.
-              </p>
-              <p class="preset-desc settings-searchable" data-settings-search="learner profile summary" id="profileSummary">Loading…</p>
-              <div class="field settings-searchable" data-settings-search="speaking estimate level pre-n5 n5 n4">
-                <label>Speaking estimate</label>
-                <div class="seg" id="profileSpeakingSeg">
-                  <button type="button" data-level="pre_n5" class="on">Pre-N5</button>
-                  <button type="button" data-level="n5">N5</button>
-                  <button type="button" data-level="n4">N4</button>
+                <div class="field settings-searchable" data-settings-search="push to talk ptt key bind binding mouse button f24">
+                  <label>Key</label>
+                  <div class="controls">
+                    <span id="pttBindLabel" class="value">Not set</span>
+                    <button id="pttBindBtn" class="secondary" type="button">Change…</button>
+                  </div>
                 </div>
-              </div>
-              <div class="field settings-searchable" data-settings-search="comprehension estimate listening reading level">
-                <label>Comprehension estimate</label>
-                <div class="seg" id="profileCompSeg">
-                  <button type="button" data-level="pre_n5" class="on">Pre-N5</button>
-                  <button type="button" data-level="n5">N5</button>
-                  <button type="button" data-level="n4">N4</button>
+                <div class="field settings-searchable" data-settings-search="push to talk ptt reply play speakers silent">
+                  <label data-tip="Speak Kaiwa's reply through your default speakers, even while another app is focused.">Reply</label>
+                  <div class="seg" id="pttPlaySeg">
+                    <button type="button" data-ptt-play="on" class="on">Speak</button>
+                    <button type="button" data-ptt-play="off">Silent</button>
+                  </div>
+                  <span id="pttPlayHelp" hidden></span>
                 </div>
-              </div>
-              <div class="field settings-searchable" data-settings-search="profile notes level notes">
-                <label for="profileNotes">Notes</label>
-                <textarea id="profileNotes" placeholder="Auto-filled notes about your level"></textarea>
-              </div>
-              <div class="field settings-searchable" data-settings-search="profile topics tags detected">
-                <label for="profileTags">Profile topics</label>
-                <input id="profileTags" type="text" maxlength="200" placeholder="Detected / edited tags" />
-              </div>
-              <div class="controls settings-searchable" data-settings-search="save reset profile overrides learner">
-                <button id="saveProfile" class="secondary" type="button">Save profile overrides</button>
-                <button id="resetProfile" class="secondary" type="button">Reset profile</button>
-                <span id="profileStatus"></span>
-              </div>
+              </fieldset>
+              <fieldset class="group">
+                <legend>Sounds</legend>
+                <div class="field settings-searchable" data-settings-search="push to talk ptt blip sound cue beep">
+                  <label data-tip="Short sounds when you press and release the push-to-talk key.">Key sounds</label>
+                  <div class="seg" id="pttBlipsSeg">
+                    <button type="button" data-ptt-blips="on" class="on">On</button>
+                    <button type="button" data-ptt-blips="off">Off</button>
+                  </div>
+                  <span id="pttBlipHelp" hidden></span>
+                </div>
+                <div class="field settings-searchable" data-settings-search="push to talk ptt blip volume loud">
+                  <label for="pttBlipVolume" data-tip="Up to 500% if they are hard to hear.">Volume</label>
+                  <div class="controls">
+                    <input id="pttBlipVolume" class="kaiwa-range" type="range" min="0" max="500" value="60" step="5" />
+                    <span id="pttBlipVolumePct" class="value">60%</span>
+                  </div>
+                </div>
+                <div class="field settings-searchable" data-settings-search="push to talk ptt blip sound file custom press">
+                  <label>Press sound</label>
+                  <div class="controls">
+                    <span id="pttBlipInLabel" class="value">Default</span>
+                    <button id="pttBlipInChange" class="secondary" type="button">Change…</button>
+                    <button id="pttBlipInReset" class="secondary" type="button">Reset</button>
+                    <input id="pttBlipInFile" type="file" accept=".ogg,.wav,.mp3,audio/ogg,audio/wav,audio/mpeg,audio/*" hidden />
+                  </div>
+                </div>
+                <div class="field settings-searchable" data-settings-search="push to talk ptt blip sound file custom release">
+                  <label>Release sound</label>
+                  <div class="controls">
+                    <span id="pttBlipOutLabel" class="value">Default</span>
+                    <button id="pttBlipOutChange" class="secondary" type="button">Change…</button>
+                    <button id="pttBlipOutReset" class="secondary" type="button">Reset</button>
+                    <input id="pttBlipOutFile" type="file" accept=".ogg,.wav,.mp3,audio/ogg,audio/wav,audio/mpeg,audio/*" hidden />
+                  </div>
+                </div>
+              </fieldset>
             </div>
 
-            <div class="settings-section" data-settings-section="placement" hidden>
-              <h2 class="section-title">Place me</h2>
-              <div class="quiz-stage">
-                <div id="quizIntro" class="settings-searchable" data-settings-search="place me placement quiz self-assessment level start skip where you're at">
-                  <div class="meta">Where you’re at</div>
-                  <p class="disclaimer" id="quizIntroCopy">
-                    A few questions about where you’re at — not a test. This is how Kaiwa decides how simple to keep chat.
-                  </p>
-                  <p class="disclaimer quiz-soft-banner" id="quizSoftBanner" hidden>
-                    You can skip and still talk. Until you finish, Kaiwa keeps chat extra simple.
-                  </p>
-                  <div class="controls" style="margin-top:1rem">
-                    <button id="quizStart" type="button">Start</button>
-                    <button id="quizSkip" class="secondary" type="button">Skip — keep chat simple</button>
-                    <span id="quizStatus">Ready when you are</span>
+            <div class="settings-section" data-settings-section="chat" hidden>
+              <h2 class="section-title">Chat</h2>
+              <fieldset class="group">
+                <legend>How Kaiwa talks</legend>
+                <div class="field settings-searchable" data-settings-search="language help adaptive immersion immerse japanese english">
+                  <label data-tip="Adaptive: Japanese, with short English help when you're stuck. Japanese only: corrections stay in Japanese too.">English help</label>
+                  <div class="seg" id="languageSeg">
+                    <button type="button" data-policy="adaptive" class="on">Adaptive</button>
+                    <button type="button" data-policy="immerse">Japanese only</button>
+                  </div>
+                  <span id="languageHelp" hidden></span>
+                </div>
+                <div class="field settings-searchable" data-settings-search="speech register casual formal polite tameguchi">
+                  <label data-tip="Casual: plain friend speech (ため口). Polite: です・ます.">Politeness</label>
+                  <div class="seg" id="registerSeg">
+                    <button type="button" data-register="casual" class="on">Casual</button>
+                    <button type="button" data-register="formal">Polite</button>
+                  </div>
+                  <span id="registerHelp" hidden></span>
+                </div>
+                <div class="field settings-searchable" data-settings-search="personality persona preset character tutor buddy">
+                  <label for="personalitySelect">Personality</label>
+                  <div class="stack">
+                    <div class="controls">
+                      <select id="personalitySelect"></select>
+                      <span id="userPresetActions" class="controls" hidden>
+                        <button id="editUserPreset" class="secondary" type="button">Edit</button>
+                        <button id="deleteUserPreset" class="secondary" type="button">Delete</button>
+                      </span>
+                    </div>
+                    <span class="status" id="personalityDesc"></span>
+                  </div>
+                </div>
+                <div class="field settings-searchable" data-settings-search="extra notes custom instructions call me">
+                  <label for="personalityCustom" data-tip="Added to any personality. For example: Call me Alex. I like travel topics.">Extra instructions</label>
+                  <textarea id="personalityCustom" rows="2"></textarea>
+                </div>
+              </fieldset>
+              <details class="group" id="presetEditor">
+                <summary>New personality</summary>
+                <div class="field settings-searchable" data-settings-search="preset personality name label">
+                  <label for="newPresetLabel">Name</label>
+                  <input id="newPresetLabel" type="text" maxlength="60" />
+                </div>
+                <div class="field settings-searchable" data-settings-search="preset description">
+                  <label for="newPresetDesc">Description</label>
+                  <input id="newPresetDesc" type="text" maxlength="200" />
+                </div>
+                <div class="field settings-searchable" data-settings-search="preset prompt instructions personality japanese">
+                  <label for="newPresetBlurb" data-tip="How Kaiwa should talk. Japanese or English both work.">Instructions</label>
+                  <textarea id="newPresetBlurb" rows="3"></textarea>
+                </div>
+                <div class="field settings-searchable" data-settings-search="save preset personality">
+                  <span></span>
+                  <div class="controls">
+                    <button id="saveUserPreset" type="button">Save personality</button>
+                    <button id="cancelEditPreset" class="secondary" type="button" hidden>Cancel</button>
+                    <span class="status" id="presetEditorStatus"></span>
+                  </div>
+                </div>
+              </details>
+            </div>
+
+            <div class="settings-section" data-settings-section="level" hidden>
+              <h2 class="section-title">Level</h2>
+              <fieldset class="group">
+                <legend>Goal</legend>
+                <div class="field settings-searchable" data-settings-search="goal level pre-n5 n5 n4 jlpt target">
+                  <label data-tip="The hardest level Chat will aim for. Kaiwa still adjusts to your estimated level below.">Goal level</label>
+                  <div class="seg" id="goalSeg">
+                    <button type="button" data-goal="pre_n5" class="on">Pre-N5</button>
+                    <button type="button" data-goal="n5">N5</button>
+                    <button type="button" data-goal="n4">N4</button>
+                  </div>
+                  <span id="goalHelp" hidden></span>
+                </div>
+                <div class="field settings-searchable" data-settings-search="topic preferences interests anime travel">
+                  <label for="topicPrefs" data-tip="Comma-separated, up to 8.">Topics</label>
+                  <input id="topicPrefs" type="text" maxlength="200" placeholder="anime, travel, daily life" />
+                </div>
+              </fieldset>
+              <fieldset class="group">
+                <legend>Estimated level</legend>
+                <div class="field settings-searchable" data-settings-search="learner profile estimate summary">
+                  <label data-tip="Updated automatically from your chats, lessons and the level test. You can override it here.">Summary</label>
+                  <span class="value" id="profileSummary">Loading…</span>
+                </div>
+                <div class="field settings-searchable" data-settings-search="speaking estimate level pre-n5 n5 n4">
+                  <label>Speaking</label>
+                  <div class="seg" id="profileSpeakingSeg">
+                    <button type="button" data-level="pre_n5" class="on">Pre-N5</button>
+                    <button type="button" data-level="n5">N5</button>
+                    <button type="button" data-level="n4">N4</button>
+                  </div>
+                </div>
+                <div class="field settings-searchable" data-settings-search="comprehension estimate listening reading level">
+                  <label>Comprehension</label>
+                  <div class="seg" id="profileCompSeg">
+                    <button type="button" data-level="pre_n5" class="on">Pre-N5</button>
+                    <button type="button" data-level="n5">N5</button>
+                    <button type="button" data-level="n4">N4</button>
+                  </div>
+                </div>
+                <div class="field settings-searchable" data-settings-search="profile notes level notes">
+                  <label for="profileNotes">Notes</label>
+                  <textarea id="profileNotes" rows="2"></textarea>
+                </div>
+                <div class="field settings-searchable" data-settings-search="profile topics tags detected">
+                  <label for="profileTags">Detected topics</label>
+                  <input id="profileTags" type="text" maxlength="200" />
+                </div>
+                <div class="field settings-searchable" data-settings-search="save reset profile overrides learner">
+                  <span></span>
+                  <div class="controls">
+                    <button id="saveProfile" class="secondary" type="button">Save level</button>
+                    <button id="resetProfile" class="secondary" type="button">Reset level</button>
+                    <span class="status" id="profileStatus"></span>
+                  </div>
+                </div>
+              </fieldset>
+              <fieldset class="group quiz-stage">
+                <legend>Level test</legend>
+                <div id="quizIntro" class="settings-searchable" data-settings-search="level test placement quiz self-assessment start skip">
+                  <p class="value" id="quizIntroCopy">About a dozen questions. The answers set how simple Chat starts.</p>
+                  <p class="status quiz-soft-banner" id="quizSoftBanner" hidden>Until you take it, Chat stays extra simple.</p>
+                  <div class="controls" style="margin-top:8px">
+                    <button id="quizStart" type="button">Start test</button>
+                    <button id="quizSkip" class="secondary" type="button">Skip</button>
+                    <span class="status" id="quizStatus"></span>
                   </div>
                 </div>
                 <div id="quizActive" hidden>
                   <div class="meta" id="quizProgress">Question 1 of 9</div>
                   <p class="target" id="quizPrompt" style="margin:0.5rem 0 0.85rem">—</p>
                   <div id="quizChoices" class="quiz-choices"></div>
-                  <div id="quizExtra" class="field" hidden style="margin-top:0.75rem">
-                    <input id="quizOtherInput" type="text" maxlength="120" placeholder="Your topic…" autocomplete="off" />
-                    <textarea id="quizNoteInput" maxlength="300" rows="3" placeholder="Optional — anything helpful for Kaiwa…" hidden></textarea>
+                  <div id="quizExtra" class="quiz-extra" hidden>
+                    <input id="quizOtherInput" type="text" maxlength="120" placeholder="Your topic" autocomplete="off" />
+                    <textarea id="quizNoteInput" maxlength="300" rows="3" hidden></textarea>
                   </div>
-                  <p class="preset-desc" id="quizFeedback"></p>
-                  <div class="controls">
-                    <button id="quizNext" type="button" hidden>Continue</button>
-                    <button id="quizSkipActive" class="secondary" type="button">Skip for now</button>
+                  <p class="status" id="quizFeedback"></p>
+                  <div class="controls" style="margin-top:8px">
+                    <button id="quizNext" type="button" hidden>Next</button>
+                    <button id="quizSkipActive" class="secondary" type="button">Stop test</button>
                   </div>
                 </div>
                 <div id="quizResults" hidden>
-                  <div class="meta">Here’s what Kaiwa will use</div>
+                  <div class="meta">Result</div>
                   <p class="target" id="quizScoreLabel">—</p>
-                  <p class="disclaimer" id="quizResultNote"></p>
-                  <div class="controls" style="margin-top:1rem">
-                    <button id="quizRetake" type="button">Try again</button>
-                    <button id="quizDoneChat" class="secondary" type="button">Go to Chat</button>
+                  <p class="status" id="quizResultNote"></p>
+                  <div class="controls" style="margin-top:8px">
+                    <button id="quizRetake" class="secondary" type="button">Take again</button>
+                    <button id="quizDoneChat" type="button">Go to Chat</button>
                   </div>
                 </div>
-              </div>
+              </fieldset>
             </div>
 
             <div class="settings-section" data-settings-section="memory" hidden>
               <h2 class="section-title">Memory</h2>
-              <p class="disclaimer settings-searchable" data-settings-search="memory remember name vibe comfort vocab grammar">
-                Kaiwa remembers how you like to chat, topics, vocab, and recurring grammar — updated occasionally after chat turns.
-                Preferred name is also asked at the end of Place me. Add a reading if it helps (Eli / イーライ).
-              </p>
-              <p class="preset-desc settings-searchable" data-settings-search="memory summary" id="memorySummary">Loading…</p>
-              <div class="field settings-searchable" data-settings-search="preferred name call me nickname">
-                <label for="memoryName">Preferred name</label>
-                <input id="memoryName" type="text" maxlength="40" placeholder="Eli / イーライ" />
-              </div>
-              <div class="field settings-searchable" data-settings-search="vibe comfort notes tone teasing short replies">
-                <label for="memoryVibe">Vibe / comfort notes</label>
-                <textarea id="memoryVibe" placeholder="e.g. Likes light teasing; keep replies short"></textarea>
-              </div>
-              <div class="field settings-searchable" data-settings-search="do prefer likes should">
-                <label for="memoryDo">Do (comma-separated)</label>
-                <input id="memoryDo" type="text" maxlength="300" placeholder="Keep replies short, anime icebreakers" />
-              </div>
-              <div class="field settings-searchable" data-settings-search="don't dont avoid quiz">
-                <label for="memoryDont">Don't (comma-separated)</label>
-                <input id="memoryDont" type="text" maxlength="300" placeholder="Don't quiz mid-chat" />
-              </div>
-              <div class="field settings-searchable" data-settings-search="remembered topics memory topics">
-                <label for="memoryTopics">Remembered topics</label>
-                <input id="memoryTopics" type="text" maxlength="200" placeholder="anime, daily life" />
-              </div>
-              <div class="field settings-searchable" data-settings-search="vocab vocabulary words top">
-                <label>Top vocab</label>
-                <p class="preset-desc" id="memoryVocabList">—</p>
-              </div>
-              <div class="field settings-searchable" data-settings-search="grammar notes patterns">
-                <label>Grammar notes</label>
-                <p class="preset-desc" id="memoryGrammarList">—</p>
-              </div>
-              <div class="controls settings-searchable" data-settings-search="save reset memory">
-                <button id="saveMemory" class="secondary" type="button">Save memory</button>
-                <button id="resetMemory" class="secondary" type="button">Reset memory</button>
-                <span id="memoryStatus"></span>
-              </div>
+              <fieldset class="group">
+                <legend data-tip="What Kaiwa remembers about you between chats. It updates on its own every few turns; edit anything here.">About you</legend>
+                <div class="field settings-searchable" data-settings-search="memory summary">
+                  <label>Summary</label>
+                  <span class="value" id="memorySummary">Loading…</span>
+                </div>
+                <div class="field settings-searchable" data-settings-search="preferred name call me nickname">
+                  <label for="memoryName" data-tip="Add a reading if it helps, for example Eli / イーライ.">Name</label>
+                  <input id="memoryName" type="text" maxlength="40" />
+                </div>
+                <div class="field settings-searchable" data-settings-search="vibe comfort notes tone teasing short replies">
+                  <label for="memoryVibe">Style notes</label>
+                  <textarea id="memoryVibe" rows="2" placeholder="Likes light teasing; keep replies short"></textarea>
+                </div>
+                <div class="field settings-searchable" data-settings-search="do prefer likes should">
+                  <label for="memoryDo" data-tip="Comma-separated.">Do</label>
+                  <input id="memoryDo" type="text" maxlength="300" />
+                </div>
+                <div class="field settings-searchable" data-settings-search="don't dont avoid quiz">
+                  <label for="memoryDont" data-tip="Comma-separated.">Don't</label>
+                  <input id="memoryDont" type="text" maxlength="300" />
+                </div>
+                <div class="field settings-searchable" data-settings-search="remembered topics memory topics">
+                  <label for="memoryTopics">Topics</label>
+                  <input id="memoryTopics" type="text" maxlength="200" />
+                </div>
+                <div class="field settings-searchable" data-settings-search="vocab vocabulary words top">
+                  <label>Frequent words</label>
+                  <span class="value" id="memoryVocabList">—</span>
+                </div>
+                <div class="field settings-searchable" data-settings-search="grammar notes patterns">
+                  <label>Grammar notes</label>
+                  <span class="value" id="memoryGrammarList">—</span>
+                </div>
+                <div class="field settings-searchable" data-settings-search="save reset memory">
+                  <span></span>
+                  <div class="controls">
+                    <button id="saveMemory" class="secondary" type="button">Save memory</button>
+                    <button id="resetMemory" class="secondary" type="button">Clear memory</button>
+                    <span class="status" id="memoryStatus"></span>
+                  </div>
+                </div>
+              </fieldset>
             </div>
 
-            <div class="settings-section" data-settings-section="speech" hidden>
-              <h2 class="section-title">Speech</h2>
-              <p class="disclaimer settings-searchable" data-settings-search="speech voice tts microphone push to talk">
-                TTS voice and Windows desktop push-to-talk.
-              </p>
-              <div class="field settings-searchable" data-settings-search="microphone mic input device recording level headset">
-                <label>Microphone</label>
-                <div id="settingsMicRow"></div>
-                <p class="disclaimer">Talk and watch the bar. If it doesn't move, pick another microphone. Learn, Chat and desktop push-to-talk all use this one.</p>
-              </div>
-              <div class="field settings-searchable" data-settings-search="tts engine aivisspeech voicevox speech synthesis">
-                <label>TTS engine</label>
-                <div class="seg" id="ttsEngineSeg">
-                  <button type="button" data-engine="aivisspeech" class="on">AivisSpeech</button>
-                  <button type="button" data-engine="voicevox">VOICEVOX</button>
+            <div class="settings-section" data-settings-section="data" hidden>
+              <h2 class="section-title">Data</h2>
+              <fieldset class="group">
+                <legend data-tip="Settings, level, memory, lesson progress and custom personalities. Kaiwa backs up the current data before an import or reset.">Backup</legend>
+                <div class="field settings-searchable" data-settings-search="data backup export import restore json file">
+                  <label>Backup file</label>
+                  <div class="controls">
+                    <button id="exportProfileBtn" class="secondary" type="button">Export…</button>
+                    <button id="importProfileBtn" class="secondary" type="button">Import…</button>
+                    <input id="importProfileFile" type="file" accept="application/json,.json" hidden />
+                  </div>
                 </div>
-                <p class="disclaimer" id="ttsEngineHelp">AivisSpeech is the default (port 10101). VOICEVOX stays available as fallback (port 50021).</p>
-              </div>
-              <div class="field settings-searchable" data-settings-search="voice speaker preview listen tts">
-                <label for="voiceSelect">Voice</label>
-                <select id="voiceSelect"></select>
-                <p class="disclaimer" id="voiceHelp">Requires the selected TTS engine running. Preview uses the selected voice.</p>
-                <div class="controls" style="margin-top:0.6rem">
-                  <button id="previewVoice" class="secondary" type="button">Preview voice</button>
-                  <span id="voiceStatus"></span>
+                <div class="field settings-searchable" data-settings-search="reset everything defaults wipe">
+                  <label>Reset</label>
+                  <div class="controls">
+                    <button id="resetUserProfileBtn" class="secondary danger" type="button">Reset everything…</button>
+                    <span class="status" id="profilesStatus"></span>
+                  </div>
                 </div>
-              </div>
-              <div class="field settings-searchable" data-settings-search="push to talk ptt global mic microphone hold key mouse f24 bind blip volume desktop hook">
-                <label>Global push-to-talk (Windows desktop)</label>
-                <div class="seg" id="pttEnabledSeg">
-                  <button type="button" data-ptt="off" class="on">Off</button>
-                  <button type="button" data-ptt="on">On</button>
-                </div>
-                <p class="disclaimer">Hold (don’t just click) a key or mouse button from any app while the <strong>Kaiwa desktop app</strong> is running. Window can stay in the background. Some games may block global hooks.</p>
-                <p class="disclaimer" id="pttHookStatus">Desktop hook: checking…</p>
-                <div class="controls" style="margin-top:0.6rem; gap:0.5rem; flex-wrap:wrap; align-items:center;">
-                  <button id="pttBindBtn" class="secondary" type="button">Press to bind…</button>
-                  <span id="pttBindLabel" class="disclaimer" style="margin:0;">(not set)</span>
-                </div>
-                <div class="seg" id="pttPlaySeg" style="margin-top:0.75rem">
-                  <button type="button" data-ptt-play="on" class="on">Play reply</button>
-                  <button type="button" data-ptt-play="off">Silent</button>
-                </div>
-                <p class="disclaimer" id="pttPlayHelp">When On, Kaiwa speaks the reply over your default speakers (even while another app is focused).</p>
-                <div class="seg" id="pttBlipsSeg" style="margin-top:0.75rem">
-                  <button type="button" data-ptt-blips="on" class="on">Blips on</button>
-                  <button type="button" data-ptt-blips="off">Blips off</button>
-                </div>
-                <label for="pttBlipVolume" class="disclaimer" style="display:block;margin-top:0.6rem;">Blip volume <span id="pttBlipVolumePct">60%</span></label>
-                <input id="pttBlipVolume" class="kaiwa-range" type="range" min="0" max="500" value="60" step="5" />
-                <p class="disclaimer" id="pttBlipHelp">Short in/out cues when you press and release the PTT key (desktop app only). Up to 500% if you need them louder.</p>
-                <div class="controls" style="margin-top:0.75rem; gap:0.5rem; flex-wrap:wrap; align-items:center;">
-                  <span class="disclaimer" style="margin:0; min-width:5rem;">Blip in</span>
-                  <span id="pttBlipInLabel" class="disclaimer" style="margin:0;">Default</span>
-                  <button id="pttBlipInChange" class="secondary" type="button">Change…</button>
-                  <button id="pttBlipInReset" class="secondary" type="button">Reset</button>
-                  <input id="pttBlipInFile" type="file" accept=".ogg,.wav,.mp3,audio/ogg,audio/wav,audio/mpeg,audio/*" hidden />
-                </div>
-                <div class="controls" style="margin-top:0.4rem; gap:0.5rem; flex-wrap:wrap; align-items:center;">
-                  <span class="disclaimer" style="margin:0; min-width:5rem;">Blip out</span>
-                  <span id="pttBlipOutLabel" class="disclaimer" style="margin:0;">Default</span>
-                  <button id="pttBlipOutChange" class="secondary" type="button">Change…</button>
-                  <button id="pttBlipOutReset" class="secondary" type="button">Reset</button>
-                  <input id="pttBlipOutFile" type="file" accept=".ogg,.wav,.mp3,audio/ogg,audio/wav,audio/mpeg,audio/*" hidden />
-                </div>
-              </div>
-            </div>
-
-            <div class="settings-section" data-settings-section="about" hidden>
-              <h2 class="section-title">About</h2>
-              <p class="disclaimer settings-searchable" data-settings-search="about version update github release installer setup">
-                Kaiwa checks GitHub Releases for newer Windows installers. Updates download into AppData and launch Setup (UAC may ask for permission).
-              </p>
-              <div class="field settings-searchable" data-settings-search="about version kaiwa release">
-                <label>Version</label>
-                <p class="disclaimer" id="aboutVersionLabel">…</p>
-              </div>
-              <div class="controls settings-searchable" data-settings-search="check for updates update now github" style="margin-top:0.6rem; gap:0.5rem; flex-wrap:wrap; align-items:center;">
-                <button id="aboutCheckUpdatesBtn" class="secondary" type="button">Check for updates</button>
-                <button id="aboutInstallUpdateBtn" type="button" hidden>Update now</button>
-              </div>
-              <p class="disclaimer settings-searchable" data-settings-search="update status download install" id="aboutUpdateStatus" style="margin-top:0.6rem"></p>
+              </fieldset>
             </div>
           </div>
           <div class="settings-save-bar" id="settingsPrefsSaveBar" hidden>
-            <button id="savePrefs" type="button">Save settings</button>
+            <button id="savePrefs" type="button">Save</button>
             <span id="settingsStatus"></span>
           </div>
         </div>
@@ -501,6 +573,7 @@
     </section>
   </div>
 
+  <script src="/static/tips.js"></script>
   <script src="/static/mic.js"></script>
   <script>
     const talkBtn = document.getElementById("talk");
@@ -582,7 +655,7 @@
     let activeTalkBtn = talkBtn;
     let activeStatusEl = statusEl;
     let languagePolicy = "adaptive";
-    let uiTheme = "night";
+    let uiTheme = window.kaiwaTheme ? window.kaiwaTheme.get() : "system";
     let speechRegister = "casual";
     let goalLevel = "pre_n5";
     let ttsEngine = "aivisspeech";
@@ -686,18 +759,18 @@
     }
 
     function offerTypeRetry(detail) {
-      const msg = String(detail || "Couldn't catch that — type it below.");
+      const msg = String(detail || "Didn't catch that. Type it below.");
       setStatus(msg);
       if (chatTextRow) chatTextRow.classList.add("type-retry");
       if (chatTextInput) {
-        chatTextInput.placeholder = "Type what you meant";
+        chatTextInput.placeholder = "Type what you said";
         chatTextInput.focus();
       }
     }
 
     function clearTypeRetry() {
       if (chatTextRow) chatTextRow.classList.remove("type-retry");
-      if (chatTextInput) chatTextInput.placeholder = "Or type what you meant";
+      if (chatTextInput) chatTextInput.placeholder = "Type a message";
     }
 
     function looksLikeEngineError(msg) {
@@ -774,32 +847,28 @@
       tab.addEventListener("click", () => setMode(tab.dataset.mode));
     });
 
-    const PREFS_SAVE_SECTIONS = new Set(["tutor", "speech", "learning"]);
-    const SETTINGS_SECTIONS = new Set([
-      "profiles",
-      "tutor",
-      "learning",
-      "placement",
-      "memory",
-      "speech",
-      "about",
-    ]);
+    const PREFS_SAVE_SECTIONS = new Set(["chat", "speech", "ptt", "level"]);
+    const SETTINGS_SECTIONS = new Set(["general", "speech", "ptt", "chat", "level", "memory", "data"]);
     const SETTINGS_SECTION_MIGRATE = {
-      conversation: "tutor",
-      presets: "tutor",
+      profiles: "data",
+      about: "general",
+      tutor: "chat",
+      conversation: "chat",
+      presets: "chat",
       voice: "speech",
-      level: "learning",
-      learner: "learning",
-      quiz: "placement",
+      learning: "level",
+      learner: "level",
+      placement: "level",
+      quiz: "level",
     };
 
     let settingsSearchActive = false;
-    let settingsLastSection = "profiles";
+    let settingsLastSection = "general";
 
     function migrateSettingsSectionId(id) {
-      const raw = id || "profiles";
+      const raw = id || "general";
       const mapped = SETTINGS_SECTION_MIGRATE[raw] || raw;
-      return SETTINGS_SECTIONS.has(mapped) ? mapped : "profiles";
+      return SETTINGS_SECTIONS.has(mapped) ? mapped : "general";
     }
 
     function clearSettingsSearchHits() {
@@ -903,9 +972,9 @@
     })();
 
     (function initSettingsSection() {
-      let saved = "profiles";
+      let saved = "general";
       try {
-        saved = sessionStorage.getItem("kaiwa_settings_section") || "profiles";
+        saved = sessionStorage.getItem("kaiwa_settings_section") || "general";
       } catch (_) {}
       setSettingsSection(migrateSettingsSectionId(saved));
     })();
@@ -928,7 +997,7 @@
         btn.type = "button";
         btn.className = "bubble-simpler secondary";
         btn.textContent = "Simpler";
-        btn.title = "I didn’t catch that — say it more simply";
+        btn.dataset.tip = "Say this reply more simply";
         btn.addEventListener("click", (e) => {
           e.preventDefault();
           requestRescue(wrap, body);
@@ -1001,7 +1070,7 @@
     function playWavBase64(b64) {
       if (!b64) return;
       const audio = new Audio("data:audio/wav;base64," + b64);
-      audio.play().catch(() => setStatus("Audio ready (allow sound if blocked)"));
+      audio.play().catch(() => setStatus("Audio blocked. Click Replay."));
     }
 
     function playWavBase64AndWait(b64) {
@@ -1114,7 +1183,7 @@
       }
       const text = (localStorage.getItem("kaiwa_last_reply") || "").trim();
       if (!text) {
-        setStatus("Nothing to replay yet — chat first");
+        setStatus("Nothing to replay yet");
         updateReplayButton();
         return;
       }
@@ -1127,7 +1196,7 @@
           body: JSON.stringify({ text }),
         });
         const data = await res.json();
-        if (!res.ok) throw new Error(errorMessage(data, "Could not replay"));
+        if (!res.ok) throw new Error(errorMessage(data, "Replay failed"));
         if (!data.audio_base64) throw new Error("No audio returned");
         cacheLastAudio(data.audio_base64);
         playWavBase64(data.audio_base64);
@@ -1151,7 +1220,7 @@
       if (recording || recordStarting || mode === "settings") return;
       recordStarting = true;
       recordWantsStop = false;
-      if (!window.KaiwaMic.isOpen()) setStatus("Opening the microphone…");
+      if (!window.KaiwaMic.isOpen()) setStatus("Opening microphone…");
       try {
         micHandle = await window.KaiwaMic.record();
       } catch (err) {
@@ -1163,12 +1232,12 @@
       if (recordWantsStop) {
         micHandle.stop();
         micHandle = null;
-        setStatus("The microphone was still opening. Hold until the button turns red, then speak.");
+        setStatus("Released before the microphone opened. Hold until the button turns red.");
         return;
       }
       recording = true;
       activeTalkBtn.classList.add("recording");
-      activeTalkBtn.textContent = "Listening… let go when you're done";
+      activeTalkBtn.textContent = "Listening… release to send";
       setStatus("Recording");
     }
 
@@ -1185,12 +1254,12 @@
       activeTalkBtn.textContent = mode === "chat" ? "Hold to talk" : "Hold to repeat";
       const res = await handle.stop();
       if (res.ms < 350 || res.blob.size < 800) {
-        setStatus("That was too short. Hold the whole time you speak, then let go.");
+        setStatus("Too short. Hold the whole time you speak.");
         return;
       }
       if (res.silent) {
         const mic = window.KaiwaMic.currentLabel() || "the selected microphone";
-        setStatus(`Didn't hear anything from ${mic}. Pick another microphone under the talk button.`);
+        setStatus(`No sound from ${mic}. Pick another microphone below.`);
         return;
       }
       setStatus("Thinking…");
@@ -1297,7 +1366,7 @@
       const port = ttsEngine === "voicevox" ? "50021" : "10101";
       document.getElementById("ttsEngineHelp").textContent =
         label + " on port " + port + ". Switch engines only after the matching engine is running.";
-      voiceHelp.textContent = "Requires " + label + " running. Preview uses the selected voice.";
+      voiceHelp.textContent = "";
     }
 
     function setProfileLevelSeg(segId, level, assign) {
@@ -1308,19 +1377,27 @@
       });
     }
 
+    function levelName(level) {
+      return { pre_n5: "Pre-N5", n5: "N5", n4: "N4" }[level] || String(level || "unknown");
+    }
+
+    function formatDate(iso) {
+      const d = iso ? new Date(iso) : null;
+      return d && !isNaN(d) ? d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" }) : "";
+    }
+
     function renderProfileSummary(profile) {
       if (!profile) {
-        profileSummary.textContent = "No profile yet.";
+        profileSummary.textContent = "Not estimated yet";
         return;
       }
       const conf = Math.round((profile.confidence || 0) * 100);
-      const updated = profile.updated_at ? (" · updated " + profile.updated_at) : "";
-      const tags = (profile.topic_tags || []).join(", ") || "—";
+      const updated = formatDate(profile.updated_at);
       profileSummary.textContent =
-        "Speaking " + profile.speaking_level +
-        " · Comprehension " + profile.comprehension_level +
-        " · confidence " + conf + "%" +
-        " · tags: " + tags + updated;
+        "Speaking " + levelName(profile.speaking_level) +
+        ", comprehension " + levelName(profile.comprehension_level) +
+        " (" + conf + "% confident)" +
+        (updated ? ". Updated " + updated + "." : ".");
     }
 
     function applyProfileToForm(profile) {
@@ -1348,7 +1425,7 @@
 
     function applyMemoryToForm(memory) {
       if (!memory) {
-        document.getElementById("memorySummary").textContent = "No memory yet.";
+        document.getElementById("memorySummary").textContent = "Nothing remembered yet";
         return;
       }
       const comfort = memory.comfort || {};
@@ -1357,13 +1434,14 @@
       document.getElementById("memoryDo").value = (comfort.do || []).join(", ");
       document.getElementById("memoryDont").value = (comfort.dont || []).join(", ");
       document.getElementById("memoryTopics").value = (memory.topics || []).join(", ");
-      const vocab = (memory.vocab || []).slice(0, 6).map((v) => v.surface + (v.note ? " — " + v.note : ""));
-      const grammar = (memory.grammar_notes || []).slice(0, 5).map((g) => g.pattern + (g.hint ? " → " + g.hint : ""));
-      document.getElementById("memoryVocabList").textContent = vocab.length ? vocab.join(" · ") : "(none yet)";
-      document.getElementById("memoryGrammarList").textContent = grammar.length ? grammar.join(" · ") : "(none yet)";
+      const vocab = (memory.vocab || []).slice(0, 6).map((v) => v.surface + (v.note ? " (" + v.note + ")" : ""));
+      const grammar = (memory.grammar_notes || []).slice(0, 5).map((g) => g.pattern + (g.hint ? ": " + g.hint : ""));
+      document.getElementById("memoryVocabList").textContent = vocab.length ? vocab.join(", ") : "None yet";
+      document.getElementById("memoryGrammarList").textContent = grammar.length ? grammar.join("; ") : "None yet";
       const extracts = (memory.stats && memory.stats.total_extracts) || 0;
+      const updated = formatDate(memory.updated_at);
       document.getElementById("memorySummary").textContent =
-        "Extracts: " + extracts + (memory.updated_at ? " · updated " + memory.updated_at : "");
+        "Updated from " + extracts + " chat" + (extracts === 1 ? "" : "s") + (updated ? ", last on " + updated : "") + ".";
     }
 
     async function saveMemoryOverrides() {
@@ -1388,7 +1466,7 @@
     }
 
     async function resetMemoryClick() {
-      if (!confirm("Reset long-term memory?")) return;
+      if (!confirm("Clear everything Kaiwa remembers about you?")) return;
       const memoryStatus = document.getElementById("memoryStatus");
       memoryStatus.textContent = "Resetting…";
       const res = await fetch("/api/memory", {
@@ -1418,11 +1496,11 @@
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || "Profile save failed");
       applyProfileToForm(data.profile);
-      profileStatusEl.textContent = "Profile saved";
+      profileStatusEl.textContent = "Saved";
     }
 
     async function resetProfileClick() {
-      if (!confirm("Reset learner profile to defaults?")) return;
+      if (!confirm("Reset your estimated level?")) return;
       profileStatusEl.textContent = "Resetting…";
       const res = await fetch("/api/profile", {
         method: "PUT",
@@ -1432,7 +1510,7 @@
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || "Reset failed");
       applyProfileToForm(data.profile);
-      profileStatusEl.textContent = "Profile reset";
+      profileStatusEl.textContent = "Reset";
     }
 
     document.querySelectorAll("#goalSeg button").forEach((btn) => {
@@ -1462,6 +1540,10 @@
 
     function applyPrefsToForm(prefs) {
       if (!prefs) return;
+      if (prefs.ui_theme && window.kaiwaTheme) {
+        uiTheme = window.kaiwaTheme.set(prefs.ui_theme);
+        themeSelect.value = uiTheme;
+      }
       setLanguageUI(prefs.language_policy || "adaptive");
       setRegisterUI(prefs.speech_register || "casual");
       setGoalUI(prefs.goal_level || "pre_n5");
@@ -1489,9 +1571,9 @@
       if (!voices || !voices.length) {
         const opt = document.createElement("option");
         opt.value = String(selectedId || (ttsEngine === "voicevox" ? 3 : 888753760));
-        opt.textContent = label + " unavailable (id " + opt.value + ")";
+        opt.textContent = label + " not running";
         voiceSelect.appendChild(opt);
-        voiceHelp.textContent = "Start " + label + ", then reopen Settings to refresh voices.";
+        voiceHelp.textContent = label + " isn't running. Start it, then reopen Settings.";
         return;
       }
       voices.forEach((v) => {
@@ -1503,7 +1585,7 @@
       const want = String(selectedId != null ? selectedId : voices[0].id);
       const exists = [...voiceSelect.options].some((o) => o.value === want);
       voiceSelect.value = exists ? want : String(voices[0].id);
-      voiceHelp.textContent = "Requires " + label + " running. Preview uses the selected voice.";
+      voiceHelp.textContent = "";
     }
 
     async function loadVoicesIntoForm(selectedId) {
@@ -1580,7 +1662,7 @@
 
       const custom = document.createElement("option");
       custom.value = "custom";
-      custom.textContent = "Custom notes only";
+      custom.textContent = "None (extra instructions only)";
       personalitySelect.appendChild(custom);
 
       const want = selectedId || "patient_tutor";
@@ -1594,11 +1676,22 @@
       const found = personalities.find((p) => p.id === id);
       personalityDesc.textContent = found
         ? found.description
-        : "Uses only your custom notes below.";
+        : "Uses only your extra instructions.";
       const isUser = found && found.source === "user";
       userPresetActions.hidden = !isUser;
     }
     personalitySelect.addEventListener("change", updatePersonalityDesc);
+
+    const themeSelect = document.getElementById("themeSelect");
+    themeSelect.value = uiTheme;
+    themeSelect.addEventListener("change", () => {
+      uiTheme = window.kaiwaTheme.set(themeSelect.value);
+      fetch("/api/prefs/theme", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ theme: uiTheme }),
+      }).catch(() => {});
+    });
 
     function clearPresetEditor() {
       editingPresetId = null;
@@ -1606,7 +1699,7 @@
       newPresetDesc.value = "";
       newPresetBlurb.value = "";
       cancelEditPresetBtn.hidden = true;
-      saveUserPresetBtn.textContent = "Save as preset";
+      saveUserPresetBtn.textContent = "Save personality";
       presetEditorStatus.textContent = "";
     }
 
@@ -1615,6 +1708,7 @@
       const found = personalities.find((p) => p.id === id && p.source === "user");
       if (!found) return;
       editingPresetId = found.id;
+      document.getElementById("presetEditor").open = true;
       newPresetLabel.value = found.label || "";
       newPresetDesc.value = found.description || "";
       // prompt_blurb may not be in public list — fetch personalities detail
@@ -1624,8 +1718,8 @@
           const full = (data.user || []).find((p) => p.id === found.id);
           newPresetBlurb.value = (full && full.prompt_blurb) || "";
           cancelEditPresetBtn.hidden = false;
-          saveUserPresetBtn.textContent = "Update preset";
-          presetEditorStatus.textContent = "Editing “" + found.label + "”";
+          saveUserPresetBtn.textContent = "Save changes";
+          presetEditorStatus.textContent = "Editing " + found.label;
         })
         .catch((err) => {
           presetEditorStatus.textContent = String(err.message || err);
@@ -1639,7 +1733,7 @@
         prompt_blurb: newPresetBlurb.value.trim(),
       };
       if (!body.label || !body.prompt_blurb) {
-        presetEditorStatus.textContent = "Label and prompt instructions are required";
+        presetEditorStatus.textContent = "Name and instructions are required";
         return;
       }
       presetEditorStatus.textContent = "Saving…";
@@ -1657,14 +1751,14 @@
       const selected = (data.preset && data.preset.id) || personalitySelect.value;
       fillPersonalitySelect(data.personalities, selected);
       clearPresetEditor();
-      presetEditorStatus.textContent = method === "POST" ? "Preset created" : "Preset updated";
+      presetEditorStatus.textContent = method === "POST" ? "Saved" : "Changes saved";
     }
 
     async function deleteSelectedUserPreset() {
       const id = personalitySelect.value;
       const found = personalities.find((p) => p.id === id && p.source === "user");
       if (!found) return;
-      if (!confirm("Delete preset “" + found.label + "”?")) return;
+      if (!confirm("Delete the personality " + found.label + "?")) return;
       presetEditorStatus.textContent = "Deleting…";
       const res = await fetch("/api/personalities/" + encodeURIComponent(id), { method: "DELETE" });
       const data = await res.json();
@@ -1674,8 +1768,8 @@
       if (data.prefs) {
         applyPrefsToForm(data.prefs);
       }
-      presetEditorStatus.textContent = "Preset deleted";
-      settingsStatusEl.textContent = "Settings updated";
+      presetEditorStatus.textContent = "Deleted";
+      settingsStatusEl.textContent = "Saved";
     }
 
     async function loadPrefsIntoForm(opts) {
@@ -1720,7 +1814,7 @@
       } else if (typeof data.placement_completed === "boolean") {
         placementCompleted = data.placement_completed;
       }
-      settingsStatusEl.textContent = "Loaded";
+      settingsStatusEl.textContent = "";
       if (!(opts && opts.skipPlacementOffer)) {
         maybeOfferPlacement(data.profile || { placement_completed: placementCompleted }, {
           profileId: activeProfileId,
@@ -1733,7 +1827,7 @@
       const note = document.createElement("p");
       note.className = "chat-disclaimer";
       note.setAttribute("role", "note");
-      note.textContent = "Hold the button (or the Space bar) and say anything. Kaiwa answers in easy Japanese built on the phrases you've learned. Type instead if the mic misses you.";
+      note.textContent = "Hold Talk (or Space) and speak, or type below.";
       logEl.prepend(note);
     }
 
@@ -1768,7 +1862,7 @@
       }
       await registerPttSession();
       const msg =
-        (opts && opts.status) || "New chat (keeps memory).";
+        (opts && opts.status) || "New chat";
       setStatus(msg);
       setSessionTurnCount(0);
       closeChatsDrawer();
@@ -1859,7 +1953,7 @@
       try {
         const res = await fetch("/api/sessions/" + encodeURIComponent(id));
         if (res.status === 404 || res.status === 409) {
-          await startNewChat({ status: "New chat (keeps memory)." });
+          await startNewChat({ status: "New chat" });
           return;
         }
         if (!res.ok) return;
@@ -1903,7 +1997,7 @@
       if (usable.length) {
         const head = document.createElement("p");
         head.className = "leftovers-alts-head";
-        head.textContent = "You could have said";
+        head.textContent = "Other ways to say it";
         leftoversBody.appendChild(head);
         usable.forEach((text) => {
           const p = document.createElement("p");
@@ -1942,7 +2036,7 @@
       if (!rows.length) {
         const empty = document.createElement("p");
         empty.className = "chats-empty";
-        empty.textContent = "No chats yet.";
+        empty.textContent = "No chats yet";
         chatsList.appendChild(empty);
         return;
       }
@@ -2017,15 +2111,15 @@
 
     async function startAgainChat() {
       if (!sessionId) {
-        setStatus("Nothing to try again yet — chat first");
+        setStatus("Nothing to ask again yet");
         return;
       }
       if (!lastBotBubble()) {
-        setStatus("Nothing to try again yet — chat first");
+        setStatus("Nothing to ask again yet");
         return;
       }
       setChatBusy(true);
-      setStatus("Trying those questions again…");
+      setStatus("Starting a new chat with the same questions…");
       try {
         const res = await fetch("/api/sessions/" + encodeURIComponent(sessionId) + "/replay", {
           method: "POST",
@@ -2034,7 +2128,7 @@
         if (!res.ok) throw new Error((data && data.detail) || "Could not try again");
         closeLeftoversDrawer();
         closeChatsDrawer();
-        await applyHydratedSession(data, "Trying those questions again.");
+        await applyHydratedSession(data, "Same questions, new chat");
         if (data.audio_base64) {
           cacheLastAudio(data.audio_base64);
           resetAudioQueue();
@@ -2064,11 +2158,11 @@
       const data = await res.json().catch(() => ({}));
       if (res.status === 404 || res.status === 409) {
         closeChatsDrawer();
-        await startNewChat({ status: "New chat (keeps memory)." });
+        await startNewChat({ status: "New chat" });
         return;
       }
       if (!res.ok) throw new Error((data && data.detail) || "Could not open chat");
-      await applyHydratedSession(data, "Resumed chat.");
+      await applyHydratedSession(data, "Chat reopened");
       closeChatsDrawer();
     }
 
@@ -2089,8 +2183,8 @@
       }
       if (data.profile) applyProfileToForm(data.profile);
       if (data.memory) applyMemoryToForm(data.memory);
-      profilesStatusEl.textContent = statusMsg || "Profile updated";
-      settingsStatusEl.textContent = statusMsg || "Profile updated";
+      profilesStatusEl.textContent = statusMsg || "Done";
+      settingsStatusEl.textContent = statusMsg || "Done";
       const profilePayload = data.profile || {};
       if (typeof profilePayload.placement_completed === "boolean") {
         placementCompleted = profilePayload.placement_completed;
@@ -2104,7 +2198,7 @@
     }
 
     async function resetUserData() {
-      if (!confirm("Reset everything? Settings, level, memory, and custom personalities go back to defaults. Kaiwa saves a copy of your current data first.")) {
+      if (!confirm("Reset settings, level, memory, lesson progress and custom personalities? A backup of the current data is saved first.")) {
         return;
       }
       profilesStatusEl.textContent = "Resetting…";
@@ -2112,7 +2206,7 @@
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || "Reset failed");
       clearChatSessionLocal();
-      await applyActiveProfileState(data, "Reset. A copy of your old data was saved.");
+      await applyActiveProfileState(data, "Reset. The old data was backed up.");
     }
 
     async function exportUserData() {
@@ -2139,7 +2233,7 @@
 
     async function importUserData(file) {
       if (!file) return;
-      if (!confirm("Replace your current data with “" + file.name + "”? Kaiwa saves a copy of what's here first.")) {
+      if (!confirm("Replace your current data with " + file.name + "? A backup of the current data is saved first.")) {
         return;
       }
       profilesStatusEl.textContent = "Importing…";
@@ -2216,7 +2310,7 @@
       if (savedVoice !== prevVoice || savedEngine !== prevEngine) {
         clearLastAudioCache();
       }
-      settingsStatusEl.textContent = "Saved — applies to next chat turn";
+      settingsStatusEl.textContent = "Saved";
     }
 
     document.getElementById("savePrefs").addEventListener("click", () => {
@@ -2326,7 +2420,7 @@
 
     function formatPttBinding(binding) {
       const b = canonicalizePttBinding(binding);
-      if (!b) return "(not set)";
+      if (!b) return "Not set";
       if (b.startsWith("key:")) return b.slice(4).toUpperCase();
       if (b.startsWith("mouse:")) return "Mouse " + b.slice(6);
       return b;
@@ -2457,17 +2551,17 @@
         if (!res.ok) throw new Error("state failed");
         setPttBlipLabels(data);
         if (data.hook_alive) {
-          el.textContent = "Desktop hook: running";
+          el.textContent = "Active";
           el.style.color = "";
         } else if (pttEnabled) {
-          el.textContent = "Desktop hook: not detected — start Kaiwa from the desktop app (kaiwa-desktop / Kaiwa.exe) for global PTT.";
+          el.textContent = "Only works in the Kaiwa desktop app (Kaiwa.exe), not in a browser.";
           el.style.color = "var(--danger, #e8a0a0)";
         } else {
-          el.textContent = "Desktop hook: idle (PTT is off)";
+          el.textContent = "";
           el.style.color = "";
         }
       } catch (_) {
-        el.textContent = "Desktop hook: unknown (is the server up?)";
+        el.textContent = "Status unknown";
       }
     }
 
@@ -2481,7 +2575,7 @@
       }
       await refreshPttHookStatus();
       settingsStatusEl.textContent =
-        which === "in" ? "Blip in updated" : "Blip out updated";
+        which === "in" ? "Press sound changed" : "Release sound changed";
     }
 
     async function resetPttBlip(which) {
@@ -2492,7 +2586,7 @@
       }
       await refreshPttHookStatus();
       settingsStatusEl.textContent =
-        which === "in" ? "Blip in reset to default" : "Blip out reset to default";
+        which === "in" ? "Press sound reset" : "Release sound reset";
     }
 
     async function setPttBindCapture(active) {
@@ -2510,7 +2604,7 @@
       pttBindListening = true;
       const btn = document.getElementById("pttBindBtn");
       const label = document.getElementById("pttBindLabel");
-      if (btn) btn.textContent = "Listening… hold a key or mouse button";
+      if (btn) btn.textContent = "Press a key or mouse button…";
       if (label) label.textContent = "Waiting…";
       await setPttBindCapture(true);
 
@@ -2520,7 +2614,7 @@
         window.removeEventListener("keydown", onKey, true);
         window.removeEventListener("mousedown", onMouse, true);
         await setPttBindCapture(false);
-        if (btn) btn.textContent = "Press to bind…";
+        if (btn) btn.textContent = "Change…";
         if (binding) {
           setPttBindingUI(binding);
           try {
@@ -2574,10 +2668,10 @@
           const el = document.getElementById("pttHookStatus");
           if (el) {
             if (data.hook_alive) {
-              el.textContent = "Desktop hook: running";
+              el.textContent = "Active";
               el.style.color = "";
             } else if (pttEnabled) {
-              el.textContent = "Desktop hook: not detected — start Kaiwa from the desktop app (kaiwa-desktop / Kaiwa.exe) for global PTT.";
+              el.textContent = "Only works in the Kaiwa desktop app (Kaiwa.exe), not in a browser.";
               el.style.color = "var(--danger, #e8a0a0)";
             }
           }
@@ -2602,7 +2696,7 @@
             localStorage.setItem("kaiwa_last_reply", ev.reply_text);
             clearLastAudioCache();
           }
-          setStatus("Ready · push-to-talk");
+          setStatus("Ready (push-to-talk on)");
           bumpSessionTurnCount();
           sawTurn = true;
         }
@@ -2682,8 +2776,8 @@
     });
 
     function formatChatStatus(data) {
-      if (data.tts_error) return "Couldn’t play audio — see the note above";
-      const status = "Ready — hold to talk";
+      if (data.tts_error) return "No audio. See the message above.";
+      const status = "Ready";
       if (data.timing && data.timing.total_ms != null) {
         const st = document.getElementById("status");
         if (st) {
@@ -2873,13 +2967,13 @@
     async function requestRescue(wrap, bodyEl) {
       if (!guardDeepseekOrExplain()) return;
       if (!sessionId) {
-        setStatus("Nothing to simplify yet — chat first");
+        setStatus("Nothing to simplify yet");
         return;
       }
       const last = lastBotBubble();
       if (!last || last !== wrap) return;
       setChatBusy(true);
-      setStatus("Saying that more simply…");
+      setStatus("Simplifying…");
       hideChatHelpHint();
       try {
         const res = await fetch("/api/rescue", {
@@ -2941,7 +3035,7 @@
         await consumeChatStream(res);
       } catch (err) {
         if (err && err.name === "AbortError") {
-          setStatus("Timed out — is the server still starting Whisper, or is DeepSeek/TTS down?");
+          setStatus("Timed out. Speech recognition may still be loading, or DeepSeek or the voice engine is down.");
         } else {
           const msg = String(err.message || err);
           setStatus(msg);
@@ -2957,7 +3051,7 @@
       if (!guardDeepseekOrExplain()) return;
       const text = (chatTextInput.value || "").trim();
       if (!text) {
-        setStatus("Type a short line first");
+        setStatus("Type something first");
         return;
       }
       setChatBusy(true);
@@ -2976,7 +3070,7 @@
         await consumeChatStream(res);
       } catch (err) {
         if (err && err.name === "AbortError") {
-          setStatus("Timed out — check DeepSeek/TTS");
+          setStatus("Timed out. Check DeepSeek and the voice engine.");
         } else {
           const msg = String(err.message || err);
           setStatus(msg);
@@ -3361,7 +3455,7 @@
 
     function skipPlacement() {
       dismissPlacement(activeProfileId);
-      quizStatusEl.textContent = "Skipped. Chat stays extra simple until you finish Place me (Settings).";
+      quizStatusEl.textContent = "Skipped. Chat stays extra simple until you take the test.";
       resetQuizUi();
       setMode("learn");
     }
@@ -3374,7 +3468,7 @@
       quizNextBtn.hidden = true;
       quizChoices.innerHTML = "";
       quizPrompt.textContent = "—";
-      quizStatusEl.textContent = "Ready when you are";
+      quizStatusEl.textContent = "";
       quizMultiSelected = [];
       quizLocked = false;
       const extra = document.getElementById("quizExtra");
@@ -3392,9 +3486,9 @@
     }
 
     function levelLabel(level) {
-      if (level === "n4") return "Getting comfortable (N4-ish)";
-      if (level === "n5") return "Can handle basics (N5-ish)";
-      return "Just starting (pre-N5)";
+      if (level === "n4") return "About N4";
+      if (level === "n5") return "About N5";
+      return "Pre-N5";
     }
 
     function otherSelected(item) {
@@ -3420,7 +3514,7 @@
         quizMultiSelected.length === 0
           ? "Pick up to " + maxSel + ", then Continue."
           : needOther && !otherOk
-            ? "Type your topic for Other…"
+            ? "Type your topic"
             : "Selected " + quizMultiSelected.length + " · Continue when ready.";
     }
 
@@ -3439,14 +3533,14 @@
       quizChoices.innerHTML = "";
 
       if (item.free_text) {
-        quizFeedback.textContent = item.hint || "Optional — leave blank to skip.";
+        quizFeedback.textContent = item.hint || "Optional";
         quizNextBtn.hidden = false;
         quizNextBtn.disabled = false;
-        quizNextBtn.textContent = quizIndex + 1 >= quizItems.length ? "See my levels" : "Continue";
+        quizNextBtn.textContent = quizIndex + 1 >= quizItems.length ? "Finish" : "Next";
         extra.hidden = false;
         otherIn.hidden = true;
         noteIn.hidden = false;
-        noteIn.placeholder = item.placeholder || "Optional — anything helpful for Kaiwa…";
+        noteIn.placeholder = item.placeholder || "";
         noteIn.maxLength = item.max_length > 0 ? item.max_length : 300;
         noteIn.focus();
         return;
@@ -3458,7 +3552,7 @@
       quizFeedback.textContent = item.multi ? "Pick up to " + (item.max_select || 3) + ", then Continue." : "";
       quizNextBtn.hidden = !item.multi;
       if (item.multi) {
-        quizNextBtn.textContent = quizIndex + 1 >= quizItems.length ? "See my levels" : "Continue";
+        quizNextBtn.textContent = quizIndex + 1 >= quizItems.length ? "Finish" : "Next";
         quizNextBtn.disabled = true;
       }
       (item.choices || []).forEach((text, idx) => {
@@ -3500,10 +3594,10 @@
       clearPlacementDismiss(activeProfileId);
       resetQuizUi();
       quizIntro.hidden = true;
-      quizStatusEl.textContent = "Setting up…";
+      quizStatusEl.textContent = "Loading…";
       const res = await fetch("/api/quiz/start", { method: "POST" });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || "Could not start placement");
+      if (!res.ok) throw new Error(data.detail || "Couldn't start the test");
       quizSessionId = data.session_id;
       quizItems = data.items || [];
       quizIndex = 0;
@@ -3536,7 +3630,7 @@
       quizFeedback.textContent = "Got it.";
       quizNextBtn.hidden = false;
       quizNextBtn.disabled = false;
-      quizNextBtn.textContent = quizIndex + 1 >= quizItems.length ? "See my levels" : "Continue";
+      quizNextBtn.textContent = quizIndex + 1 >= quizItems.length ? "Finish" : "Next";
     }
 
     async function submitQuizMultiAnswer() {
@@ -3544,7 +3638,7 @@
       const item = quizItems[quizIndex];
       if (!item || !item.multi) return true;
       if (!quizMultiSelected.length) {
-        quizFeedback.textContent = "Pick at least one";
+        quizFeedback.textContent = "Pick at least one.";
         return false;
       }
       const otherIn = document.getElementById("quizOtherInput");
@@ -3556,7 +3650,7 @@
       if (otherSelected(item)) {
         payload.text = (otherIn.value || "").trim();
         if (!payload.text) {
-          quizFeedback.textContent = "Type your topic for Other…";
+          quizFeedback.textContent = "Type your topic.";
           return false;
         }
       }
@@ -3626,14 +3720,14 @@
     }
 
     async function finishQuiz() {
-      quizStatusEl.textContent = "Wrapping up…";
+      quizStatusEl.textContent = "Saving…";
       const res = await fetch("/api/quiz/finish", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ session_id: quizSessionId }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || "Could not finish placement");
+      if (!res.ok) throw new Error(data.detail || "Couldn't save the result");
       quizActive.hidden = true;
       quizIntro.hidden = true;
       quizResults.hidden = false;
@@ -3645,7 +3739,7 @@
         " · Listening: " + levelLabel(listening) +
         " · Chat aim: " + levelLabel(goal);
       quizResultNote.textContent =
-        "Kaiwa will use these as your starting point — tweak them anytime under Learning.";
+        "Chat starts at this level. Change it any time under Estimated level.";
       const callMe = data.summary && data.summary.preferred_name;
       if (callMe) {
         quizResultNote.textContent += " Kaiwa will call you " + callMe + ".";
@@ -3699,9 +3793,9 @@
       const maskedEl = document.getElementById("deepseekKeyMasked");
       if (maskedEl) {
         if (deepseekConfigured) {
-          maskedEl.textContent = "Saved (" + (data.masked_key || "••••") + ").";
+          maskedEl.textContent = data.masked_key || "Saved";
         } else {
-          maskedEl.textContent = "Not configured";
+          maskedEl.textContent = "Not set";
         }
       }
       setApiKeyGateVisible(!deepseekConfigured);
@@ -3717,7 +3811,7 @@
 
     async function saveDeepseekKey(rawKey, statusEl) {
       const key = String(rawKey || "").trim();
-      if (!key) throw new Error("Paste an API key first");
+      if (!key) throw new Error("Paste a key first");
       if (statusEl) {
         statusEl.textContent = "Saving…";
         statusEl.className = statusEl.id === "apiKeyGateStatus" ? "api-key-gate-status" : "";
@@ -3735,7 +3829,7 @@
           statusEl.textContent = "Saved — " + data.warning;
           if (statusEl.id === "apiKeyGateStatus") statusEl.className = "api-key-gate-status warn";
         } else {
-          statusEl.textContent = "Saved. You’re ready to chat.";
+          statusEl.textContent = "Saved";
           if (statusEl.id === "apiKeyGateStatus") statusEl.className = "api-key-gate-status ok";
         }
       }
@@ -3747,7 +3841,7 @@
       setApiKeyGateVisible(true);
       const st = document.getElementById("apiKeyGateStatus");
       if (st) {
-        st.textContent = "Add your DeepSeek API key to use Chat and Practice tips.";
+        st.textContent = "Add a DeepSeek API key to use Chat.";
         st.className = "api-key-gate-status warn";
       }
       return false;
@@ -3836,9 +3930,9 @@
         } else if (data.dismissed) {
           statusEl.textContent = "Update " + (data.latest_version || "") + " snoozed until a newer release.";
         } else if (data.latest_version) {
-          statusEl.textContent = "You’re up to date (latest " + data.latest_version + ").";
+          statusEl.textContent = "Up to date (" + data.latest_version + ")";
         } else {
-          statusEl.textContent = "No update info yet.";
+          statusEl.textContent = "";
         }
       }
 
@@ -3891,11 +3985,11 @@
         }
         applyUpdateCheck(updateCheckState, {
           hideBanner: false,
-          statusText: data.detail || "Installer started — finish Setup and relaunch Kaiwa.",
+          statusText: data.detail || "Setup started. Finish it, then reopen Kaiwa.",
         });
         const bannerText = document.getElementById("updateBannerText");
         if (bannerText) {
-          bannerText.textContent = data.detail || "Installer started — finish Setup and relaunch Kaiwa.";
+          bannerText.textContent = data.detail || "Setup started. Finish it, then reopen Kaiwa.";
         }
       } catch (err) {
         applyUpdateCheck(updateCheckState, {
@@ -3936,8 +4030,8 @@
           localStorage.setItem("kaiwa_prompt_revision", String(rev));
           return startNewChat({
             status: data.chat_reset
-              ? "New chat — tutor update (memory kept)."
-              : "New chat (keeps memory).",
+              ? "New chat (Kaiwa was updated)"
+              : "New chat",
           }).catch((err) => {
             clearChatSessionLocal();
             setStatus(String(err.message || err));

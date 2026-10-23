@@ -10,14 +10,14 @@ LanguagePolicy = Literal["immerse", "adaptive"]
 SpeechRegister = Literal["formal", "casual"]
 GoalLevel = Literal["pre_n5", "n5", "n4"]
 TtsEngine = Literal["aivisspeech", "voicevox"]
-UiTheme = Literal["night", "day", "sage"]
+UiTheme = Literal["system", "light", "dark"]
 ChatPace = Literal["easy", "free"]
 
 VALID_LANGUAGE_POLICY = {"immerse", "adaptive"}
 VALID_SPEECH_REGISTER = {"formal", "casual"}
 VALID_GOAL_LEVEL = {"pre_n5", "n5", "n4"}
 VALID_TTS_ENGINE = {"aivisspeech", "voicevox"}
-VALID_UI_THEME = {"night", "day", "sage"}
+VALID_UI_THEME = {"system", "light", "dark"}
 VALID_CHAT_PACE = {"easy", "free"}
 MAX_TOPIC_PREFS = 8
 MAX_TOPIC_LEN = 40
@@ -34,7 +34,7 @@ class UserPrefs:
     voicevox_speaker_id: int = 888753760
     goal_level: GoalLevel = "pre_n5"
     topic_preferences: list[str] = field(default_factory=list)
-    ui_theme: UiTheme = "night"
+    ui_theme: UiTheme = "system"
     ptt_enabled: bool = False
     ptt_binding: str = ""
     ptt_play_reply: bool = True
@@ -132,9 +132,9 @@ def validate_prefs_dict(raw: dict[str, Any]) -> UserPrefs:
 
     topic_preferences = _normalize_topics(raw.get("topic_preferences", []))
 
-    ui_theme = str(raw.get("ui_theme", "night") or "night").strip().lower()
+    ui_theme = str(raw.get("ui_theme", "system") or "system").strip().lower()
     if ui_theme not in VALID_UI_THEME:
-        ui_theme = "night"  # retired themes fall back instead of failing the whole file
+        ui_theme = "system"  # retired themes (night/day/sage) fall back instead of failing the file
 
     ptt_enabled = _as_bool(raw.get("ptt_enabled", False), False)
     from kaiwa.ptt_binding import canonicalize_binding

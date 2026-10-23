@@ -10,14 +10,14 @@
 .lesson {
   max-width: 720px;
   margin: 0 auto;
-  padding: 32px 28px 40px;
+  padding: 20px 24px 28px;
 }
 
 /* ---------- home ---------- */
 .home {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 12px;
 }
 
 .home-kicker {
@@ -26,7 +26,7 @@
 }
 
 .home-title {
-  font-size: 28px;
+  font-size: 22px;
   font-weight: 600;
   letter-spacing: -0.01em;
   margin-top: 2px;
@@ -54,7 +54,7 @@
   background: var(--line);
   border-radius: 2px;
   overflow: hidden;
-  margin-top: -10px;
+  margin-top: -4px;
 }
 
 .home-bar span {
@@ -77,7 +77,7 @@
   grid-template-columns: 28px 140px 1fr auto;
   align-items: center;
   gap: 12px;
-  min-height: 52px;
+  min-height: 40px;
   border-bottom: 1px solid var(--line);
 }
 
@@ -123,23 +123,16 @@
 }
 
 .home-more {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  align-items: center;
-  gap: 10px 14px;
-  margin-top: 14px;
-  padding-top: 20px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+  padding-top: 12px;
   border-top: 1px solid var(--line);
 }
 
-.home-more span {
-  color: var(--ink-2);
-  font-size: 14px;
-}
-
 .home-romaji {
-  margin-top: 8px;
-  font-size: 14px;
+  font-size: 13px;
   color: var(--ink-2);
   display: flex;
   align-items: center;
@@ -155,9 +148,9 @@
 
 /* Primary action button: bigger, always at the end of the footer. */
 .lesson-primary {
-  min-height: 42px;
-  padding: 0 20px;
-  font-size: 15px;
+  min-height: 34px;
+  padding: 0 16px;
+  font-size: 14px;
 }
 
 /* ---------- lesson frame ---------- */
@@ -194,7 +187,7 @@
 .lesson-steps {
   display: flex;
   gap: 4px;
-  margin-top: 14px;
+  margin-top: 10px;
 }
 
 .lesson-steps span {
@@ -222,7 +215,7 @@
 
 .lesson-body {
   flex: 1;
-  padding: 36px 0 32px;
+  padding: 22px 0 22px;
 }
 
 .lesson-actions {
@@ -231,7 +224,7 @@
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-  padding: 14px 0 20px;
+  padding: 10px 0 14px;
   border-top: 1px solid var(--line);
   background: var(--surface);
 }
@@ -239,7 +232,7 @@
 .card-body {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 12px;
 }
 
 /* ---------- phrase ---------- */
@@ -296,7 +289,7 @@
   position: relative;
   overflow: hidden;
   width: 100%;
-  min-height: 56px;
+  min-height: 46px;
   border: 1px solid var(--accent);
   background: var(--accent-soft);
   color: var(--accent);
@@ -366,7 +359,7 @@
   display: flex;
   flex-direction: column;
   gap: 14px;
-  padding-top: 18px;
+  padding-top: 12px;
   border-top: 1px solid var(--line);
 }
 
@@ -414,7 +407,7 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 16px 0;
+  padding: 10px 0;
   border-top: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
 }
@@ -532,7 +525,7 @@
 .questions {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 14px;
 }
 
 .question-q {
