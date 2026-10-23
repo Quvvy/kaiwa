@@ -942,6 +942,21 @@ def difficulty_governor_block(
 """
 
 
+def course_phrases_block(known: list[dict[str, str]]) -> str:
+    """What the learner has been taught in the Learn tab — Chat builds on exactly this."""
+    if not known:
+        return """コースの進み具合: まだ何も習っていない（まったくの初心者）。
+- あいさつと「はい／いいえ」で答えられる質問だけにする。日本語の下に短い英訳を添えてよい。
+"""
+    lines = "\n".join(f"- {row['jp']} ({row['en']})" for row in known)
+    return f"""コースで習った表現（学習者はこれを聞いて分かり、自分でも言える）:
+{lines}
+- 会話はできるだけこの表現と、その中の単語の組み合わせで作る。
+- 学習者がこの表現を使って答えられる質問をする（例: 「すきです」を習ったなら「〜がすきですか」）。
+- 習っていない語は1ターンに最大1つ。使ったら同じ返事の中でやさしく言い換えるか、短い英語を添える。
+"""
+
+
 def build_tutor_system_prompt(
     prefs: UserPrefs,
     *,
@@ -953,6 +968,7 @@ def build_tutor_system_prompt(
     help_type: str | None = None,
     replay_questions: list[str] | None = None,
     elicit_line: str | None = None,
+    known_phrases: list[dict[str, str]] | None = None,
 ) -> str:
     from kaiwa.learner_memory import LearnerMemory, memory_prompt_block
     from kaiwa.learner_profile import LearnerProfile, effective_speech_level
@@ -1030,6 +1046,8 @@ def build_tutor_system_prompt(
         "",
         memory_prompt_block(memory, prefs).strip(),
     ]
+    if known_phrases is not None:
+        parts.extend(["", course_phrases_block(known_phrases).strip()])
     thread_line = thread_stickiness_block(
         last_assistant_text, last_user_text, state
     ).strip()

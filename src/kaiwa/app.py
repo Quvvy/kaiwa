@@ -58,6 +58,7 @@ from kaiwa.learner_memory import (
     should_extract,
 )
 from kaiwa import jsonio
+from kaiwa.course import routes as course_routes
 from kaiwa import leftovers
 from kaiwa import session_store
 from kaiwa.stream_util import SentenceBuffer
@@ -96,6 +97,7 @@ def _require_deepseek_key() -> None:
 app = FastAPI(title="Kaiwa", version=__version__)
 static_dir = ROOT / "static"
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+app.include_router(course_routes.router)
 
 # In-memory chat history keyed by browser session id.
 _sessions: dict[str, list[dict[str, str]]] = {}

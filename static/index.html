@@ -1563,6 +1563,7 @@
       }
     }
   </style>
+  <link rel="stylesheet" href="/static/course.css" />
 </head>
 <body>
   <div id="apiKeyGate" hidden>
@@ -1597,7 +1598,8 @@
         </div>
       </div>
       <nav class="tabs" role="tablist" aria-label="Modes">
-        <button class="tab active" type="button" data-mode="chat">Chat</button>
+        <button class="tab active" type="button" data-mode="learn">Learn</button>
+        <button class="tab" type="button" data-mode="chat">Chat</button>
         <button class="tab" type="button" data-mode="practice">Practice</button>
         <button class="tab" type="button" data-mode="settings">Settings</button>
       </nav>
@@ -1616,7 +1618,11 @@
       </div>
     </div>
 
-    <section class="mode active" id="modeChat">
+    <section class="mode active" id="modeLearn">
+      <div id="course"></div>
+    </section>
+
+    <section class="mode" id="modeChat">
       <div class="chat-stage">
         <div id="log" aria-live="polite">
           <p class="chat-disclaimer" role="note">
@@ -2132,7 +2138,7 @@
     }
     let audioPlayQueue = [];
     let audioPlaying = false;
-    let mode = "chat";
+    let mode = "learn";
     let mediaRecorder = null;
     let chunks = [];
     let recording = false;
@@ -2298,6 +2304,7 @@
       document.querySelectorAll(".tab").forEach((t) => {
         t.classList.toggle("active", t.dataset.mode === next);
       });
+      document.getElementById("modeLearn").classList.toggle("active", next === "learn");
       document.getElementById("modeChat").classList.toggle("active", next === "chat");
       document.getElementById("modePractice").classList.toggle("active", next === "practice");
       document.getElementById("modeSettings").classList.toggle("active", next === "settings");
@@ -2312,6 +2319,9 @@
             practiceStatusEl.textContent = String(err.message || err);
           });
         }
+      }
+      if (next === "learn" && window.KaiwaCourse) {
+        window.KaiwaCourse.show();
       }
       if (next === "settings") {
         loadPrefsIntoForm({ skipPlacementOffer: true }).catch((err) => {
@@ -5611,5 +5621,6 @@
       refreshPttHookStatus();
     }, 4000);
   </script>
+  <script src="/static/course.js"></script>
 </body>
 </html>

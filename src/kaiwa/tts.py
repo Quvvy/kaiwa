@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import threading
+from collections import OrderedDict
 from typing import Any, Literal
 
 import httpx
@@ -64,8 +66,12 @@ def synthesize(
     *,
     speaker_id: int | None = None,
     engine: str | None = None,
+    speed: float | None = None,
 ) -> bytes:
-    """Return WAV bytes from the selected local TTS engine (VOICEVOX-compatible API)."""
+    """Return WAV bytes from the selected local TTS engine (VOICEVOX-compatible API).
+
+    `speed` scales speaking rate (1.0 normal; ~0.75 for a slow learner replay).
+    """
     from kaiwa.text_clean import clean_reply_for_speech
 
     text = clean_reply_for_speech(text)
@@ -92,11 +98,14 @@ def synthesize(
                 f"{label} audio_query failed ({query.status_code}). "
                 f"{engine_hint(eng)}. {query.text}"
             )
+        audio_query = query.json()
+        if speed and isinstance(audio_query, dict):
+            audio_query["speedScale"] = float(speed)
         try:
             audio = client.post(
                 f"{base}/synthesis",
                 params={"speaker": speaker},
-                json=query.json(),
+                json=audio_query,
                 headers={"Content-Type": "application/json"},
             )
         except httpx.HTTPError as exc:
@@ -167,3 +176,49 @@ def resolve_speaker_id(
     if default in ids:
         return default
     return int(voices[0]["id"]) if voices else preferred_id
+
+
+_CACHE_MAX = 300
+_cache: OrderedDict[tuple, bytes] = OrderedDict()
+_cache_lock = threading.Lock()
+_alt_speaker: dict[tuple[str, int], int] = {}
+
+
+def synthesize_cached(
+    settings: Settings,
+    text: str,
+    *,
+    speaker_id: int | None = None,
+    engine: str | None = None,
+    speed: float | None = None,
+) -> bytes:
+    """synthesize() with a small in-memory LRU — lessons replay the same lines often."""
+    key = (normalize_engine(engine, settings.tts_engine), speaker_id, text, speed)
+    with _cache_lock:
+        hit = _cache.get(key)
+        if hit is not None:
+            _cache.move_to_end(key)
+            return hit
+    wav = synthesize(settings, text, speaker_id=speaker_id, engine=engine, speed=speed)
+    with _cache_lock:
+        _cache[key] = wav
+        while len(_cache) > _CACHE_MAX:
+            _cache.popitem(last=False)
+    return wav
+
+
+def alternate_speaker(settings: Settings, *, engine: str, primary: int) -> int:
+    """A second voice for dialogues: another character if possible, else another style."""
+    eng = normalize_engine(engine, settings.tts_engine)
+    key = (eng, primary)
+    if key in _alt_speaker:
+        return _alt_speaker[key]
+    try:
+        voices = flatten_speaker_styles(list_speakers(settings, engine=eng))
+    except Exception:
+        return primary
+    primary_name = next((v["name"] for v in voices if v["id"] == primary), None)
+    other = next((v for v in voices if v["name"] != primary_name), None)
+    other = other or next((v for v in voices if v["id"] != primary), None)
+    _alt_speaker[key] = int(other["id"]) if other else primary
+    return _alt_speaker[key]

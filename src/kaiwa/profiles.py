@@ -24,6 +24,7 @@ MEMORY_FILE = "learner_memory.json"
 PERSONALITIES_FILE = "user_personalities.json"
 STRUGGLE_CARDS_FILE = "struggle_cards.jsonl"
 PRACTICE_STATE_FILE = "practice_state.json"
+COURSE_STATE_FILE = "course_state.json"
 
 BUNDLE_FORMAT = "kaiwa-profile"
 BUNDLE_VERSION = 1
@@ -341,12 +342,13 @@ def backup_active(reason: str) -> Path:
 
 
 def reset_active() -> tuple[ProfileMeta, Path]:
-    """Back up, then reset prefs, level, memory, and custom personalities."""
+    """Back up, then reset prefs, level, memory, custom personalities, and course progress."""
     ensure_migrated()
     backup = backup_active("reset")
     reg = _load_registry_raw()
     with jsonio.STATE_LOCK:
         _write_fresh_profile_files(profiles_dir() / reg.active)
+        (profiles_dir() / reg.active / COURSE_STATE_FILE).unlink(missing_ok=True)
     _touch_meta(reg, reg.active)
     _save_registry(reg)
     meta = get_meta(reg.active)
@@ -388,6 +390,7 @@ def export_bundle() -> dict[str, Any]:
         "learner_profile": _load_bundle_file(profile_id, PROFILE_FILE),
         "learner_memory": _load_bundle_file(profile_id, MEMORY_FILE),
         "user_personalities": _load_bundle_file(profile_id, PERSONALITIES_FILE),
+        "course_state": _load_bundle_file(profile_id, COURSE_STATE_FILE),
     }
 
 
@@ -475,6 +478,9 @@ def import_bundle(bundle: dict[str, Any]) -> tuple[ProfileMeta, Path]:
         save_profile(learner, dest / PROFILE_FILE)
         save_memory(memory, dest / MEMORY_FILE)
         _save_raw(valid_presets, dest / PERSONALITIES_FILE)
+        course = bundle.get("course_state")
+        if isinstance(course, dict) and course:
+            _write_json(dest / COURSE_STATE_FILE, course)
     _touch_meta(reg, reg.active)
     _save_registry(reg)
     meta = get_meta(reg.active)

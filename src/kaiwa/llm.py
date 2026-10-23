@@ -67,6 +67,7 @@ def _completion(
     *,
     client: OpenAI | None = None,
     model: str | None = None,
+    json_mode: bool = False,
 ) -> str:
     client = client or make_client(settings)
     payload: list[dict[str, str]] = [{"role": "system", "content": system}, *messages]
@@ -74,6 +75,8 @@ def _completion(
         "model": model or settings.deepseek_model,
         "messages": payload,
     }
+    if json_mode:
+        kwargs["response_format"] = {"type": "json_object"}
     if settings.deepseek_thinking in {"disabled", "enabled"}:
         kwargs["extra_body"] = {"thinking": {"type": settings.deepseek_thinking}}
 
@@ -82,6 +85,26 @@ def _completion(
     if not content:
         raise RuntimeError("DeepSeek returned an empty reply")
     return content.strip()
+
+
+def complete_json(
+    settings: Settings,
+    system: str,
+    user: str,
+    *,
+    client: OpenAI | None = None,
+) -> dict | None:
+    """One JSON-mode Flash call. None on any failure (callers fall back)."""
+    import json
+
+    try:
+        raw = _completion(
+            settings, system, [{"role": "user", "content": user}], client=client, json_mode=True
+        )
+        data = json.loads(raw)
+    except Exception:
+        return None
+    return data if isinstance(data, dict) else None
 
 
 def _prepare_chat(
@@ -124,8 +147,13 @@ def _prepare_chat(
         support,
         chat_pace=prefs.chat_pace,
     )
+    from kaiwa.course.state import known_phrases_for_chat
     from kaiwa.practice.sitting import peek_pending_elicit
 
+    try:
+        known = known_phrases_for_chat()
+    except Exception:
+        known = None
     system = build_tutor_system_prompt(
         prefs,
         last_user_text=last_user,
@@ -136,6 +164,7 @@ def _prepare_chat(
         help_type=ht,
         replay_questions=replay_questions,
         elicit_line=peek_pending_elicit(),
+        known_phrases=known,
     )
     use_pro = needs_pro_routing(settings.model_routing, profile, state, help_type=ht)
     model = settings.deepseek_model_pro if use_pro else settings.deepseek_model
