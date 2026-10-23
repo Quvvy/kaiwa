@@ -39,6 +39,15 @@ MIN_ITEMS = 4
 MAX_ITEMS = 8
 SKILLS = ("words", "sentences", "imitate")
 
+# Graduated hints (dynamic assessment): each "don't know" or miss makes the same
+# item easier, and an answer after hint N earns HINT_CREDIT[N] of its score
+# (partial-credit scoring). Words/sentences: 0 normal, 1 slowed audio, 2 kana
+# shown, 3 first letter of the meaning (words only). Imitation: 0, 1 slowed,
+# 2 text shown. Hints 0-1 are still "by ear"; from 2 on it's reading.
+HINT_CREDIT = (1.0, 0.75, 0.5, 0.25)
+HINTS = {"words": 3, "sentences": 2, "imitate": 2}
+EAR_HINTS = 1  # the highest hint that still counts as understanding by ear
+
 # Kana groups: lessons are skipped when the learner gets ≥ PASS of a group's sample.
 KANA_GROUPS = [
     ("hiragana", [l["id"] for l in KANA_LESSONS if l["script"] == "hiragana" and int(l["id"][1:]) <= 9], 6),
@@ -198,14 +207,47 @@ def kana_result(answers: list[dict[str, Any]]) -> dict[str, Any]:
     return out
 
 
+def channel_scores(entry: dict[str, Any]) -> tuple[float, float]:
+    """(by ear, in kana) for one answered item from its judged score and the hint it took.
+
+    Understood by ear (normal or slowed) also counts as understood in kana; the
+    first-letter hint earns half in kana; nothing by ear after the kana is shown.
+    """
+    judged = float(entry.get("judged", entry.get("score", 0)) or 0)
+    hint = int(entry.get("hint", 0) or 0)
+    ear = judged if hint <= EAR_HINTS else 0.0
+    read = judged if hint <= 2 else judged * 0.5
+    return ear, read
+
+
 def summarize(histories: dict[str, list[dict[str, Any]]], kana: list[dict[str, Any]]) -> dict[str, Any]:
-    """Per-skill estimates and the recommended start. Starting unit: the lower comprehension estimate."""
+    """Per-skill estimates (combined, by ear, in kana) and the recommended start.
+
+    The adaptive test steers on the combined (partial-credit) score; the start
+    is the lower by-ear comprehension estimate, since listening is the goal.
+    """
     est = {skill: estimate(histories.get(skill, [])) for skill in SKILLS if histories.get(skill)}
-    comprehension = [est[s]["level"] for s in ("words", "sentences") if s in est]
-    known_units = int(math.floor(min(comprehension))) if comprehension else 0
+    channels: dict[str, dict[str, Any]] = {}
+    reading_only: list[str] = []
+    for skill in ("words", "sentences"):
+        rows = histories.get(skill) or []
+        if not rows:
+            continue
+        ear = [{"unit": h["unit"], "score": channel_scores(h)[0]} for h in rows]
+        read = [{"unit": h["unit"], "score": channel_scores(h)[1]} for h in rows]
+        channels[skill] = {"ear": estimate(ear), "read": estimate(read)}
+        if skill == "words":
+            reading_only += [h["id"] for h in rows if channel_scores(h)[1] >= 0.5 and channel_scores(h)[0] == 0]
+    ear_levels = [channels[s]["ear"]["level"] for s in ("words", "sentences") if s in channels]
+    known_units = int(math.floor(min(ear_levels))) if ear_levels else 0
     known_units = max(0, min(len(UNITS), known_units))
+    read_levels = [channels[s]["read"]["level"] for s in ("words", "sentences") if s in channels]
+    gap = round(min(read_levels) - min(ear_levels), 1) if ear_levels and read_levels else 0.0
     return {
         "skills": est,
+        "channels": channels,
+        "listening_gap": gap,
+        "reading_only": reading_only,
         "known_units": known_units,
         "start_unit": min(len(UNITS), known_units + 1),
         "kana": kana_result(kana),

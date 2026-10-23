@@ -1365,9 +1365,9 @@
           el("p", { class: "lesson-note", text: "About 6–10 minutes. Each part adjusts to your answers and stops once it knows your level, so it won't drag on." }),
           el("ul", { class: "stats-rules" },
             el("li", { text: "Kana: type the sound of a few characters." }),
-            el("li", { text: "Words and sentences: listen, then type what they mean in English." }),
+            el("li", { text: "Words and sentences: listen, then type what they mean in English. Stuck? Leave it empty and press Enter for a hint: slower audio, then the kana, then a first letter." }),
             el("li", { text: "Repeat after me: say a few phrases back (skip it if you have no microphone)." })),
-          el("p", { class: "lesson-note", text: "Don't guess. If you don't know, press Enter with the box empty: that tells the test more than a guess does. Nothing changes until you press Apply at the end." })),
+          el("p", { class: "lesson-note", text: "Don't guess: an empty Enter gets you a hint, and how much help you needed tells the test a lot. Nothing changes until you press Apply at the end." })),
         actions: [el("button", { type: "button", class: "secondary", onclick: showHome }, "Not now"), primaryButton("Start", kana)],
         primary: kana,
       });
@@ -1405,7 +1405,11 @@
       ask();
     }
 
-    // 2–4. The adaptive skills.
+    // 2–4. The adaptive skills, each item with graduated hints: every "don't know"
+    // or miss makes the same item easier (slowed audio, then the kana, then the
+    // first letter of the meaning) and an answer earns less credit per hint.
+    const HINT_CREDIT = [1, 0.75, 0.5, 0.25];
+    const MAX_HINT = { words: 3, sentences: 2, imitate: 2 };
     async function skill(name) {
       let item;
       try {
@@ -1415,29 +1419,52 @@
       const info = SKILL_INFO[name];
       const n = histories[name].length;
       const voice = item.who === "b" ? { voice: "b" } : {};
-      const record = (score) => {
-        histories[name].push({ id: item.id, unit: item.unit, score });
+      let hint = 0;
+      const record = (judged) => {
+        histories[name].push({ id: item.id, unit: item.unit, judged, hint, score: judged * HINT_CREDIT[hint] });
         skill(name);
       };
+      const hintBox = el("div", { class: "hint-steps" });
+      const slow = () => play(item.jp, { ...voice, slow: true });
+      // One step easier: returns false when there are no hints left.
+      function easier() {
+        if (hint >= MAX_HINT[name]) return false;
+        hint += 1;
+        if (hint === 1) {
+          hintBox.append(el("div", { class: "hint-row" }, el("p", { class: "hint-step", text: "Slower:" }),
+            el("button", { type: "button", class: "secondary", onclick: slow }, "Play slowly")));
+          slow();
+        } else if (hint === 2) {
+          hintBox.append(el("p", { class: "hint-step" }, "In kana: ", el("span", { lang: "ja", class: "hint-jp", text: item.jp })));
+        } else if (hint === 3) {
+          const first = item.en.replace(/^\W+/, "").charAt(0).toUpperCase();
+          hintBox.append(el("p", { class: "hint-step", text: `The meaning starts with "${first}"` }));
+        }
+        return true;
+      }
       const replay = el("button", { type: "button", class: "secondary", onclick: () => play(item.jp, voice) }, "Play again", kbd("R"));
-      let answerArea;
+
       if (name === "imitate") {
         const result = el("div", { class: "result" });
         const hold = holdControl("Hold and say it", async (blob, ext) => {
           result.replaceChildren(el("p", { class: "pending", text: "Checking…" }));
           try {
             const r = await api("/api/course/check_text", { method: "POST", body: audioForm(blob, ext, { target: item.jp }) });
-            record(r.band === "good" ? 1 : r.band === "close" ? 0.5 : 0);
+            const judged = r.band === "good" ? 1 : r.band === "close" ? 0.5 : 0;
+            if (judged === 0 && easier()) {
+              result.replaceChildren(el("p", { class: "status", text: "Here's some help. Try again." }));
+              return;
+            }
+            record(judged);
           } catch (err) {
             result.replaceChildren(el("p", { class: "verdict off", text: String(err.message || err) }));
           }
         }, showProblem(result));
-        answerArea = [hold, micRow(), result];
         frame({
           title: `Placement: ${info.title}`, index: n, total: 8,
           body: el("div", { class: "card-body" }, el("p", { class: "prompt", text: info.prompt }),
-            el("div", { class: "lesson-play" }, replay), ...answerArea),
-          actions: [el("button", { type: "button", class: "secondary", onclick: () => record(0) }, "Can't say it"),
+            el("div", { class: "lesson-play" }, replay), hintBox, hold, micRow(), result),
+          actions: [el("button", { type: "button", class: "secondary", onclick: () => { if (!easier()) record(0); } }, "Can't say it"),
             el("button", { type: "button", class: "secondary", onclick: results }, "Skip this part")],
           hold,
         });
@@ -1447,21 +1474,35 @@
         const status = el("p", { class: "status" });
         const submit = async () => {
           const answer = input.value.trim();
+          if (!answer) {
+            if (!easier()) return record(0);
+            input.focus();
+            return;
+          }
           input.disabled = true;
-          if (!answer) return record(0);
           status.textContent = "…";
+          let judged;
           try {
-            const { score } = await postJson("/api/course/placement/judge", { jp: item.jp, expected: item.en, answer, kind: name });
-            record(score);
+            judged = (await postJson("/api/course/placement/judge", { jp: item.jp, expected: item.en, answer, kind: name })).score;
           } catch (err) {
             input.disabled = false;
             status.textContent = String(err.message || err);
+            return;
           }
+          status.textContent = "";
+          if (judged === 0 && easier()) {
+            // A miss is treated like "don't know": one step easier, same item.
+            input.disabled = false;
+            input.value = "";
+            input.focus();
+            return;
+          }
+          record(judged);
         };
         frame({
           title: `Placement: ${info.title}`, index: n, total: 8,
           body: el("div", { class: "card-body" }, el("p", { class: "prompt", text: info.prompt }),
-            el("div", { class: "lesson-play" }, replay),
+            el("div", { class: "lesson-play" }, replay), hintBox,
             el("form", { class: "produce-form", onsubmit: (e) => { e.preventDefault(); submit(); } }, input,
               el("button", { type: "submit", class: "secondary" }, "Next")),
             status),
@@ -1492,8 +1533,17 @@
       } catch (err) { return fail(err); }
       const describe = (e) => (e.level < 0.75 ? "before unit 1"
         : `about unit ${Math.round(e.level)}${e.low !== e.high ? ` (range ${Math.max(0, e.low)}–${e.high})` : ""}`);
-      const rows = Object.entries(r.skills).map(([k, e]) => el("tr", {},
-        el("th", { text: SKILL_INFO[k].title }), el("td", { text: describe(e) })));
+      const rows = [];
+      for (const [k, e] of Object.entries(r.skills)) {
+        const ch = (r.channels || {})[k];
+        if (ch) {
+          const noun = k === "words" ? "Words" : "Sentences";
+          rows.push(el("tr", {}, el("th", { text: `${noun} by ear` }), el("td", { text: describe(ch.ear) })));
+          rows.push(el("tr", {}, el("th", { text: `${noun} once shown in kana` }), el("td", { text: describe(ch.read) })));
+        } else {
+          rows.push(el("tr", {}, el("th", { text: SKILL_INFO[k].title }), el("td", { text: describe(e) })));
+        }
+      }
       const kanaRows = Object.entries(r.kana).map(([g, k]) => el("tr", {},
         el("th", { text: { hiragana: "Hiragana", "hiragana+": "Voiced and blended hiragana", katakana: "Katakana" }[g] }),
         el("td", { text: `${k.right} of ${k.of}${k.passed ? " (lessons skipped)" : ""}` })));
@@ -1506,11 +1556,17 @@
         } catch (err) { return fail(err); }
         showHome();
       };
+      const gapNote = r.listening_gap >= 1.5
+        ? el("p", { class: "lesson-note", text: `You understand more when you can see the kana than by ear (about ${Math.round(r.listening_gap)} units more). `
+            + "The course starts at your listening level, and the "
+            + (r.reading_only.length ? `${r.reading_only.length} word${r.reading_only.length === 1 ? "" : "s"} you only got from the kana come up as listening reviews first.` : "gap closes as you review by ear.") })
+        : null;
       frame({
         title: "Placement result",
         body: el("div", { class: "card-body" },
           el("table", { class: "stats-table" }, el("tbody", {}, rows, kanaRows)),
           el("p", { class: "lesson-note", text: start }),
+          gapNote,
           el("p", { class: "status", text: "Chat's difficulty is set from these results too. You can retake the test any time from Settings → Level." })),
         actions: [el("button", { type: "button", class: "secondary", onclick: showHome }, "Don't apply"), primaryButton("Apply", apply)],
         primary: apply,

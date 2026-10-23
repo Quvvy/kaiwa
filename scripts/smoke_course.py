@@ -402,6 +402,34 @@ def placement_test() -> None:
         _check(st["placement"]["known_units"] == summary["known_units"], "the result is remembered")
 
 
+def placement_hints() -> None:
+    from kaiwa.course import placement as pl
+
+    _check(pl.channel_scores({"judged": 1, "hint": 0}) == (1, 1), "right first time: understood by ear and in kana")
+    _check(pl.channel_scores({"judged": 1, "hint": 1}) == (1, 1), "right after slowed audio still counts as by ear")
+    _check(pl.channel_scores({"judged": 1, "hint": 2}) == (0, 1), "right only once the kana was shown: reading, not listening")
+    _check(pl.channel_scores({"judged": 1, "hint": 3}) == (0, 0.5), "right only with the first letter: half credit in kana")
+    words = [w for w in pl.BANK["words"] if w["unit"] <= 12]
+    # Someone who reads units 1-10 but only hears units 1-4.
+    history = []
+    for w in words[::9][:10]:
+        hint = 0 if w["unit"] <= 4 else 2 if w["unit"] <= 10 else 3
+        judged = 1.0 if w["unit"] <= 10 else 0.0
+        history.append({"id": w["id"], "unit": w["unit"], "judged": judged, "hint": hint,
+                        "score": judged * pl.HINT_CREDIT[hint]})
+    s = pl.summarize({"words": history, "sentences": history[:6]}, [])
+    ch = s["channels"]["words"]
+    _check(ch["read"]["level"] > ch["ear"]["level"] + 1.5, f"in-kana level beats by-ear level (ear {ch['ear']['level']}, kana {ch['read']['level']})")
+    _check(s["listening_gap"] >= 1.5 and s["reading_only"], "the gap is reported, with the words only got from the kana")
+    _check(s["known_units"] <= int(ch["ear"]["level"]), "the start follows the by-ear level")
+    with tempfile.TemporaryDirectory() as raw:
+        path = Path(raw) / "course_state.json"
+        applied = course_state.apply_placement(s, path=path)
+        st = course_state.load_state(path)
+        _check(applied["listen_soon"] and all(f"{w}:mean" in st["cards"] for w in applied["listen_soon"]),
+               "reading-only words become listening reviews straight away")
+
+
 def pacing() -> None:
     real_today = course_state._today
     day = [real_today()]
@@ -460,6 +488,7 @@ def main() -> None:
     undo_and_regrade()
     grader_tuning()
     placement_test()
+    placement_hints()
     pacing()
     story_checks()
     sentence_checks()

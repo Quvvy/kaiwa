@@ -1517,3 +1517,31 @@ body:not([data-mode="learn"]) .ask-dock {
 .placement-input {
   max-width: 420px;
 }
+
+.hint-steps {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.hint-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.hint-steps:empty {
+  display: none;
+}
+
+.hint-step {
+  font-size: 13.5px;
+  color: var(--ink-2);
+}
+
+.hint-jp {
+  font-family: var(--font-jp);
+  font-size: 22px;
+  color: var(--ink);
+}

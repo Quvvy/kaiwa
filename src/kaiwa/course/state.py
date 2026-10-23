@@ -889,6 +889,14 @@ def apply_placement(result: dict[str, Any], *, path: Path | None = None) -> dict
                     place(f"{p['id']}:{skill}")
             for w in unit.get("words", []):
                 place(f"{w['id']}:mean")
+        # Words understood once the kana was shown but not by ear: known in writing,
+        # not yet by sound. They start as near-due reviews so listening catches up.
+        listen_soon = []
+        for wid in result.get("reading_only") or []:
+            cid = f"{wid}:mean"
+            if wid in _WORDS and cid not in state["cards"]:
+                state["cards"][cid] = srs.placed_card(1.0, today + timedelta(days=1))
+                listen_soon.append(wid)
         skipped = []
         for group in kana.values():
             if group.get("passed"):
@@ -899,8 +907,9 @@ def apply_placement(result: dict[str, Any], *, path: Path | None = None) -> dict
                         for ch, _ in LESSON_BY_ID[lid]["kana"]:
                             place(f"kana.{ch}:read")
         state["placement"] = {"date": today.isoformat(), "known_units": known_units,
-                              "skills": result.get("skills", {}), "kana_skipped": skipped}
-        return {"known_units": known_units, "cards_added": n, "kana_skipped": skipped}
+                              "skills": result.get("skills", {}), "channels": result.get("channels", {}),
+                              "kana_skipped": skipped, "listen_soon": listen_soon}
+        return {"known_units": known_units, "cards_added": n, "kana_skipped": skipped, "listen_soon": listen_soon}
 
     summary = _with_state(apply, path)
 
@@ -908,7 +917,9 @@ def apply_placement(result: dict[str, Any], *, path: Path | None = None) -> dict
     from kaiwa import learner_profile as lp
 
     skills = result.get("skills") or {}
-    comp = min([skills[s]["level"] for s in ("words", "sentences") if s in skills] or [0])
+    channels = result.get("channels") or {}
+    ear = [channels[s]["ear"]["level"] for s in ("words", "sentences") if s in channels]
+    comp = min(ear or [skills[s]["level"] for s in ("words", "sentences") if s in skills] or [0])
     speak = skills.get("imitate", {}).get("level", comp)
     profile = lp.load_profile()
     lp.apply_manual_override(profile, comprehension_level=pl.jlpt_level(comp), speaking_level=pl.jlpt_level(speak),
