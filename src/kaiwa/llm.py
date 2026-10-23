@@ -137,7 +137,7 @@ def _prepare_chat(
         replay_questions=replay_questions,
         elicit_line=peek_pending_elicit(),
     )
-    use_pro = needs_pro_routing(prefs, profile, state, help_type=ht)
+    use_pro = needs_pro_routing(settings.model_routing, profile, state, help_type=ht)
     model = settings.deepseek_model_pro if use_pro else settings.deepseek_model
     return prefs, profile, memory, state, system, model, locked, last_user, last_assistant
 
@@ -268,7 +268,7 @@ def rescue_rewrite(
         replay_questions=replay_questions,
     )
     system = system.rstrip() + "\n\n" + rescue_rewrite_block(last_assistant, step).strip()
-    use_pro = needs_pro_routing(prefs, profile, state, help_type=ht)
+    use_pro = needs_pro_routing(settings.model_routing, profile, state, help_type=ht)
     model = settings.deepseek_model_pro if use_pro else settings.deepseek_model
     prior = messages[:-1] if messages else []
     reply, retry = _complete_with_retry(

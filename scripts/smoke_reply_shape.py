@@ -207,13 +207,6 @@ def main() -> None:
         "zenzen wakaranai stays collapse",
     )
 
-    critique_prefs = UserPrefs(goal_level="pre_n5", correction_style="critique")
-    critique_prompt = build_tutor_system_prompt(
-        critique_prefs, last_user_text="猫好きです", profile=pre
-    )
-    _check("ごく短い理由" not in critique_prompt, "critique is not a 3-step lecture")
-    _check("三段講義" in critique_prompt, "critique forbids lecture form")
-
     free_prefs = UserPrefs(goal_level="pre_n5", chat_pace="free")
     free_prompt = build_tutor_system_prompt(
         free_prefs, last_user_text="猫好きです", profile=pre

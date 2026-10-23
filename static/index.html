@@ -2114,14 +2114,6 @@
               <p class="disclaimer settings-searchable" data-settings-search="tutor conversation how kaiwa talks teaching style">
                 How Kaiwa teaches and sounds in chat — corrections, immersion, personality.
               </p>
-              <div class="field settings-searchable" data-settings-search="correction style gentle critique fix rephrase">
-                <label>Correction style</label>
-                <div class="seg" id="correctionSeg">
-                  <button type="button" data-style="gentle" class="on">Gentle</button>
-                  <button type="button" data-style="critique">Critique</button>
-                </div>
-                <p class="disclaimer" id="correctionHelp">Soft rephrases while keeping the conversation going.</p>
-              </div>
               <div class="field settings-searchable" data-settings-search="language help adaptive immersion immerse japanese english">
                 <label>Language help</label>
                 <div class="seg" id="languageSeg">
@@ -2130,14 +2122,6 @@
                 </div>
                 <p class="disclaimer" id="languageHelp">Japanese by default; brief English corrections only when you're clearly struggling.</p>
               </div>
-              <div class="field settings-searchable" data-settings-search="help language english japanese practice tips gloss">
-                <label>Help language</label>
-                <div class="seg" id="helpLangSeg">
-                  <button type="button" data-help="en" class="on">English</button>
-                  <button type="button" data-help="ja">Japanese</button>
-                </div>
-                <p class="disclaimer" id="helpLangHelp">Language for Practice tips (and Adaptive English help notes). Chat immersion still speaks Japanese.</p>
-              </div>
               <div class="field settings-searchable" data-settings-search="speech register casual formal polite tameguchi">
                 <label>Speech register</label>
                 <div class="seg" id="registerSeg">
@@ -2145,22 +2129,6 @@
                   <button type="button" data-register="formal">Formal</button>
                 </div>
                 <p class="disclaimer" id="registerHelp">Friend-level ため口. Personality vibe still applies on top.</p>
-              </div>
-              <div class="field settings-searchable" data-settings-search="naturalness tips textbook stiff natural phrasing">
-                <label>Naturalness tips</label>
-                <div class="seg" id="naturalnessSeg">
-                  <button type="button" data-natural="on" class="on">On</button>
-                  <button type="button" data-natural="off">Off</button>
-                </div>
-                <p class="disclaimer" id="naturalnessHelp">Flags textbook-stiff lines (e.g. 「僕は元気ですよ」→「元気だよ」) even when grammar is fine.</p>
-              </div>
-              <div class="field settings-searchable" data-settings-search="model routing auto flash pro deepseek llm">
-                <label>Model routing</label>
-                <div class="seg" id="routingSeg">
-                  <button type="button" data-routing="auto" class="on">Auto</button>
-                  <button type="button" data-routing="flash_only">Flash only</button>
-                </div>
-                <p class="disclaimer" id="routingHelp">Auto uses Pro for hard correction moments; otherwise Flash.</p>
               </div>
               <div class="field settings-searchable" data-settings-search="personality persona preset character vibe tutor buddy">
                 <label for="personalitySelect">Personality</label>
@@ -2479,12 +2447,9 @@
     const voiceSelect = document.getElementById("voiceSelect");
     const voiceHelp = document.getElementById("voiceHelp");
     const voiceStatusEl = document.getElementById("voiceStatus");
-    const correctionHelp = document.getElementById("correctionHelp");
     const languageHelp = document.getElementById("languageHelp");
-    const helpLangHelp = document.getElementById("helpLangHelp");
     const themeHelp = document.getElementById("themeHelp");
     const registerHelp = document.getElementById("registerHelp");
-    const naturalnessHelp = document.getElementById("naturalnessHelp");
     const userPresetActions = document.getElementById("userPresetActions");
     const newPresetLabel = document.getElementById("newPresetLabel");
     const newPresetDesc = document.getElementById("newPresetDesc");
@@ -2514,14 +2479,10 @@
     let practiceSittingActive = false;
     let activeTalkBtn = talkBtn;
     let activeStatusEl = statusEl;
-    let correctionStyle = "gentle";
     let languagePolicy = "adaptive";
-    let helpLanguage = "en";
     let uiTheme = "night";
     let speechRegister = "casual";
-    let naturalnessTips = true;
     let goalLevel = "pre_n5";
-    let modelRouting = "auto";
     let ttsEngine = "aivisspeech";
     let pttEnabled = false;
     let pttBinding = "";
@@ -3182,27 +3143,12 @@
     bindHold(talkBtn);
     bindHold(practiceTalkBtn);
 
-    function setCorrectionUI(style) {
-      correctionStyle = style;
-      document.querySelectorAll("#correctionSeg button").forEach((b) => {
-        b.classList.toggle("on", b.dataset.style === style);
-      });
-      correctionHelp.textContent = style === "critique"
-        ? "More explicit corrections; still keeps replies short."
-        : "Soft rephrases while keeping the conversation going.";
-    }
-
-    document.querySelectorAll("#correctionSeg button").forEach((btn) => {
-      btn.addEventListener("click", () => setCorrectionUI(btn.dataset.style));
-    });
-
     const topicPrefsInput = document.getElementById("topicPrefs");
     const profileSummary = document.getElementById("profileSummary");
     const profileNotes = document.getElementById("profileNotes");
     const profileTags = document.getElementById("profileTags");
     const profileStatusEl = document.getElementById("profileStatus");
     const goalHelp = document.getElementById("goalHelp");
-    const routingHelp = document.getElementById("routingHelp");
 
     function setLanguageUI(policy) {
       languagePolicy = policy === "immerse" ? "immerse" : "adaptive";
@@ -3368,16 +3314,6 @@
       applyTheme(uiTheme);
     }
 
-    function setHelpLanguageUI(lang) {
-      helpLanguage = lang === "ja" ? "ja" : "en";
-      document.querySelectorAll("#helpLangSeg button").forEach((b) => {
-        b.classList.toggle("on", b.dataset.help === helpLanguage);
-      });
-      helpLangHelp.textContent = helpLanguage === "ja"
-        ? "Practice tips in easy Japanese. Chat immersion still speaks Japanese either way."
-        : "Language for Practice tips (and Adaptive English help notes). Chat immersion still speaks Japanese.";
-    }
-
     function setRegisterUI(register) {
       speechRegister = register === "formal" ? "formal" : "casual";
       document.querySelectorAll("#registerSeg button").forEach((b) => {
@@ -3388,28 +3324,11 @@
         : "Friend-level ため口. Personality vibe still applies on top.";
     }
 
-    function setNaturalnessUI(on) {
-      naturalnessTips = !!on;
-      document.querySelectorAll("#naturalnessSeg button").forEach((b) => {
-        const wantOn = b.dataset.natural === "on";
-        b.classList.toggle("on", wantOn === naturalnessTips);
-      });
-      naturalnessHelp.textContent = naturalnessTips
-        ? "Flags textbook-stiff lines (e.g. 「僕は元気ですよ」→「元気だよ」) even when grammar is fine."
-        : "No commentary on naturalness — only clear mistakes if correction style asks for them.";
-    }
-
     document.querySelectorAll("#languageSeg button").forEach((btn) => {
       btn.addEventListener("click", () => setLanguageUI(btn.dataset.policy));
     });
-    document.querySelectorAll("#helpLangSeg button").forEach((btn) => {
-      btn.addEventListener("click", () => setHelpLanguageUI(btn.dataset.help));
-    });
     document.querySelectorAll("#registerSeg button").forEach((btn) => {
       btn.addEventListener("click", () => setRegisterUI(btn.dataset.register));
-    });
-    document.querySelectorAll("#naturalnessSeg button").forEach((btn) => {
-      btn.addEventListener("click", () => setNaturalnessUI(btn.dataset.natural === "on"));
     });
 
     function setGoalUI(level) {
@@ -3418,16 +3337,6 @@
         b.classList.toggle("on", b.dataset.goal === goalLevel);
       });
       goalHelp.textContent = "Target ceiling for pacing. Kaiwa still adapts to your live profile.";
-    }
-
-    function setRoutingUI(routing) {
-      modelRouting = routing === "flash_only" ? "flash_only" : "auto";
-      document.querySelectorAll("#routingSeg button").forEach((b) => {
-        b.classList.toggle("on", b.dataset.routing === modelRouting);
-      });
-      routingHelp.textContent = modelRouting === "auto"
-        ? "Auto uses Pro for hard correction moments; otherwise Flash."
-        : "Always Flash — no Pro routing.";
     }
 
     function setTtsEngineUI(engine) {
@@ -3580,9 +3489,6 @@
     document.querySelectorAll("#goalSeg button").forEach((btn) => {
       btn.addEventListener("click", () => setGoalUI(btn.dataset.goal));
     });
-    document.querySelectorAll("#routingSeg button").forEach((btn) => {
-      btn.addEventListener("click", () => setRoutingUI(btn.dataset.routing));
-    });
     document.querySelectorAll("#ttsEngineSeg button").forEach((btn) => {
       btn.addEventListener("click", () => {
         setTtsEngineUI(btn.dataset.engine);
@@ -3608,14 +3514,10 @@
     function applyPrefsToForm(prefs) {
       if (!prefs) return;
       renderThemePicker();
-      setCorrectionUI(prefs.correction_style || "gentle");
       setLanguageUI(prefs.language_policy || "adaptive");
-      setHelpLanguageUI(prefs.help_language || "en");
       setThemeUI(prefs.ui_theme || "night");
       setRegisterUI(prefs.speech_register || "casual");
-      setNaturalnessUI(prefs.naturalness_tips !== false);
       setGoalUI(prefs.goal_level || "pre_n5");
-      setRoutingUI(prefs.model_routing || "auto");
       setTtsEngineUI(prefs.tts_engine || "aivisspeech");
       setPttEnabledUI(prefs.ptt_enabled === true);
       setPttBindingUI(prefs.ptt_binding || "");
@@ -4435,20 +4337,16 @@
       const prevVoice = Number(localStorage.getItem("kaiwa_saved_voice_id") || "");
       const prevEngine = localStorage.getItem("kaiwa_saved_tts_engine") || "";
       const body = {
-        correction_style: correctionStyle,
         personality_id: personalitySelect.value,
         personality_custom: personalityCustom.value,
         max_sentences: 3,
         language_policy: languagePolicy,
         speech_register: speechRegister,
-        naturalness_tips: naturalnessTips,
-        help_language: helpLanguage,
         ui_theme: uiTheme,
         tts_engine: ttsEngine,
         voicevox_speaker_id: Number(voiceSelect.value || (ttsEngine === "voicevox" ? 3 : 888753760)),
         goal_level: goalLevel,
         topic_preferences: topics,
-        model_routing: modelRouting,
         ptt_enabled: pttEnabled,
         ptt_binding: pttBinding,
         ptt_play_reply: pttPlayReply,

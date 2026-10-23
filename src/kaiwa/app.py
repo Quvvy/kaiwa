@@ -250,19 +250,15 @@ class SpeakRequest(BaseModel):
 
 
 class PrefsUpdate(BaseModel):
-    correction_style: str = "gentle"
     personality_id: str = "patient_tutor"
     personality_custom: str = ""
     max_sentences: int = 3
     language_policy: str = "adaptive"
     speech_register: str = "casual"
-    naturalness_tips: bool = True
-    help_language: str = "en"
     tts_engine: str = "aivisspeech"
     voicevox_speaker_id: int = 888753760
     goal_level: str = "pre_n5"
     topic_preferences: list[str] = Field(default_factory=list)
-    model_routing: str = "auto"
     ui_theme: str = "night"
     ptt_enabled: bool = False
     ptt_binding: str = ""
@@ -1131,7 +1127,6 @@ async def rescue_turn(body: RescueBody) -> dict[str, Any]:
             "tts_ok": not tts_error,
             "tts_error": tts_error,
             "tts_engine": prefs.tts_engine,
-            "correction_style": prefs.correction_style,
             "personality_id": prefs.personality_id,
             "learner_state": "help_request",
             "speaking_level": profile.speaking_level,
@@ -1423,7 +1418,6 @@ def _stream_chat_events(
             "tts_ok": not tts_error,
             "tts_error": tts_error,
             "tts_engine": prefs.tts_engine,
-            "correction_style": prefs.correction_style,
             "personality_id": prefs.personality_id,
             "learner_state": learner_state,
             "speaking_level": profile.speaking_level,
@@ -1683,7 +1677,6 @@ async def _run_chat_turn(
             "tts_ok": not tts_error,
             "tts_error": tts_error,
             "tts_engine": prefs.tts_engine,
-            "correction_style": prefs.correction_style,
             "personality_id": prefs.personality_id,
             "learner_state": learner_state,
             "speaking_level": profile.speaking_level,

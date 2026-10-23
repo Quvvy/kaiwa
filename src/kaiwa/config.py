@@ -46,6 +46,8 @@ class Settings:
     host: str
     port: int
     sessions_dir: Path
+    # auto: Pro for hard comprehension moments, else Flash. flash_only: never Pro.
+    model_routing: str = "auto"
     deepseek_key_source: str = "none"
 
 
@@ -57,6 +59,10 @@ def _build_settings() -> Settings:
         ROOT,
         process_env_key=_PROCESS_DEEPSEEK_KEY,
     )
+
+    model_routing = os.getenv("MODEL_ROUTING", "auto").strip().lower()
+    if model_routing not in {"auto", "flash_only"}:
+        model_routing = "auto"
 
     tts_engine = os.getenv("TTS_ENGINE", "aivisspeech").strip().lower()
     if tts_engine not in {"aivisspeech", "voicevox"}:
@@ -85,6 +91,7 @@ def _build_settings() -> Settings:
         host=os.getenv("HOST", "127.0.0.1"),
         port=int(os.getenv("PORT", "8787")),
         sessions_dir=secrets_store.sessions_dir(),
+        model_routing=model_routing,
         deepseek_key_source=source,
     )
 

@@ -313,9 +313,6 @@ def apply_chat_signals(
 
 
 def should_assess(profile: LearnerProfile, prefs: UserPrefs) -> bool:
-    if prefs.model_routing == "flash_only":
-        # Still allow assess on Flash — routing only gates Pro for chat replies.
-        pass
     if not profile.placement_completed:
         return False
     if placement_levels_locked(profile):
@@ -476,13 +473,13 @@ def run_assess(
 
 
 def needs_pro_routing(
-    prefs: UserPrefs,
+    routing: str,
     profile: LearnerProfile,
     learner_state: str,
     help_type: str | None = None,
 ) -> bool:
-    """Auto routing: Pro only for heavier comprehension / critique streak — not vocab glosses."""
-    if prefs.model_routing != "auto":
+    """Auto routing (MODEL_ROUTING env): Pro only for heavier comprehension — not vocab glosses."""
+    if routing != "auto":
         return False
     ht = (help_type or "none").strip().lower()
     # Soft help stays on Flash.
@@ -493,6 +490,4 @@ def needs_pro_routing(
     if ht == "comprehension" and streak >= 2:
         return True
     # Weak struggle alone (EN-heavy / fragments) stays Flash.
-    if prefs.correction_style == "critique" and streak >= 2:
-        return True
     return False

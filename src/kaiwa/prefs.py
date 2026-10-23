@@ -6,11 +6,9 @@ from typing import Any, Literal
 
 from kaiwa import jsonio
 
-CorrectionStyle = Literal["gentle", "critique"]
 LanguagePolicy = Literal["immerse", "adaptive"]
 SpeechRegister = Literal["formal", "casual"]
 GoalLevel = Literal["pre_n5", "n5", "n4"]
-ModelRouting = Literal["flash_only", "auto"]
 TtsEngine = Literal["aivisspeech", "voicevox"]
 UiTheme = Literal[
     "night",
@@ -31,11 +29,9 @@ UiTheme = Literal[
 ]
 ChatPace = Literal["easy", "free"]
 
-VALID_CORRECTION = {"gentle", "critique"}
 VALID_LANGUAGE_POLICY = {"immerse", "adaptive"}
 VALID_SPEECH_REGISTER = {"formal", "casual"}
 VALID_GOAL_LEVEL = {"pre_n5", "n5", "n4"}
-VALID_MODEL_ROUTING = {"flash_only", "auto"}
 VALID_TTS_ENGINE = {"aivisspeech", "voicevox"}
 VALID_UI_THEME = {
     "night",
@@ -61,19 +57,15 @@ MAX_TOPIC_LEN = 40
 
 @dataclass
 class UserPrefs:
-    correction_style: CorrectionStyle = "gentle"
     personality_id: str = "patient_tutor"
     personality_custom: str = ""
     max_sentences: int = 3
     language_policy: LanguagePolicy = "adaptive"
     speech_register: SpeechRegister = "casual"
-    naturalness_tips: bool = True
-    help_language: str = "en"
     tts_engine: TtsEngine = "aivisspeech"
     voicevox_speaker_id: int = 888753760
     goal_level: GoalLevel = "pre_n5"
     topic_preferences: list[str] = field(default_factory=list)
-    model_routing: ModelRouting = "auto"
     ui_theme: UiTheme = "night"
     ptt_enabled: bool = False
     ptt_binding: str = ""
@@ -130,10 +122,6 @@ def validate_prefs_dict(raw: dict[str, Any]) -> UserPrefs:
     # Import here to avoid circular import at module load.
     from kaiwa.persona import valid_personality_ids
 
-    style = str(raw.get("correction_style", "gentle")).strip().lower()
-    if style not in VALID_CORRECTION:
-        raise ValueError("correction_style must be 'gentle' or 'critique'")
-
     personality_id = str(raw.get("personality_id", "patient_tutor")).strip()
     allowed = valid_personality_ids()
     if personality_id not in allowed:
@@ -157,12 +145,6 @@ def validate_prefs_dict(raw: dict[str, Any]) -> UserPrefs:
     if speech_register not in VALID_SPEECH_REGISTER:
         raise ValueError("speech_register must be 'formal' or 'casual'")
 
-    naturalness_tips = _as_bool(raw.get("naturalness_tips", True), True)
-
-    help_language = str(raw.get("help_language", "en") or "en").strip().lower() or "en"
-    if len(help_language) > 16:
-        raise ValueError("help_language is too long")
-
     try:
         voicevox_speaker_id = int(raw.get("voicevox_speaker_id", 888753760))
     except (TypeError, ValueError) as exc:
@@ -179,10 +161,6 @@ def validate_prefs_dict(raw: dict[str, Any]) -> UserPrefs:
         raise ValueError("goal_level must be 'pre_n5', 'n5', or 'n4'")
 
     topic_preferences = _normalize_topics(raw.get("topic_preferences", []))
-
-    model_routing = str(raw.get("model_routing", "auto")).strip().lower()
-    if model_routing not in VALID_MODEL_ROUTING:
-        raise ValueError("model_routing must be 'flash_only' or 'auto'")
 
     ui_theme = str(raw.get("ui_theme", "night") or "night").strip().lower()
     if ui_theme not in VALID_UI_THEME:
@@ -213,19 +191,15 @@ def validate_prefs_dict(raw: dict[str, Any]) -> UserPrefs:
         raise ValueError("chat_pace must be 'easy' or 'free'")
 
     return UserPrefs(
-        correction_style=style,  # type: ignore[arg-type]
         personality_id=personality_id,
         personality_custom=custom.strip(),
         max_sentences=max_sentences,
         language_policy=language_policy,  # type: ignore[arg-type]
         speech_register=speech_register,  # type: ignore[arg-type]
-        naturalness_tips=naturalness_tips,
-        help_language=help_language,
         tts_engine=tts_engine,  # type: ignore[arg-type]
         voicevox_speaker_id=voicevox_speaker_id,
         goal_level=goal_level,  # type: ignore[arg-type]
         topic_preferences=topic_preferences,
-        model_routing=model_routing,  # type: ignore[arg-type]
         ui_theme=ui_theme,  # type: ignore[arg-type]
         ptt_enabled=ptt_enabled,
         ptt_binding=ptt_binding,

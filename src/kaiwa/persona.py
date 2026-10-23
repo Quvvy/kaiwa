@@ -152,19 +152,12 @@ MICRO_INVARIANTS_BLOCK = """\
 - 音声認識の近いかなゆれ（けんき≈元気）は意図した語で続ける。Whisper 誤りを講義しない。
 """
 
-CORRECTION_BLOCKS = {
-    "gentle": """\
+CORRECTION_BLOCK = """\
 訂正スタイル（やさしい）:
 - 直しがいのある誤りだけ（語族・意味が変わる助詞・です/だずれ・教えた型の繰り返し）。口頭の返事で正しい形を使って確認する（コーヒーが好きなんだね）。それから次の番のフック。
 - 通じることを認めるのは、正しい形を口に出したあとで短くてよい。認めるだけで直さないのは誤り。
 - 軽い誤字・フィラー・STTノイズはスルー。文法の名前は言わない。TRY: は出さない。責めない。
-""",
-    "critique": """\
-訂正スタイル（はっきり）:
-- 直しがいのある誤りだけ。口頭の返事で正しい形をはっきり使う（くり返してよい）。それから会話を続ける。
-- まちがい／正しい言い方／理由の三段講義はしない。文法の名前は言わない。TRY: は出さない。カジュアルな声は保つ。
-""",
-}
+"""
 
 # Scaffolding intensity stored in struggle_streak: 0 normal, 1 light, 2 simplified, 3 heavy.
 SUPPORT_MODES = ("normal", "light", "simplified", "heavy")
@@ -484,7 +477,6 @@ def language_policy_block(
     last_user_text: str | None = None,
     speech_pitch: str | None = None,
 ) -> str:
-    help_lang = prefs.help_language or "en"
     mode = (support_mode or "normal").strip().lower()
     ht = (help_type or "none").strip().lower()
     explicit_en = wants_explicit_english(last_user_text)
@@ -494,7 +486,7 @@ def language_policy_block(
         return f"""\
 言語（イマーション）:
 - 日本語のみ。英語グロスなし（明示要求でも英語にしない。やさしい日本語で言い換える）。
-- 困ったとき: 短い言い換え＋例1つ。help_language={help_lang} は使わない。
+- 困ったとき: 短い言い換え＋例1つ。英語は使わない。
 - このターン: support={mode} help_type={ht}
 """
 
@@ -514,7 +506,7 @@ def language_policy_block(
 - {en_threshold}
 - {explicit}
 - vocabulary: その1語をやさしい日本語＋短い例で渡す。まだダメなら短い英語グロス（例: 「眠い」は sleepy）。理解崩壊にしない。
-- comprehension: やさしい日本語で言い換え → まだダメなら help_language={help_lang} の短い訳1つ → 日本語へ戻る。二択で逃げない。
+- comprehension: やさしい日本語で言い換え → まだダメなら英語の短い訳1つ → 日本語へ戻る。二択で逃げない。
 - 英語は最大1〜2短い文。英語会話を始めない。
 - このターン: support={mode} help_type={ht}
 """
@@ -542,8 +534,6 @@ def naturalness_tips_block(prefs: UserPrefs, *, support_mode: str = "normal") ->
     mode = (support_mode or "normal").strip().lower()
     if mode in {"simplified", "heavy"}:
         return "自然さヒント: オフ（理解サポート優先）。"
-    if not prefs.naturalness_tips:
-        return "自然さヒント: オフ。"
 
     if prefs.speech_register == "casual":
         focus = "カジュアルへ1つ（例: 僕は元気ですよ → 元気だよ）。"
@@ -964,7 +954,6 @@ def build_tutor_system_prompt(
     replay_questions: list[str] | None = None,
     elicit_line: str | None = None,
 ) -> str:
-    style = prefs.correction_style if prefs.correction_style in CORRECTION_BLOCKS else "gentle"
     from kaiwa.learner_memory import LearnerMemory, memory_prompt_block
     from kaiwa.learner_profile import LearnerProfile, effective_speech_level
 
@@ -1031,7 +1020,7 @@ def build_tutor_system_prompt(
             prefs, profile, state, support_mode=support
         ).strip(),
         "",
-        CORRECTION_BLOCKS[style].strip(),
+        CORRECTION_BLOCK.strip(),
         "",
         MICRO_INVARIANTS_BLOCK.strip(),
         "",
