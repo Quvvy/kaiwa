@@ -349,7 +349,6 @@
     /* Modes fill the viewport — one desk sheet on the dark room */
     #modeChat,
     #modePractice,
-    #modeLearn,
     #modeSettings {
       background: var(--surface);
       border: 1px solid var(--line);
@@ -359,7 +358,6 @@
 
     #modeChat.mode.active,
     #modePractice.mode.active,
-    #modeLearn.mode.active,
     #modeSettings.mode.active {
       display: flex;
       flex-direction: column;
@@ -1071,7 +1069,7 @@
       color: var(--muted);
     }
 
-    .learn-lines {
+    .practice-choices-list {
       display: flex;
       flex-direction: column;
       align-items: stretch;
@@ -1080,7 +1078,7 @@
       margin-top: 0.35rem;
     }
 
-    .learn-line {
+    .practice-choice {
       display: block;
       width: 100%;
       margin: 0;
@@ -1098,11 +1096,11 @@
       cursor: pointer;
     }
 
-    .learn-line:hover:not(:disabled) {
+    .practice-choice:hover:not(:disabled) {
       color: var(--accent);
     }
 
-    .learn-line:disabled {
+    .practice-choice:disabled {
       cursor: default;
       opacity: 0.7;
     }
@@ -1601,7 +1599,6 @@
       <nav class="tabs" role="tablist" aria-label="Modes">
         <button class="tab active" type="button" data-mode="chat">Chat</button>
         <button class="tab" type="button" data-mode="practice">Practice</button>
-        <button class="tab" type="button" data-mode="learn">Learn</button>
         <button class="tab" type="button" data-mode="settings">Settings</button>
       </nav>
     </header>
@@ -1681,10 +1678,13 @@
             <button id="practiceStart" type="button">Start</button>
             <button id="practiceGoChat" class="secondary" type="button">Back to chat</button>
           </div>
+          <div class="practice-choices" id="practiceChoices" hidden>
+            <div class="meta" id="practiceChoicesLabel">Or pick a line</div>
+            <div class="practice-choices-list" id="practiceChoicesList"></div>
+          </div>
           <div class="practice-lines" id="practiceLines" hidden>
             <div class="meta">You’ve said</div>
             <div id="practiceLinesList"></div>
-            <p class="practice-lines-note">Not tappable — pick a line on Learn to practice it again.</p>
           </div>
         </div>
         <div class="practice-sitting" id="practiceSitting" hidden>
@@ -1708,20 +1708,6 @@
         <div class="chat-text-row" id="practiceTextRow">
           <input id="practiceText" type="text" maxlength="500" placeholder="Or type the line if it missed you" autocomplete="off" />
           <button id="practiceTextSend" class="secondary" type="button">Send</button>
-        </div>
-      </div>
-    </section>
-
-    <section class="mode" id="modeLearn">
-      <div class="practice-stage">
-        <div class="practice-home" id="learnHome">
-          <div class="meta">Learn</div>
-          <p class="practice-home-title">Pick something to say</p>
-          <p class="disclaimer" id="learnHomeCopy">Tap a line. You’ll say it in Practice, then go back to talking.</p>
-          <div class="practice-home-actions">
-            <button id="learnGoChat" class="secondary" type="button">Back to chat</button>
-          </div>
-          <div class="learn-lines" id="learnLinesList"></div>
         </div>
       </div>
     </section>
@@ -1789,10 +1775,10 @@
 
             <div class="settings-section" data-settings-section="appearance" hidden>
               <h2 class="section-title">Appearance</h2>
-              <p class="disclaimer settings-searchable" data-settings-search="theme themes appearance look dark light night day slate graphite cloud frost color" id="themeHelp">
+              <p class="disclaimer settings-searchable" data-settings-search="theme themes appearance look dark light night day sage color" id="themeHelp">
                 Pick a look for Chat, Practice, and Settings. Save to keep it on this profile.
               </p>
-              <div class="settings-searchable" data-settings-search="theme themes appearance look dark light night day slate graphite cloud frost color picker" id="themePickerWrap">
+              <div class="settings-searchable" data-settings-search="theme themes appearance look dark light night day sage color picker" id="themePickerWrap">
                 <div id="themePicker"></div>
               </div>
             </div>
@@ -2127,8 +2113,9 @@
     const composerSimplerBtn = document.getElementById("composerSimpler");
     const chatHelpHintEl = document.getElementById("chatHelpHint");
     const placeMeHintEl = document.getElementById("placeMeHint");
-    const learnHomeCopyEl = document.getElementById("learnHomeCopy");
-    const learnLinesListEl = document.getElementById("learnLinesList");
+    const practiceChoicesEl = document.getElementById("practiceChoices");
+    const practiceChoicesLabelEl = document.getElementById("practiceChoicesLabel");
+    const practiceChoicesListEl = document.getElementById("practiceChoicesList");
     const personalitySelect = document.getElementById("personalitySelect");
     const personalityDesc = document.getElementById("personalityDesc");
     const personalityCustom = document.getElementById("personalityCustom");
@@ -2325,7 +2312,6 @@
       });
       document.getElementById("modeChat").classList.toggle("active", next === "chat");
       document.getElementById("modePractice").classList.toggle("active", next === "practice");
-      document.getElementById("modeLearn").classList.toggle("active", next === "learn");
       document.getElementById("modeSettings").classList.toggle("active", next === "settings");
       if (next === "chat") {
         activeTalkBtn = talkBtn;
@@ -2338,10 +2324,6 @@
             practiceStatusEl.textContent = String(err.message || err);
           });
         }
-      } else if (next === "learn") {
-        loadLearnToday().catch((err) => {
-          if (learnHomeCopyEl) learnHomeCopyEl.textContent = String(err.message || err);
-        });
       }
       if (next === "settings") {
         loadPrefsIntoForm({ skipPlacementOffer: true }).catch((err) => {
@@ -4880,6 +4862,7 @@
       }
       showPracticeHome();
       renderPracticeLines(data.lines);
+      renderPracticeChoices(data.choices, data.choices_source);
       practiceStartBtn.hidden = false;
       practiceStartBtn.disabled = false;
       if (data.fallback) {
@@ -4891,7 +4874,7 @@
       }
     }
 
-    async function startPracticeSitting(cardId, fromLearn) {
+    async function startPracticeSitting(cardId) {
       practiceStartBtn.disabled = true;
       practiceStatusEl.textContent = "Starting…";
       try {
@@ -4904,9 +4887,6 @@
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
           throw new Error(errorMessage(data, "Could not start practice"));
-        }
-        if (fromLearn) {
-          setMode("practice", { skipLoad: true });
         }
         showPracticeSitting();
         setPracticeSpeakable(data.speakable, data.why);
@@ -4924,56 +4904,38 @@
         }
         applySittingDone(!!data.done);
       } catch (err) {
-        if (fromLearn) {
-          if (learnHomeCopyEl) learnHomeCopyEl.textContent = String(err.message || err);
-        } else {
-          showPracticeHome();
-          practiceHomeCopyEl.textContent = String(err.message || err);
-          practiceStartBtn.hidden = false;
-        }
+        showPracticeHome();
+        practiceHomeCopyEl.textContent = String(err.message || err);
+        practiceStartBtn.hidden = false;
         throw err;
       } finally {
         practiceStartBtn.disabled = false;
       }
     }
 
-    function renderLearnLines(lines) {
-      if (!learnLinesListEl) return;
+    function renderPracticeChoices(lines, source) {
+      if (!practiceChoicesListEl) return;
       const rows = Array.isArray(lines) ? lines : [];
-      learnLinesListEl.replaceChildren();
+      practiceChoicesListEl.replaceChildren();
       for (const row of rows) {
         const speakable = row && row.speakable ? String(row.speakable).trim() : "";
         const cardId = row && row.card_id ? String(row.card_id) : "";
         if (!speakable || !cardId) continue;
         const btn = document.createElement("button");
         btn.type = "button";
-        btn.className = "learn-line";
+        btn.className = "practice-choice";
         btn.textContent = speakable;
         btn.addEventListener("click", () => {
-          startPracticeSitting(cardId, true).catch((err) => {
-            if (learnHomeCopyEl) learnHomeCopyEl.textContent = String(err.message || err);
+          startPracticeSitting(cardId).catch((err) => {
+            practiceHomeCopyEl.textContent = String(err.message || err);
           });
         });
-        learnLinesListEl.appendChild(btn);
+        practiceChoicesListEl.appendChild(btn);
       }
-    }
-
-    async function loadLearnToday() {
-      const res = await fetch("/api/learn/today");
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(errorMessage(data, "Could not load Learn"));
+      if (practiceChoicesLabelEl) {
+        practiceChoicesLabelEl.textContent = source === "starter" ? "Or start with one of these" : "Or pick a line from chat";
       }
-      if (learnHomeCopyEl) {
-        if (data.source === "starter") {
-          learnHomeCopyEl.textContent =
-            "Nothing from chat yet. Start with one of these, then go talk.";
-        } else {
-          learnHomeCopyEl.textContent =
-            "Tap a line. You’ll say it in Practice, then go back to talking.";
-        }
-      }
-      renderLearnLines(data.lines);
+      if (practiceChoicesEl) practiceChoicesEl.hidden = !practiceChoicesListEl.childElementCount;
     }
 
     async function finishPracticeSitting() {
@@ -5069,9 +5031,6 @@
       });
     });
     document.getElementById("practiceGoChat").addEventListener("click", () => {
-      setMode("chat");
-    });
-    document.getElementById("learnGoChat").addEventListener("click", () => {
       setMode("chat");
     });
     document.getElementById("practiceBackChat").addEventListener("click", () => {

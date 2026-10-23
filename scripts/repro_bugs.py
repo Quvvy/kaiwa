@@ -400,9 +400,11 @@ def main() -> None:
             used_state.get("used_card_ids"),
             cards_path=cards,
         )
+        said = {row.get("speakable") for row in lines}
+        # Starter 0 was replaced before it finished; only starter 1 was practiced.
         show(
-            any(row.get("speakable") == STARTER_CARDS[0]["speakable"] for row in lines),
-            "practiced Learn starter appears in Things you can say",
+            STARTER_CARDS[1]["speakable"] in said and STARTER_CARDS[0]["speakable"] not in said,
+            "finished starter (not the replaced one) appears in Things you can say",
             f"used={used_state.get('used_card_ids')} lines={lines}",
         )
         try:

@@ -1784,12 +1784,12 @@ async def _sitting_generate(sitting: dict[str, Any], *, opening: bool) -> dict[s
 
 @app.get("/api/practice/today")
 def practice_today() -> dict[str, Any]:
-    return practice_sitting.today_payload()
-
-
-@app.get("/api/learn/today")
-def learn_today() -> dict[str, Any]:
-    return practice_learn.today_payload()
+    payload = practice_sitting.today_payload()
+    # Line picker (was the Learn tab): Chat lines, or starters if none yet.
+    picker = practice_learn.today_payload()
+    payload["choices"] = picker["lines"]
+    payload["choices_source"] = picker["source"]
+    return payload
 
 
 @app.post("/api/practice/sitting/start")

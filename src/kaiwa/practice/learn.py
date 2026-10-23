@@ -1,4 +1,4 @@
-"""Learn tab: clustered Chat lines, or canned starters if none are eligible."""
+"""Practice line picker: clustered Chat lines, or canned starters if none are eligible."""
 
 from __future__ import annotations
 
