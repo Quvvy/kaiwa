@@ -41,6 +41,8 @@ class UserPrefs:
     ptt_blips_enabled: bool = True
     ptt_blip_volume: float = 0.6
     chat_pace: ChatPace = "easy"
+    # Microphone by its Windows name ("" = system default). Shared by the page and desktop PTT.
+    mic_label: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -151,6 +153,8 @@ def validate_prefs_dict(raw: dict[str, Any]) -> UserPrefs:
     elif ptt_blip_volume > 5.0:
         ptt_blip_volume = 5.0
 
+    mic_label = str(raw.get("mic_label") or "").strip()[:200]
+
     chat_pace = str(raw.get("chat_pace", "easy") or "easy").strip().lower()
     if chat_pace not in VALID_CHAT_PACE:
         raise ValueError("chat_pace must be 'easy' or 'free'")
@@ -172,6 +176,7 @@ def validate_prefs_dict(raw: dict[str, Any]) -> UserPrefs:
         ptt_blips_enabled=ptt_blips_enabled,
         ptt_blip_volume=ptt_blip_volume,
         chat_pace=chat_pace,  # type: ignore[arg-type]
+        mic_label=mic_label,
     )
 
 

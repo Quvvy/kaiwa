@@ -911,3 +911,57 @@ body:not([data-mode="chat"]) .header-chats {
     padding: 20px;
   }
 }
+
+/* ---------- microphone picker ---------- */
+.mic-picker {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 120px;
+  align-items: center;
+  gap: 6px 10px;
+  max-width: 520px;
+}
+
+.mic-picker select {
+  min-width: 0;
+}
+
+.mic-meter {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--line);
+  overflow: hidden;
+}
+
+.mic-meter span {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--ok);
+}
+
+.mic-note {
+  grid-column: 1 / -1;
+  font-size: 13px;
+  color: var(--bad);
+}
+
+.mic-note:empty {
+  display: none;
+}
+
+.mic-picker.compact {
+  grid-template-columns: auto minmax(0, 260px) 80px;
+  max-width: none;
+}
+
+.mic-picker.compact select {
+  min-height: 30px;
+  font-size: 13px;
+  padding: 3px 8px;
+}
+
+.mic-picker.compact::before {
+  content: "Microphone";
+  font-size: 13px;
+  color: var(--ink-2);
+}

@@ -101,6 +101,7 @@
         <div class="composer-talk">
           <button id="talk" type="button">Hold to talk</button>
         </div>
+        <div id="chatMicRow"></div>
         <div class="chat-text-row" id="chatTextRow">
           <input id="chatText" type="text" maxlength="500" placeholder="Or type what you meant" autocomplete="off" />
           <button id="chatTextSend" class="secondary" type="button">Send</button>
@@ -412,6 +413,11 @@
               <p class="disclaimer settings-searchable" data-settings-search="speech voice tts microphone push to talk">
                 TTS voice and Windows desktop push-to-talk.
               </p>
+              <div class="field settings-searchable" data-settings-search="microphone mic input device recording level headset">
+                <label>Microphone</label>
+                <div id="settingsMicRow"></div>
+                <p class="disclaimer">Talk and watch the bar. If it doesn't move, pick another microphone. Learn, Chat and desktop push-to-talk all use this one.</p>
+              </div>
               <div class="field settings-searchable" data-settings-search="tts engine aivisspeech voicevox speech synthesis">
                 <label>TTS engine</label>
                 <div class="seg" id="ttsEngineSeg">
@@ -495,6 +501,7 @@
     </section>
   </div>
 
+  <script src="/static/mic.js"></script>
   <script>
     const talkBtn = document.getElementById("talk");
     const replayLastBtn = document.getElementById("replayLast");
@@ -567,8 +574,6 @@
     let audioPlayQueue = [];
     let audioPlaying = false;
     let mode = "learn";
-    let mediaRecorder = null;
-    let chunks = [];
     let recording = false;
     let recordStartMs = 0;
     let recordWantsStop = false;
@@ -730,6 +735,7 @@
       const skipLoad = !!(opts && opts.skipLoad);
       mode = next;
       document.body.dataset.mode = next;
+      if (next === "chat") mountMicPicker("chatMicRow");
       document.querySelectorAll(".tab").forEach((t) => {
         t.classList.toggle("active", t.dataset.mode === next);
       });
@@ -845,6 +851,12 @@
       if (saveBar) saveBar.hidden = false;
     }
 
+    function mountMicPicker(hostId) {
+      const host = document.getElementById(hostId);
+      if (!host || !window.KaiwaMic || host.firstChild) return;
+      host.append(window.KaiwaMic.picker({ compact: hostId === "chatMicRow" }));
+    }
+
     function setSettingsSection(id, opts) {
       const fromSearch = opts && opts.fromSearch;
       if (settingsSearchActive && !fromSearch) {
@@ -855,6 +867,7 @@
       }
       const sectionId = migrateSettingsSectionId(id);
       settingsLastSection = sectionId;
+      if (sectionId === "speech") mountMicPicker("settingsMicRow");
       document.querySelectorAll(".settings-rail [data-settings-section]").forEach((btn) => {
         btn.classList.toggle("active", btn.dataset.settingsSection === sectionId);
       });
@@ -1129,83 +1142,60 @@
       }
     }
 
+    // Recording uses the shared warm microphone (static/mic.js): pressing starts
+    // instantly instead of waiting ~1 s for Windows to open the device.
+    let micHandle = null;
+
     async function startRecording() {
       if (!guardDeepseekOrExplain()) return;
       if (recording || recordStarting || mode === "settings") return;
       recordStarting = true;
       recordWantsStop = false;
+      if (!window.KaiwaMic.isOpen()) setStatus("Opening the microphone…");
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          audio: {
-            echoCancellation: true,
-            noiseSuppression: true,
-            channelCount: 1,
-          },
-        });
-        if (recordWantsStop) {
-          // Released before mic was ready — don't send an empty clip
-          stream.getTracks().forEach((t) => t.stop());
-          setStatus("Hold a bit longer, then speak");
-          return;
-        }
-        chunks = [];
-        const mimeCandidates = [
-          "audio/webm;codecs=opus",
-          "audio/webm",
-          "audio/mp4",
-        ];
-        const mime = mimeCandidates.find((m) => MediaRecorder.isTypeSupported(m)) || "";
-        mediaRecorder = mime
-          ? new MediaRecorder(stream, { mimeType: mime })
-          : new MediaRecorder(stream);
-        mediaRecorder.ondataavailable = (e) => {
-          if (e.data && e.data.size > 0) chunks.push(e.data);
-        };
-        mediaRecorder.onstop = async () => {
-          stream.getTracks().forEach((t) => t.stop());
-          const blobType = (mediaRecorder && mediaRecorder.mimeType) || mime || "audio/webm";
-          const blob = new Blob(chunks, { type: blobType });
-          const heldMs = Date.now() - recordStartMs;
-          if (blob.size < 800 || heldMs < 280) {
-            setStatus("Hold to talk a bit longer, then release");
-            return;
-          }
-          const ext = blobType.includes("mp4") ? "m4a" : "webm";
-          if (mode === "chat") await sendTurn(blob, ext);
-          else if (mode === "practice") await sendSittingTurn(blob, ext);
-        };
-        // Timeslice so we get chunks even on short holds (helps WebView2/Edge)
-        mediaRecorder.start(250);
-        recordStartMs = Date.now();
-        recording = true;
-        activeTalkBtn.classList.add("recording");
-        activeTalkBtn.textContent = "Listening…";
-        setStatus("Recording — release to send");
-        if (recordWantsStop) stopRecording();
-      } finally {
+        micHandle = await window.KaiwaMic.record();
+      } catch (err) {
         recordStarting = false;
+        setStatus(String(err.message || err));
+        return;
       }
+      recordStarting = false;
+      if (recordWantsStop) {
+        micHandle.stop();
+        micHandle = null;
+        setStatus("The microphone was still opening. Hold until the button turns red, then speak.");
+        return;
+      }
+      recording = true;
+      activeTalkBtn.classList.add("recording");
+      activeTalkBtn.textContent = "Listening… let go when you're done";
+      setStatus("Recording");
     }
 
-    function stopRecording() {
+    async function stopRecording() {
       if (recordStarting) {
         recordWantsStop = true;
         return;
       }
-      if (!recording || !mediaRecorder) return;
+      if (!recording || !micHandle) return;
       recording = false;
+      const handle = micHandle;
+      micHandle = null;
       activeTalkBtn.classList.remove("recording");
       activeTalkBtn.textContent = mode === "chat" ? "Hold to talk" : "Hold to repeat";
-      try {
-        if (mediaRecorder.state === "recording") {
-          mediaRecorder.requestData();
-          mediaRecorder.stop();
-        }
-      } catch (_) {
-        setStatus("Ready");
+      const res = await handle.stop();
+      if (res.ms < 350 || res.blob.size < 800) {
+        setStatus("That was too short. Hold the whole time you speak, then let go.");
+        return;
+      }
+      if (res.silent) {
+        const mic = window.KaiwaMic.currentLabel() || "the selected microphone";
+        setStatus(`Didn't hear anything from ${mic}. Pick another microphone under the talk button.`);
         return;
       }
       setStatus("Thinking…");
+      if (mode === "chat") await sendTurn(res.blob, res.ext);
+      else if (mode === "practice") await sendSittingTurn(res.blob, res.ext);
     }
 
     function bindHold(btn) {
@@ -2205,6 +2195,7 @@
         ptt_blips_enabled: pttBlipsEnabled,
         ptt_blip_volume: pttBlipVolume,
         chat_pace: chatPace,
+        mic_label: window.KaiwaMic ? window.KaiwaMic.selectedLabel() : "",
       };
       const res = await fetch("/api/prefs", {
         method: "PUT",

@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import base64
+import collections
 import io
+import json
+import queue
 import threading
 import wave
 from pathlib import Path
@@ -37,6 +40,45 @@ def _noop_log(msg: str) -> None:
     pass
 
 
+def resolve_input_device(label: str) -> int | None:
+    """PortAudio input index for a Windows mic name, or None for the system default.
+
+    The page stores the name the browser shows ("use THIS (VB-Audio Voicemeeter VAIO)",
+    sometimes prefixed "Default - "). MME device names are cut to 31 characters, so a
+    prefix match in either direction counts. MME is preferred: it resamples to 16 kHz.
+    """
+    want = (label or "").strip()
+    for prefix in ("Default - ", "Communications - "):
+        if want.startswith(prefix):
+            want = want[len(prefix):]
+    want = want.casefold()
+    if not want:
+        return None
+    try:
+        import sounddevice as sd
+
+        apis = sd.query_hostapis()
+        devices = sd.query_devices()
+    except Exception:
+        return None
+    best: tuple[int, int] | None = None
+    for index, dev in enumerate(devices):
+        if dev.get("max_input_channels", 0) <= 0:
+            continue
+        name = str(dev.get("name") or "").casefold()
+        if not name:
+            continue
+        exact = name == want
+        prefix = want.startswith(name) or name.startswith(want)
+        if not (exact or prefix):
+            continue
+        api = str(apis[dev["hostapi"]].get("name") or "")
+        rank = (0 if exact else 1) * 10 + (0 if api == "MME" else 1 if "DirectSound" in api else 2)
+        if best is None or rank < best[0]:
+            best = (rank, index)
+    return best[1] if best else None
+
+
 class PttController:
     """Hold-to-talk via global key/mouse while Kaiwa desktop runs."""
 
@@ -66,6 +108,12 @@ class PttController:
         self._bind_capture = False
         self._lock = threading.Lock()
         self._blip_cache: dict[str, tuple[Any, int] | None] = {}
+        self._prefs_mic = ""
+        # Warm input stream while PTT is on: pressing starts instantly, and a short
+        # rolling pre-roll keeps the first syllable said while the key goes down.
+        self._mic_stream = None
+        self._mic_key: tuple[str, int | None] | None = None
+        self._preroll: collections.deque = collections.deque(maxlen=8)  # ~0.3 s at 16 kHz/40 ms blocks
 
     def start(self) -> None:
         if self._threads:
@@ -82,6 +130,7 @@ class PttController:
     def stop(self) -> None:
         self._stop.set()
         self._stop_recording(discard=True)
+        self._close_mic()
         self._threads = []
         self._log("ptt controller stopped")
 
@@ -177,6 +226,7 @@ class PttController:
                             )
                             self._prefs_play = bool(prefs.get("ptt_play_reply", True))
                             self._prefs_blips = bool(prefs.get("ptt_blips_enabled", True))
+                            self._prefs_mic = str(prefs.get("mic_label") or "")
                             try:
                                 vol = float(prefs.get("ptt_blip_volume", 0.6))
                             except (TypeError, ValueError):
@@ -204,6 +254,10 @@ class PttController:
                             self._log(f"ptt heartbeat: {exc}")
             except Exception as exc:
                 self._log(f"ptt poll client: {exc}")
+            try:
+                self._sync_mic()
+            except Exception as exc:
+                self._log(f"ptt mic sync: {exc}")
             self._stop.wait(1.5)
 
     def _hook_loop(self) -> None:
@@ -290,67 +344,98 @@ class PttController:
             return
         threading.Thread(target=self._finish_turn, name="kaiwa-ptt-turn", daemon=True).start()
 
-    def _start_recording(self) -> None:
+    def _sync_mic(self) -> None:
+        with self._lock:
+            enabled = self._prefs_enabled
+            label = self._prefs_mic
+        if not enabled:
+            if not self._recording:
+                self._close_mic()
+            return
+        device = resolve_input_device(label)
+        if self._mic_stream is not None and self._mic_key == (label, device):
+            return
+        if self._recording:
+            return
+        self._open_mic(label, device)
+
+    def _open_mic(self, label: str, device: int | None) -> bool:
         try:
             import sounddevice as sd
         except ImportError:
             self._log("ptt: sounddevice missing — pip install sounddevice")
-            self._post_status(
-                "Global PTT mic unavailable — install sounddevice.",
-                level="error",
-            )
-            return
-
-        self._frames = []
+            self._post_status("Push-to-talk can't record: the sounddevice package is missing.", level="error")
+            return False
+        self._close_mic()
 
         def callback(indata, frames, time_info, status) -> None:  # noqa: ANN001
-            if status:
-                self._log(f"ptt mic status: {status}")
-            self._frames.append(indata.copy())
+            block = indata.copy()
+            if self._recording:
+                self._frames.append(block)
+            else:
+                self._preroll.append(block)
 
         try:
-            self._stream = sd.InputStream(
+            stream = sd.InputStream(
                 samplerate=self._sample_rate,
                 channels=1,
                 dtype="float32",
+                blocksize=640,
+                device=device,
                 callback=callback,
             )
-            # Cue before opening the mic to avoid PortAudio duplex glitches.
-            self._play_blip("in")
-            self._stream.start()
-            self._recording = True
-            self._log("ptt recording…")
-            self._post_status("PTT listening — hold, then release to send")
+            stream.start()
         except Exception as exc:
-            self._log(f"ptt mic start failed: {exc}")
-            self._stream = None
-            self._recording = False
-            self._post_status(f"PTT mic failed: {exc}", level="error")
+            self._log(f"ptt mic open failed ({label or 'default'}): {exc}")
+            self._post_status(f"Push-to-talk couldn't open {label or 'the default microphone'}: {exc}", level="error")
+            return False
+        self._mic_stream = stream
+        self._mic_key = (label, device)
+        self._log(f"ptt mic open: {label or 'system default'} (device {device})")
+        return True
 
-    def _stop_recording(self, *, discard: bool = False) -> bytes | None:
-        was_recording = self._recording
-        self._recording = False
-        stream = self._stream
-        self._stream = None
+    def _close_mic(self) -> None:
+        stream = self._mic_stream
+        self._mic_stream = None
+        self._mic_key = None
         if stream is not None:
             try:
                 stream.stop()
                 stream.close()
             except Exception:
                 pass
+
+    def _start_recording(self) -> None:
+        if self._mic_stream is None:
+            with self._lock:
+                label = self._prefs_mic
+            if not self._open_mic(label, resolve_input_device(label)):
+                return
+        self._frames = list(self._preroll)
+        self._recording = True
+        self._play_blip("in")
+        self._log("ptt recording…")
+        self._post_status("Listening — let go to send")
+    def _stop_recording(self, *, discard: bool = False) -> bytes | None:
+        was_recording = self._recording
+        self._recording = False
         if was_recording:
             self._play_blip("out")
-        if discard:
-            self._frames = []
-            return None
-        if not self._frames:
+        frames, self._frames = self._frames, []
+        if discard or not frames:
             return None
         try:
             import numpy as np
         except ImportError:
             return None
-        audio = np.concatenate(self._frames, axis=0).reshape(-1)
-        self._frames = []
+        audio = np.concatenate(frames, axis=0).reshape(-1)
+        if float(np.max(np.abs(audio))) < 0.01:
+            self._log("ptt: silent clip")
+            self._post_status(
+                "Push-to-talk heard silence. Pick your microphone in Settings → Speech.",
+                level="warn",
+            )
+            return None
         pcm = np.clip(audio, -1.0, 1.0)
         pcm_i16 = (pcm * 32767.0).astype("<i2")
         buf = io.BytesIO()
@@ -360,7 +445,6 @@ class PttController:
             wf.setframerate(self._sample_rate)
             wf.writeframes(pcm_i16.tobytes())
         return buf.getvalue()
-
     def _finish_turn(self) -> None:
         with self._lock:
             if self._busy:
@@ -371,70 +455,91 @@ class PttController:
             play = self._prefs_play
         try:
             wav = self._stop_recording(discard=False)
-            if not wav or len(wav) < 1600:
+            if wav is None:
+                return
+            if len(wav) < 1600 * 2 * 4:  # < ~0.4 s of audio
                 self._log("ptt: clip too short")
-                self._post_status(
-                    "Hold the PTT key longer, then release (don’t just click).",
-                    level="warn",
-                )
+                self._post_status("That was too short. Hold the key the whole time you speak.", level="warn")
                 return
             self._log("ptt: sending turn…")
-            self._post_status("PTT sending…")
+            self._post_status("Thinking…")
             files = {"audio": ("ptt.wav", wav, "audio/wav")}
-            data = {
-                "session_id": session_id,
-                "client_source": "ptt",
-            }
+            data = {"session_id": session_id, "client_source": "ptt"}
+            player = _SequentialPlayer(self._log) if play else None
+            # Streamed: each sentence's audio plays as soon as it is ready.
             with httpx.Client(timeout=180.0) as client:
-                res = client.post(f"{self.api_base}/api/turn", files=files, data=data)
-            if res.status_code >= 400:
-                self._log(f"ptt turn failed: {res.status_code} {res.text[:200]}")
-                self._post_status(
-                    f"PTT turn failed ({res.status_code}).",
-                    level="error",
-                )
-                return
-            payload = res.json()
-            if payload.get("type_retry"):
-                self._log("ptt: no speech — type in Chat")
-                self._post_status(
-                    str(payload.get("detail") or "Couldn't catch that — type it in Chat."),
-                    level="warn",
-                )
-                return
+                with client.stream("POST", f"{self.api_base}/api/turn/stream", files=files, data=data) as res:
+                    if res.status_code >= 400:
+                        self._log(f"ptt turn failed: {res.status_code}")
+                        self._post_status(f"Push-to-talk turn failed ({res.status_code}).", level="error")
+                        return
+                    if "text/event-stream" not in res.headers.get("content-type", ""):
+                        payload = json.loads(res.read() or b"{}")
+                        self._log("ptt: no speech")
+                        self._post_status(
+                            str(payload.get("detail") or "Couldn't catch that. Try again or type it in Chat."),
+                            level="warn",
+                        )
+                        return
+                    event = ""
+                    for line in res.iter_lines():
+                        if line.startswith("event:"):
+                            event = line[6:].strip()
+                        elif line.startswith("data:"):
+                            body = json.loads(line[5:].strip() or "{}")
+                            if event == "audio" and player is not None:
+                                player.add(str(body.get("audio_base64") or ""))
+                            elif event == "error":
+                                self._post_status(f"Push-to-talk: {body.get('detail')}", level="error")
+            if player is not None:
+                player.finish()
             self._log("ptt turn ok")
             self._post_status("Ready · push-to-talk")
-            if play and payload.get("audio_base64"):
-                self._play_wav_b64(str(payload["audio_base64"]))
         except Exception as exc:
             self._log(f"ptt turn error: {exc}")
-            self._post_status(f"PTT error: {exc}", level="error")
+            self._post_status(f"Push-to-talk error: {exc}", level="error")
         finally:
             with self._lock:
                 self._busy = False
 
-    def _play_wav_b64(self, b64: str) -> None:
+
+class _SequentialPlayer:
+    """Plays WAV chunks in order on a background thread as they arrive."""
+
+    def __init__(self, log: LogFn) -> None:
+        self._log = log
+        self._queue: queue.Queue[str | None] = queue.Queue()
+        self._thread = threading.Thread(target=self._run, name="kaiwa-ptt-play", daemon=True)
+        self._thread.start()
+
+    def add(self, b64: str) -> None:
+        if b64:
+            self._queue.put(b64)
+
+    def finish(self) -> None:
+        self._queue.put(None)
+        self._thread.join(timeout=120)
+
+    def _run(self) -> None:
         try:
             import numpy as np
             import sounddevice as sd
         except ImportError:
             self._log("ptt: cannot play — sounddevice/numpy missing")
             return
-        try:
-            raw = base64.b64decode(b64)
-            with wave.open(io.BytesIO(raw), "rb") as wf:
-                rate = wf.getframerate()
-                channels = wf.getnchannels()
-                frames = wf.readframes(wf.getnframes())
-                width = wf.getsampwidth()
-            if width == 2:
-                data = np.frombuffer(frames, dtype="<i2").astype("float32") / 32768.0
-            else:
-                self._log(f"ptt: unsupported sample width {width}")
+        while True:
+            b64 = self._queue.get()
+            if b64 is None:
                 return
-            if channels > 1:
-                data = data.reshape(-1, channels)
-            sd.play(data, rate)
-            sd.wait()
-        except Exception as exc:
-            self._log(f"ptt play failed: {exc}")
+            try:
+                with wave.open(io.BytesIO(base64.b64decode(b64)), "rb") as wf:
+                    rate = wf.getframerate()
+                    channels = wf.getnchannels()
+                    frames = wf.readframes(wf.getnframes())
+                data = np.frombuffer(frames, dtype="<i2").astype("float32") / 32768.0
+                if channels > 1:
+                    data = data.reshape(-1, channels)
+                sd.play(data, rate)
+                sd.wait()
+            except Exception as exc:
+                self._log(f"ptt play failed: {exc}")

@@ -129,95 +129,74 @@
     );
   }
 
-  // ---------- hold to speak (with live mic level) ----------
-  function holdControl(label, onAudio) {
+  // ---------- hold to speak (shared warm mic, live level) ----------
+  /**
+   * A wide hold-to-speak bar. `onAudio(blob, ext)` gets real speech;
+   * `onProblem(message)` explains anything else (too short, silence, mic errors)
+   * so a press never ends with nothing on screen.
+   */
+  function holdControl(label, onAudio, onProblem) {
     const fill = el("span", { class: "hold-level" });
     const text = el("span", { class: "hold-label" }, label, kbd("Space"));
     const btn = el("button", { class: "hold", type: "button" }, fill, text);
+    let pressing = false;
     let rec = null;
-    let stream = null;
-    let chunks = [];
-    let startedAt = 0;
-    let wantStop = false;
-    let starting = false;
-    let meter = null;
+    let raf = 0;
 
-    function setLabel(content) {
+    function setLabel(...content) {
       text.replaceChildren(...content);
     }
-    function startMeter(s) {
-      try {
-        const ctx = new AudioContext();
-        const analyser = ctx.createAnalyser();
-        analyser.fftSize = 512;
-        ctx.createMediaStreamSource(s).connect(analyser);
-        const data = new Uint8Array(analyser.fftSize);
-        const tick = () => {
-          analyser.getByteTimeDomainData(data);
-          let peak = 0;
-          for (const v of data) peak = Math.max(peak, Math.abs(v - 128));
-          btn.style.setProperty("--level", Math.min(1, peak / 64).toFixed(3));
-          meter.raf = requestAnimationFrame(tick);
-        };
-        meter = { ctx, raf: requestAnimationFrame(tick) };
-      } catch (_) {
-        meter = null;
-      }
+    function resetLabel() {
+      setLabel(label, kbd("Space"));
     }
-    function stopMeter() {
-      if (!meter) return;
-      cancelAnimationFrame(meter.raf);
-      meter.ctx.close().catch(() => {});
-      meter = null;
-      btn.style.setProperty("--level", "0");
+    function meter() {
+      btn.style.setProperty("--level", window.KaiwaMic.level().toFixed(3));
+      raf = requestAnimationFrame(meter);
     }
-
     async function start() {
-      if (rec || starting || btn.disabled) return;
-      starting = true;
-      wantStop = false;
+      if (pressing || btn.disabled) return;
+      pressing = true;
       stopAudio();
+      setLabel("Opening the microphone…");
+      let handle;
       try {
-        stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, channelCount: 1 } });
-      } catch (_) {
-        starting = false;
-        setLabel(["Microphone blocked. Allow it in Windows privacy settings."]);
+        handle = await window.KaiwaMic.record();
+      } catch (err) {
+        pressing = false;
+        resetLabel();
+        onProblem(String(err.message || err));
         return;
       }
-      starting = false;
-      if (wantStop) { stream.getTracks().forEach((t) => t.stop()); return; }
-      const mime = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"].find((m) => MediaRecorder.isTypeSupported(m)) || "";
-      rec = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
-      chunks = [];
-      rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
-      rec.onstop = () => {
-        stream.getTracks().forEach((t) => t.stop());
-        stopMeter();
-        const type = rec.mimeType || mime || "audio/webm";
-        const blob = new Blob(chunks, { type });
-        const held = Date.now() - startedAt;
-        rec = null;
-        btn.classList.remove("recording");
-        setLabel([label, kbd("Space")]);
-        if (blob.size < 800 || held < 300) {
-          setLabel(["Hold a little longer while you speak"]);
-          setTimeout(() => setLabel([label, kbd("Space")]), 1500);
-          return;
-        }
-        onAudio(blob, type.includes("mp4") ? "m4a" : "webm");
-      };
-      rec.start(250);
-      startedAt = Date.now();
+      if (!pressing) {
+        // Let go before the mic was ready: nothing usable was recorded.
+        handle.stop();
+        resetLabel();
+        onProblem("The microphone was still opening. Hold the bar until it turns red, then speak.");
+        return;
+      }
+      rec = handle;
       btn.classList.add("recording");
-      setLabel(["Listening… release when you're done"]);
-      startMeter(stream);
-      if (wantStop) stop();
+      setLabel("Listening… let go when you're done");
+      meter();
     }
-    function stop() {
-      if (starting) { wantStop = true; return; }
-      if (rec && rec.state === "recording") {
-        rec.requestData();
-        rec.stop();
+    async function stop() {
+      if (!pressing) return;
+      pressing = false;
+      if (!rec) return; // start() reports the early release
+      const handle = rec;
+      rec = null;
+      cancelAnimationFrame(raf);
+      btn.style.setProperty("--level", "0");
+      btn.classList.remove("recording");
+      resetLabel();
+      const res = await handle.stop();
+      if (res.ms < 400) {
+        onProblem("That was too short. Hold the bar the whole time you speak, then let go.");
+      } else if (res.silent) {
+        const mic = window.KaiwaMic.currentLabel() || "the selected microphone";
+        onProblem(`I didn't hear anything from ${mic}. Pick another microphone below and watch its level bar move when you talk.`);
+      } else {
+        onAudio(res.blob, res.ext);
       }
     }
     btn.addEventListener("pointerdown", (e) => { e.preventDefault(); btn.setPointerCapture?.(e.pointerId); start(); });
@@ -225,6 +204,14 @@
     btn.addEventListener("pointercancel", stop);
     btn.holdApi = { start, stop };
     return btn;
+  }
+
+  function micRow() {
+    return window.KaiwaMic.picker({ compact: true });
+  }
+
+  function showProblem(result) {
+    return (message) => result.replaceChildren(el("p", { class: "verdict off", text: message }));
   }
 
   function audioForm(blob, ext, fields) {
@@ -459,11 +446,12 @@
         } catch (err) {
           result.replaceChildren(el("p", { class: "verdict off", text: String(err.message || err) }));
         }
-      });
+      }, showProblem(result));
       const body = el("div", { class: "card-body" },
         el("p", { class: "prompt", text: "Say this in Japanese" }),
         el("p", { class: "prompt-en", text: p.en }),
         hold,
+        micRow(),
         result,
         answer,
       );
@@ -505,7 +493,7 @@
         } catch (err) {
           result.replaceChildren(el("p", { class: "verdict off", text: String(err.message || err) }));
         }
-      });
+      }, showProblem(result));
       const last = i === phrases.length - 1;
       const actions = [];
       if (i > 0) actions.push(el("button", { type: "button", class: "secondary", onclick: () => { i -= 1; show(); } }, "Back"));
@@ -514,7 +502,7 @@
         title: `New phrases, unit ${unit.number}`,
         index: i,
         total: phrases.length,
-        body: el("div", { class: "card-body" }, phraseBlock(p), playRow(p.jp), hold, result),
+        body: el("div", { class: "card-body" }, phraseBlock(p), playRow(p.jp), hold, micRow(), result),
         actions,
         primary: next,
         hold,
@@ -703,7 +691,7 @@
         ].filter(Boolean));
         if (r.verdict !== "great" && r.model) play(r.model);
       }
-      const hold = holdControl("Hold and answer", (blob, ext) => submit(audioForm(blob, ext, { unit_id: unit.id, task: t })));
+      const hold = holdControl("Hold and answer", (blob, ext) => submit(audioForm(blob, ext, { unit_id: unit.id, task: t })), showProblem(result));
       const typed = el("input", { type: "text", maxlength: "120", placeholder: "Or type your answer", lang: "ja" });
       const typedForm = el("form", { class: "typed", onsubmit: (e) => {
         e.preventDefault();
@@ -727,6 +715,7 @@
             el("p", { class: "says-jp", lang: "ja", text: task.say }),
             playRow(task.say)),
           hold,
+          micRow(),
           typedForm,
           el("button", { class: "secondary hint-toggle", type: "button", onclick: () => { hint.hidden = !hint.hidden; } }, "Show a hint"),
           hint,

@@ -279,6 +279,7 @@ class PrefsUpdate(BaseModel):
     ptt_blips_enabled: bool = True
     ptt_blip_volume: float = 0.6
     chat_pace: str = "easy"
+    mic_label: str = ""
 
 
 class ProfileUpdate(BaseModel):
@@ -492,6 +493,20 @@ def get_prefs() -> dict[str, Any]:
         "placement_completed": profile.placement_completed,
         "active_id": listing.get("active_id") or listing.get("active") or "",
     }
+
+
+class MicBody(BaseModel):
+    label: str = Field(default="", max_length=200)
+
+
+@app.post("/api/prefs/mic")
+def put_mic(body: MicBody) -> dict[str, Any]:
+    """Save just the microphone choice (the full prefs PUT replaces every field)."""
+    with jsonio.STATE_LOCK:
+        prefs = load_prefs()
+        prefs.mic_label = body.label.strip()
+        save_prefs(prefs)
+    return {"mic_label": prefs.mic_label}
 
 
 @app.put("/api/prefs")
@@ -1173,8 +1188,9 @@ def _stream_chat_events(
     *,
     stt_ms: int,
     stt_meta: dict[str, Any] | None = None,
+    client_source: str = "ui_stream",
 ) -> Iterator[str]:
-    """Yield SSE chunks for UI Chat (LLM deltas + sentence TTS). Not used by PTT."""
+    """Yield SSE chunks (LLM deltas + per-sentence TTS) for Chat and desktop push-to-talk."""
     turn_t0 = time.perf_counter()
     try:
         _require_deepseek_key()
@@ -1352,7 +1368,7 @@ def _stream_chat_events(
             "model_used": model_used,
             "timing": timing,
             "input": "text" if stt_ms == 0 else "voice",
-            "client_source": "ui_stream",
+            "client_source": client_source,
             "streamed": True,
             "reply_shape": reply_shape,
         },
@@ -1367,15 +1383,22 @@ def _stream_chat_events(
     )
     practice_sitting.consume_pending_elicit()
 
+    notice = recast_phrase(transcript, reply, last_assistant=prompt_line)
+    if client_source == "ptt":
+        # Background push-to-talk turn: let the Chat tab draw it.
+        ptt_events.push_event(
+            user_text=transcript,
+            reply_text=reply,
+            recast_phrase=notice,
+            session_id=sid,
+        )
     yield _sse_pack(
         "final",
         {
             "session_id": sid,
             "transcript": transcript,
             "reply_text": reply,
-            "recast_phrase": recast_phrase(
-                transcript, reply, last_assistant=prompt_line
-            ),
+            "recast_phrase": notice,
             "tts_error": tts_error,
             "learner_state": learner_state,
             "speaking_level": profile.speaking_level,
@@ -1402,6 +1425,7 @@ def _sse_response(events: Iterator[str]) -> StreamingResponse:
 async def turn_stream(
     audio: UploadFile = File(...),
     session_id: str = Form(default=""),
+    client_source: str = Form(default=""),
 ) -> Response:
     sid = _resolve_session(session_id.strip())
     raw = await audio.read()
@@ -1429,8 +1453,11 @@ async def turn_stream(
     if not transcript:
         return _unheard_chat_response(sid, stt_meta)
 
+    source = "ptt" if client_source.strip().lower() == "ptt" else "ui_stream"
     return _sse_response(
-        _stream_chat_events(sid, transcript, stt_ms=stt_ms, stt_meta=stt_meta)
+        _stream_chat_events(
+            sid, transcript, stt_ms=stt_ms, stt_meta=stt_meta, client_source=source
+        )
     )
 
 
