@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import json
+import os
+import time
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +17,7 @@ from kaiwa import stt, tts
 from kaiwa.config import get_settings
 from kaiwa.course import coach, prerender, state, stories
 from kaiwa.course.speech_check import check_phrase
+from kaiwa.secrets_store import user_data_dir
 
 router = APIRouter(prefix="/api/course")
 
@@ -77,6 +81,24 @@ async def _transcribe(audio: UploadFile) -> str:
     return heard
 
 
+def _keep_clip(audio: UploadFile, phrase_id: str, target: str, heard: str, band: str) -> None:
+    """With KAIWA_SAVE_CLIPS=1, keep each say-it-back recording for testing recognisers."""
+    if os.environ.get("KAIWA_SAVE_CLIPS") != "1":
+        return
+    try:
+        folder = user_data_dir() / "clips"
+        folder.mkdir(parents=True, exist_ok=True)
+        stem = f"{time.strftime('%Y%m%d-%H%M%S')}_{phrase_id}"
+        audio.file.seek(0)
+        suffix = Path(audio.filename or "clip.webm").suffix or ".webm"
+        (folder / (stem + suffix)).write_bytes(audio.file.read())
+        row = {"file": stem + suffix, "target": target, "whisper": heard, "band": band}
+        with open(folder / "clips.jsonl", "a", encoding="utf-8") as fh:
+            fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+    except OSError:
+        pass
+
+
 @router.post("/check")
 async def check(audio: UploadFile = File(...), phrase_id: str = Form(...)) -> dict[str, Any]:
     """Say-it-back check for one phrase (new-phrase step and speak reviews)."""
@@ -85,6 +107,7 @@ async def check(audio: UploadFile = File(...), phrase_id: str = Form(...)) -> di
         raise HTTPException(status_code=404, detail="Unknown phrase")
     heard = await _transcribe(audio)
     result = check_phrase(phrase["jp"], heard, phrase.get("accept"))
+    _keep_clip(audio, phrase_id, phrase["jp"], heard, result.band)
     return {"heard": heard, "score": result.score, "band": result.band}
 
 
