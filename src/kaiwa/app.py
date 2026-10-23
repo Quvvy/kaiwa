@@ -243,7 +243,18 @@ async def _warm_stt() -> None:
         except Exception:
             pass
 
+    def _warm_tts() -> None:
+        # The voice engine's first synthesis takes ~6 s; pay it here, not on the first click.
+        prefs = load_prefs()
+        for _ in range(60):
+            try:
+                tts.synthesize(settings, "こんにちは。", speaker_id=prefs.voicevox_speaker_id, engine=prefs.tts_engine)
+                return
+            except Exception:
+                time.sleep(2)
+
     asyncio.create_task(asyncio.to_thread(_load))
+    threading.Thread(target=_warm_tts, name="kaiwa-tts-warm", daemon=True).start()
 
 
 class SpeakRequest(BaseModel):

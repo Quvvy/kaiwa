@@ -47,17 +47,9 @@ def engine_default_speaker(settings: Settings, engine: str) -> int:
 
 
 def engine_hint(engine: str) -> str:
-    eng = normalize_engine(engine)
-    if eng == "voicevox":
-        return (
-            "Start VOICEVOX (port 50021), or run: "
-            ".\\.venv\\Scripts\\python.exe scripts\\start_voicevox.py"
-        )
-    return (
-        "Start AivisSpeech (port 10101), or run: "
-        ".\\.venv\\Scripts\\python.exe scripts\\start_aivisspeech.py — "
-        "or switch TTS engine to VOICEVOX in Settings"
-    )
+    """User-facing next step when the voice engine isn't answering."""
+    other = "AivisSpeech" if normalize_engine(engine) == "voicevox" else "VOICEVOX"
+    return f"Restart Kaiwa to start it again, or switch to {other} in Settings → Speech."
 
 
 def synthesize(
@@ -91,12 +83,12 @@ def synthesize(
             )
         except httpx.HTTPError as exc:
             raise TtsError(
-                f"{label} unreachable at {base}. {engine_hint(eng)}"
+                f"The {label} voice engine isn't running. {engine_hint(eng)}"
             ) from exc
         if query.status_code >= 400:
             raise TtsError(
-                f"{label} audio_query failed ({query.status_code}). "
-                f"{engine_hint(eng)}. {query.text}"
+                f"The {label} voice engine couldn't read this text (error {query.status_code}). "
+                f"{engine_hint(eng)}"
             )
         audio_query = query.json()
         if speed and isinstance(audio_query, dict):
@@ -110,12 +102,12 @@ def synthesize(
             )
         except httpx.HTTPError as exc:
             raise TtsError(
-                f"{label} synthesis unreachable at {base}. {engine_hint(eng)}"
+                f"The {label} voice engine stopped responding. {engine_hint(eng)}"
             ) from exc
         if audio.status_code >= 400:
             raise TtsError(
-                f"{label} synthesis failed ({audio.status_code}). "
-                f"{engine_hint(eng)}. {audio.text}"
+                f"The {label} voice engine couldn't make audio (error {audio.status_code}). "
+                f"{engine_hint(eng)}"
             )
         return audio.content
 
@@ -128,10 +120,10 @@ def list_speakers(settings: Settings, *, engine: str | None = None) -> list[dict
         try:
             resp = client.get(f"{base}/speakers")
         except httpx.HTTPError as exc:
-            raise TtsError(f"{label} unreachable at {base}. {engine_hint(eng)}") from exc
+            raise TtsError(f"The {label} voice engine isn't running. {engine_hint(eng)}") from exc
         if resp.status_code >= 400:
             raise TtsError(
-                f"{label} /speakers failed ({resp.status_code}). {engine_hint(eng)}"
+                f"The {label} voice engine couldn't list its voices (error {resp.status_code}). {engine_hint(eng)}"
             )
         return resp.json()
 

@@ -1,17 +1,18 @@
-/* Kaiwa daily lesson (Learn tab): Review → Learn → Listen → Speak.
- * Self-contained: its own audio player and hold-to-talk recorder.
- * Mounted into #course; index.html calls KaiwaCourse.show() when the tab opens. */
+/* Kaiwa daily lesson (Learn tab): Review → New phrases → Listen → Speak.
+ * Self-contained: own audio player, hold-to-speak recorder with a live mic
+ * meter, and keyboard shortcuts (Enter = primary, hold Space = speak, R = replay).
+ * index.html calls KaiwaCourse.show() when the tab opens. */
 (() => {
   "use strict";
 
   const root = document.getElementById("course");
   if (!root) return;
 
-  const STEP_LABELS = { review: "Review", learn: "New phrases", listen: "Listen", speak: "Speak" };
   let today = null;
   let showRomaji = readPref("kaiwa_course_romaji", "1") === "1";
+  const keys = { primary: null, hold: null, replay: null };
 
-  // ---------- small helpers ----------
+  // ---------- helpers ----------
   function readPref(key, fallback) {
     try { return localStorage.getItem(key) ?? fallback; } catch (_) { return fallback; }
   }
@@ -33,6 +34,9 @@
     }
     return node;
   }
+  function kbd(label) {
+    return el("kbd", { text: label });
+  }
   async function api(path, opts) {
     const res = await fetch(path, opts);
     const data = await res.json().catch(() => ({}));
@@ -42,31 +46,46 @@
   function postJson(path, body) {
     return api(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
   }
-  function shuffle(items) {
-    const a = items.slice();
-    for (let i = a.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [a[i], a[j]] = [a[j], a[i]];
-    }
-    return a;
+  function learnVisible() {
+    return document.body.dataset.mode === "learn";
   }
+
+  // ---------- keyboard ----------
+  document.addEventListener("keydown", (e) => {
+    if (!learnVisible() || e.ctrlKey || e.metaKey || e.altKey) return;
+    const tag = (e.target && e.target.tagName) || "";
+    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+    if (e.key === " " && keys.hold) {
+      e.preventDefault();
+      if (!e.repeat) keys.hold.start();
+    } else if (e.key === "Enter" && keys.primary && !(tag === "BUTTON" && e.target.matches(":focus-visible"))) {
+      e.preventDefault();
+      keys.primary();
+    } else if ((e.key === "r" || e.key === "R") && keys.replay && !e.repeat) {
+      e.preventDefault();
+      keys.replay();
+    }
+  });
+  document.addEventListener("keyup", (e) => {
+    if (e.key === " " && keys.hold) {
+      e.preventDefault();
+      keys.hold.stop();
+    }
+  });
 
   // ---------- audio ----------
   const audioCache = new Map();
   let currentAudio = null;
-  let audioNotice = null;
+  let audioProblem = "";
 
-  async function audioFor(text, { slow = false, voice = "a" } = {}) {
+  function audioFor(text, { slow = false, voice = "a" } = {}) {
     const key = `${voice}|${slow ? 1 : 0}|${text}`;
     if (!audioCache.has(key)) {
-      audioCache.set(key, postJson("/api/course/tts", { text, slow, voice }).then((d) => d.audio_base64));
+      const pending = postJson("/api/course/tts", { text, slow, voice }).then((d) => d.audio_base64);
+      pending.catch(() => audioCache.delete(key));
+      audioCache.set(key, pending);
     }
-    try {
-      return await audioCache.get(key);
-    } catch (err) {
-      audioCache.delete(key);
-      throw err;
-    }
+    return audioCache.get(key);
   }
   function stopAudio() {
     if (currentAudio) {
@@ -80,10 +99,10 @@
     try {
       b64 = await audioFor(text, opts);
     } catch (err) {
-      showAudioProblem(err);
+      setAudioProblem(err);
       return;
     }
-    clearAudioProblem();
+    setAudioProblem(null);
     await new Promise((resolve) => {
       const audio = new Audio("data:audio/wav;base64," + b64);
       currentAudio = audio;
@@ -92,34 +111,66 @@
       audio.play().catch(resolve);
     });
   }
-  function prefetch(text, opts) {
-    audioFor(text, opts).catch(() => {});
+  function prefetch(items) {
+    for (const [text, opts] of items) audioFor(text, opts).catch(() => {});
   }
-  function showAudioProblem(err) {
-    if (audioNotice) return;
-    audioNotice = el("p", { class: "course-alert", text: "No audio: the voice engine isn't running. " + String(err.message || err).split(".")[0] + "." });
-    root.prepend(audioNotice);
+  function setAudioProblem(err) {
+    audioProblem = err ? "No audio: the voice engine isn't running. Start it, or switch engines in Settings → Speech." : "";
+    const note = root.querySelector(".lesson-audio-note");
+    if (note) {
+      note.textContent = audioProblem;
+      note.hidden = !audioProblem;
+    }
   }
-  function clearAudioProblem() {
-    if (audioNotice) audioNotice.remove();
-    audioNotice = null;
-  }
-  function playButtons(text, opts = {}) {
-    return el("div", { class: "course-play-row" },
-      el("button", { class: "secondary course-play", type: "button", onclick: () => play(text, opts) }, "▶ Play"),
-      el("button", { class: "secondary course-play", type: "button", onclick: () => play(text, { ...opts, slow: true }) }, "Slow"),
+  function playRow(text, opts = {}) {
+    return el("div", { class: "lesson-play" },
+      el("button", { class: "secondary", type: "button", onclick: () => play(text, opts) }, "Play", kbd("R")),
+      el("button", { class: "secondary", type: "button", onclick: () => play(text, { ...opts, slow: true }) }, "Slow"),
     );
   }
 
-  // ---------- hold-to-talk recorder ----------
-  function holdButton(label, onAudio) {
-    const btn = el("button", { class: "course-hold", type: "button" }, label);
+  // ---------- hold to speak (with live mic level) ----------
+  function holdControl(label, onAudio) {
+    const fill = el("span", { class: "hold-level" });
+    const text = el("span", { class: "hold-label" }, label, kbd("Space"));
+    const btn = el("button", { class: "hold", type: "button" }, fill, text);
     let rec = null;
-    let chunks = [];
     let stream = null;
+    let chunks = [];
     let startedAt = 0;
     let wantStop = false;
     let starting = false;
+    let meter = null;
+
+    function setLabel(content) {
+      text.replaceChildren(...content);
+    }
+    function startMeter(s) {
+      try {
+        const ctx = new AudioContext();
+        const analyser = ctx.createAnalyser();
+        analyser.fftSize = 512;
+        ctx.createMediaStreamSource(s).connect(analyser);
+        const data = new Uint8Array(analyser.fftSize);
+        const tick = () => {
+          analyser.getByteTimeDomainData(data);
+          let peak = 0;
+          for (const v of data) peak = Math.max(peak, Math.abs(v - 128));
+          btn.style.setProperty("--level", Math.min(1, peak / 64).toFixed(3));
+          meter.raf = requestAnimationFrame(tick);
+        };
+        meter = { ctx, raf: requestAnimationFrame(tick) };
+      } catch (_) {
+        meter = null;
+      }
+    }
+    function stopMeter() {
+      if (!meter) return;
+      cancelAnimationFrame(meter.raf);
+      meter.ctx.close().catch(() => {});
+      meter = null;
+      btn.style.setProperty("--level", "0");
+    }
 
     async function start() {
       if (rec || starting || btn.disabled) return;
@@ -128,9 +179,9 @@
       stopAudio();
       try {
         stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, channelCount: 1 } });
-      } catch (err) {
+      } catch (_) {
         starting = false;
-        btn.textContent = "Microphone blocked — allow it and try again";
+        setLabel(["Microphone blocked. Allow it in Windows privacy settings."]);
         return;
       }
       starting = false;
@@ -141,15 +192,16 @@
       rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
       rec.onstop = () => {
         stream.getTracks().forEach((t) => t.stop());
+        stopMeter();
         const type = rec.mimeType || mime || "audio/webm";
         const blob = new Blob(chunks, { type });
         const held = Date.now() - startedAt;
         rec = null;
         btn.classList.remove("recording");
-        btn.textContent = label;
+        setLabel([label, kbd("Space")]);
         if (blob.size < 800 || held < 300) {
-          btn.textContent = "Hold a little longer";
-          setTimeout(() => { btn.textContent = label; }, 1400);
+          setLabel(["Hold a little longer while you speak"]);
+          setTimeout(() => setLabel([label, kbd("Space")]), 1500);
           return;
         }
         onAudio(blob, type.includes("mp4") ? "m4a" : "webm");
@@ -157,7 +209,8 @@
       rec.start(250);
       startedAt = Date.now();
       btn.classList.add("recording");
-      btn.textContent = "Listening… release when done";
+      setLabel(["Listening… release when you're done"]);
+      startMeter(stream);
       if (wantStop) stop();
     }
     function stop() {
@@ -170,8 +223,7 @@
     btn.addEventListener("pointerdown", (e) => { e.preventDefault(); btn.setPointerCapture?.(e.pointerId); start(); });
     btn.addEventListener("pointerup", stop);
     btn.addEventListener("pointercancel", stop);
-    btn.addEventListener("keydown", (e) => { if ((e.key === " " || e.key === "Enter") && !e.repeat) { e.preventDefault(); start(); } });
-    btn.addEventListener("keyup", (e) => { if (e.key === " " || e.key === "Enter") stop(); });
+    btn.holdApi = { start, stop };
     return btn;
   }
 
@@ -182,42 +234,53 @@
     return form;
   }
 
-  // ---------- phrase display ----------
-  function phraseBlock(p, { big = true } = {}) {
-    return el("div", { class: "course-phrase" },
-      el("p", { class: big ? "course-jp course-jp-big" : "course-jp", lang: "ja", text: p.jp }),
-      showRomaji && p.ro ? el("p", { class: "course-ro", text: p.ro }) : null,
-      el("p", { class: "course-en", text: p.en }),
-      p.note ? el("p", { class: "course-note", text: p.note }) : null,
+  // ---------- shared pieces ----------
+  function phraseBlock(p) {
+    return el("div", { class: "phrase" },
+      el("p", { class: "phrase-jp", lang: "ja", text: p.jp }),
+      showRomaji && p.ro ? el("p", { class: "phrase-ro", text: p.ro }) : null,
+      el("p", { class: "phrase-en", text: p.en }),
+      p.note ? el("p", { class: "phrase-note", text: p.note }) : null,
     );
   }
-  function romajiToggle(rerender) {
-    return el("label", { class: "course-toggle" },
-      el("input", {
-        type: "checkbox",
-        checked: showRomaji,
-        onchange: (e) => { showRomaji = e.target.checked; writePref("kaiwa_course_romaji", showRomaji ? "1" : "0"); rerender(); },
-      }),
-      " Romaji",
-    );
+  function verdictLine(band) {
+    if (band === "good") return el("p", { class: "verdict good", text: "That's it." });
+    if (band === "close") return el("p", { class: "verdict close", text: "Close. Listen again and try once more." });
+    return el("p", { class: "verdict off", text: "Not quite. Play it slowly, then try again." });
   }
-  function bandMessage(band) {
-    if (band === "good") return { cls: "good", text: "Nice — that's it." };
-    if (band === "close") return { cls: "close", text: "Close. Listen once more and try again." };
-    return { cls: "off", text: "Not quite. Play it slowly, then try again." };
+  function heardLine(prefix, heard, extra) {
+    return el("p", { class: "heard-line" }, prefix, el("span", { lang: "ja", text: heard }), extra || null);
   }
 
   // ---------- frame ----------
-  function frame(title, progressText, body, { onBack } = {}) {
+  /** One screen of a lesson: top bar, optional sequence bar, content, action footer. */
+  function frame({ title, index, total, body, actions = [], primary = null, hold = null }) {
     stopAudio();
-    root.replaceChildren(
-      el("div", { class: "course-top" },
-        el("button", { class: "secondary course-back", type: "button", onclick: onBack || (() => showHome()) }, "← Today"),
-        el("div", { class: "course-top-title" }, el("span", { class: "meta", text: title }), progressText ? el("span", { class: "course-count", text: progressText }) : null),
-      ),
-      body,
+    keys.primary = primary;
+    keys.hold = hold ? hold.holdApi : null;
+    keys.replay = null;
+    const top = el("div", { class: "lesson-top" },
+      el("button", { class: "secondary lesson-exit", type: "button", onclick: () => showHome() }, "Exit"),
+      el("h2", { class: "lesson-title", text: title }),
+      total ? el("span", { class: "lesson-count", text: `${index + 1} of ${total}` }) : null,
     );
-    if (audioNotice) root.prepend(audioNotice);
+    const steps = total
+      ? el("div", { class: "lesson-steps", "aria-hidden": "true" },
+          Array.from({ length: total }, (_, i) => el("span", { class: i < index ? "done" : i === index ? "now" : "" })))
+      : null;
+    const note = el("p", { class: "lesson-audio-note", hidden: !audioProblem, text: audioProblem });
+    root.replaceChildren(
+      el("div", { class: "lesson" },
+        top,
+        steps,
+        note,
+        el("div", { class: "lesson-body" }, body),
+        actions.length ? el("div", { class: "lesson-actions" }, actions) : null,
+      ),
+    );
+  }
+  function primaryButton(label, onclick, { disabled = false } = {}) {
+    return el("button", { type: "button", class: "lesson-primary", disabled, onclick }, label, kbd("Enter"));
   }
 
   // ---------- home ----------
@@ -230,88 +293,91 @@
     }
     return steps;
   }
-
   function runNext() {
-    const steps = planSteps();
-    const next = steps[0];
+    const next = planSteps()[0];
     if (!next) return showHome();
     if (next === "review") return runReview(today.review);
     if (next === "learn") return runLearn(today.unit);
     if (next === "listen") return runListen(today.unit);
     return runSpeak(today.unit);
   }
-
   async function refresh() {
     today = await api("/api/course/today");
   }
 
   async function showHome() {
     stopAudio();
+    keys.primary = keys.hold = keys.replay = null;
     try {
       await refresh();
     } catch (err) {
-      root.replaceChildren(el("p", { class: "course-alert", text: String(err.message || err) }));
+      root.replaceChildren(el("div", { class: "home" }, el("p", { class: "verdict off", text: String(err.message || err) })));
       return;
     }
     const s = today.stats;
     const unit = today.unit;
-    const steps = planSteps();
     const done = today.unit_steps || {};
+    const steps = planSteps();
+    const pct = Math.round((100 * s.phrases_learned) / Math.max(1, s.phrases_total));
 
+    // The next step is started by the main button, so its row gets no button of its own.
+    const open = (key, fn) => (key === steps[0] ? null : fn);
     const rows = [];
     if (today.review_total) {
-      rows.push(planRow("Review", `${today.review_total} phrase${today.review_total === 1 ? "" : "s"} due`, false, () => runReview(today.review)));
+      rows.push(planRow("Review", `${today.review_total} phrase${today.review_total === 1 ? "" : "s"} due`, false, open("review", () => runReview(today.review))));
     } else if (s.phrases_learned) {
-      rows.push(planRow("Review", "Nothing due — reviews come back on their own schedule", true, null, false));
+      rows.push(planRow("Review", "Nothing due today", false, null));
     }
     if (unit) {
-      rows.push(planRow("New phrases", `${unit.phrases.length} phrases`, !!done.learn, () => runLearn(unit)));
-      rows.push(planRow("Listen", "A short conversation", !!done.listen, () => runListen(unit), !!done.learn));
-      rows.push(planRow("Speak", `Answer ${unit.speak.length} questions`, !!done.speak, () => runSpeak(unit), !!done.learn));
+      rows.push(planRow("New phrases", `${unit.phrases.length} phrases to learn`, !!done.learn, open("learn", () => runLearn(unit))));
+      rows.push(planRow("Listen", "A short conversation", !!done.listen, done.learn ? open("listen", () => runListen(unit)) : null));
+      rows.push(planRow("Speak", `Answer ${unit.speak.length} questions out loud`, !!done.speak, done.learn ? open("speak", () => runSpeak(unit)) : null));
     }
 
-    const pct = Math.round((100 * s.phrases_learned) / Math.max(1, s.phrases_total));
+    const progressText = s.phrases_learned
+      ? `${s.phrases_learned} of ${s.phrases_total} phrases learned, ${s.phrases_strong} remembered well. ${s.streak} day${s.streak === 1 ? "" : "s"} in a row.`
+      : "Start with unit 1. A lesson takes about ten minutes.";
+
+    if (steps.length) keys.primary = runNext;
     root.replaceChildren(
-      el("div", { class: "course-home" },
-        el("div", { class: "course-hero" },
-          el("div", { class: "meta", text: "Today" }),
-          unit
-            ? el("h2", { class: "course-title" }, `Unit ${unit.number} · ${unit.title} `, el("span", { class: "course-title-jp", lang: "ja", text: unit.title_jp }))
-            : el("h2", { class: "course-title", text: "Course complete — keep reviewing" }),
-          unit ? el("p", { class: "course-goal", text: unit.goal }) : null,
-        ),
-        el("div", { class: "course-stats" },
-          stat(s.phrases_learned, "phrases learned"),
-          stat(s.phrases_strong, "remembered well"),
-          stat(s.streak, s.streak === 1 ? "day streak" : "days in a row"),
-          stat(`${s.units_done}/${s.units_total}`, "units"),
-        ),
-        el("div", { class: "course-bar", title: `${pct}% of the beginner course` }, el("span", { style: `width:${pct}%` })),
-        el("ol", { class: "course-plan" }, rows),
+      el("div", { class: "home" },
+        unit
+          ? el("div", { class: "home-unit" },
+              el("p", { class: "home-kicker", text: `Unit ${unit.number} of ${s.units_total}` }),
+              el("h1", { class: "home-title" }, unit.title, " ", el("span", { lang: "ja", text: unit.title_jp })),
+              el("p", { class: "home-goal", text: unit.goal }))
+          : el("div", { class: "home-unit" },
+              el("h1", { class: "home-title", text: "You've finished all ten units" }),
+              el("p", { class: "home-goal", text: "Keep your reviews going and use extra listening and Chat." })),
+        el("p", { class: "home-progress", text: progressText }),
+        el("div", { class: "home-bar", role: "progressbar", "aria-valuenow": String(pct), "aria-valuemin": "0", "aria-valuemax": "100" },
+          el("span", { style: `width:${pct}%` })),
+        rows.length ? el("ol", { class: "plan" }, rows) : null,
         steps.length
-          ? el("button", { class: "course-cta", type: "button", onclick: runNext }, s.studied_today ? "Continue" : "Start today's lesson")
-          : el("div", { class: "course-done-today" },
-              el("p", { text: "You're done for today. Come back tomorrow for your reviews." }),
-              el("button", { class: "secondary", type: "button", onclick: () => goChat() }, "Try your phrases in Chat"),
-            ),
+          ? el("div", { class: "home-actions" },
+              el("button", { type: "button", class: "lesson-primary", onclick: runNext },
+                s.studied_today ? "Continue" : "Start today's lesson", kbd("Enter")))
+          : el("p", { class: "home-done", text: "Done for today. Your reviews come back tomorrow." }),
         s.phrases_learned
-          ? el("button", { class: "secondary course-extra", type: "button", onclick: runExtraListening },
-              el("strong", { text: "Extra listening" }),
-              el("span", { text: "A new short conversation using only what you know. As many as you like." }))
+          ? el("div", { class: "home-more" },
+              el("button", { type: "button", class: "secondary", onclick: runExtraListening }, "Extra listening"),
+              el("span", { text: "A new short conversation that uses only what you know." }),
+              el("button", { type: "button", class: "secondary", onclick: goChat }, "Open Chat"),
+              el("span", { text: "Talk freely. Kaiwa sticks to the phrases you've learned." }))
           : null,
-        el("p", { class: "course-foot" }, romajiToggle(showHome)),
+        el("label", { class: "home-romaji" },
+          el("input", { type: "checkbox", checked: showRomaji, onchange: (e) => { showRomaji = e.target.checked; writePref("kaiwa_course_romaji", showRomaji ? "1" : "0"); } }),
+          " Show romaji under Japanese"),
       ),
     );
-    if (audioNotice) root.prepend(audioNotice);
   }
-  function stat(value, label) {
-    return el("div", { class: "course-stat" }, el("strong", { text: String(value) }), el("span", { text: label }));
-  }
-  function planRow(name, detail, isDone, onOpen, enabled = true) {
-    return el("li", { class: "course-plan-row" + (isDone ? " done" : "") },
-      el("span", { class: "course-check", text: isDone ? "✓" : "" }),
-      el("div", { class: "course-plan-text" }, el("strong", { text: name }), el("span", { text: detail })),
-      onOpen ? el("button", { class: "secondary", type: "button", disabled: !enabled, onclick: onOpen }, isDone ? "Again" : "Open") : el("span"),
+  function planRow(name, detail, isDone, onOpen) {
+    return el("li", { class: "plan-row" + (isDone ? " done" : "") },
+      el("span", { class: "plan-name", text: name }),
+      el("span", { class: "plan-detail", text: isDone ? "Done" : detail }),
+      onOpen
+        ? el("button", { class: "secondary", type: "button", onclick: onOpen }, isDone ? "Redo" : "Open")
+        : el("span"),
     );
   }
   function goChat() {
@@ -325,16 +391,15 @@
     let index = 0;
     let right = 0;
     const total = queue.length;
+    prefetch(queue.map((c) => [c.phrase.jp, {}]));
 
     function next() {
       if (index >= queue.length) return finish();
       const card = queue[index];
       if (card.skill === "listen") listenCard(card);
       else speakCard(card);
-      const upcoming = queue[index + 1];
-      if (upcoming) prefetch(upcoming.phrase.jp);
     }
-    async function gradeCard(card, good) {
+    function gradeCard(card, good) {
       if (!card.retried) {
         postJson("/api/course/grade", { card_id: card.card_id, good }).catch(() => {});
         if (good) right += 1;
@@ -343,111 +408,119 @@
       index += 1;
       next();
     }
-    function counter() {
-      return `${Math.min(index + 1, queue.length)} / ${queue.length}`;
-    }
-    function gradeButtons(card, suggestGood) {
-      return el("div", { class: "course-actions" },
-        el("button", { class: suggestGood === false ? "" : "secondary", type: "button", onclick: () => gradeCard(card, false) }, "✗ Didn't know"),
-        el("button", { class: suggestGood === false ? "secondary" : "", type: "button", onclick: () => gradeCard(card, true) }, "✓ Got it"),
-      );
+    function gradeActions(card, suggestGood) {
+      const missed = el("button", { type: "button", class: suggestGood ? "secondary" : "", onclick: () => gradeCard(card, false) }, "I missed it");
+      const got = el("button", { type: "button", class: suggestGood ? "lesson-primary" : "secondary", onclick: () => gradeCard(card, true) }, "I knew it");
+      return { buttons: [missed, got], primary: () => gradeCard(card, !!suggestGood) };
     }
 
     function listenCard(card) {
       const p = card.phrase;
-      const answer = el("div", { class: "course-answer", hidden: true }, phraseBlock(p), gradeButtons(card));
-      const reveal = el("button", { class: "course-cta", type: "button", onclick: () => { reveal.hidden = true; answer.hidden = false; } }, "Show meaning");
-      frame("Review · listen", counter(), el("div", { class: "course-card" },
-        el("p", { class: "course-prompt", text: card.retried ? "Once more — what does this mean?" : "Listen. What does it mean?" }),
-        playButtons(p.jp),
-        reveal,
+      const answer = el("div", { class: "reveal", hidden: true }, phraseBlock(p));
+      function reveal() {
+        answer.hidden = false;
+        const g = gradeActions(card, true);
+        frameRefresh(g.buttons, g.primary);
+      }
+      const body = el("div", { class: "card-body" },
+        el("p", { class: "prompt", text: card.retried ? "Once more. What does this mean?" : "Listen. What does it mean?" }),
+        playRow(p.jp),
         answer,
-      ));
+      );
+      const showBtn = primaryButton("Show meaning", reveal);
+      function frameRefresh(buttons, primary) {
+        root.querySelector(".lesson-actions").replaceChildren(...buttons);
+        keys.primary = primary;
+      }
+      frame({ title: "Review", index: Math.min(index, queue.length - 1), total: queue.length, body, actions: [showBtn], primary: reveal });
+      keys.replay = () => play(p.jp);
       play(p.jp);
     }
 
     function speakCard(card) {
       const p = card.phrase;
-      const result = el("div", { class: "course-result" });
-      const answer = el("div", { class: "course-answer", hidden: true });
+      const result = el("div", { class: "result" });
+      const answer = el("div", { class: "reveal", hidden: true });
       function showAnswer(suggestGood) {
         answer.hidden = false;
-        answer.replaceChildren(phraseBlock(p), playButtons(p.jp), gradeButtons(card, suggestGood));
+        answer.replaceChildren(phraseBlock(p), playRow(p.jp));
+        keys.replay = () => play(p.jp);
+        const g = gradeActions(card, suggestGood);
+        root.querySelector(".lesson-actions").replaceChildren(...g.buttons);
+        keys.primary = g.primary;
       }
-      const hold = holdButton("Hold and say it", async (blob, ext) => {
-        result.replaceChildren(el("p", { class: "course-muted", text: "Checking…" }));
+      const hold = holdControl("Hold to say it", async (blob, ext) => {
+        result.replaceChildren(el("p", { class: "pending", text: "Checking…" }));
         try {
           const r = await api("/api/course/check", { method: "POST", body: audioForm(blob, ext, { phrase_id: p.id }) });
-          const msg = bandMessage(r.band);
-          result.replaceChildren(
-            el("p", { class: "course-verdict " + msg.cls, text: msg.text }),
-            el("p", { class: "course-heard" }, "Heard: ", el("span", { lang: "ja", text: r.heard })),
-          );
+          result.replaceChildren(verdictLine(r.band), heardLine("Heard ", r.heard));
           showAnswer(r.band === "good");
           if (r.band !== "good") play(p.jp);
         } catch (err) {
-          result.replaceChildren(el("p", { class: "course-verdict off", text: String(err.message || err) }));
+          result.replaceChildren(el("p", { class: "verdict off", text: String(err.message || err) }));
         }
       });
-      frame("Review · speak", counter(), el("div", { class: "course-card" },
-        el("p", { class: "course-prompt", text: "Say this in Japanese:" }),
-        el("p", { class: "course-en course-en-big", text: p.en }),
+      const body = el("div", { class: "card-body" },
+        el("p", { class: "prompt", text: "Say this in Japanese" }),
+        el("p", { class: "prompt-en", text: p.en }),
         hold,
         result,
-        el("button", { class: "secondary course-link", type: "button", onclick: () => { showAnswer(false); play(p.jp); } }, "I don't remember — show me"),
         answer,
-      ));
+      );
+      const giveUp = el("button", { type: "button", class: "secondary", onclick: () => { showAnswer(false); play(p.jp); } }, "Show me");
+      frame({ title: "Review", index: Math.min(index, queue.length - 1), total: queue.length, body, actions: [giveUp], hold });
     }
 
     function finish() {
-      frame("Review", "", el("div", { class: "course-card course-center" },
-        el("h3", { text: "Review done" }),
-        el("p", { text: `${right} of ${total} remembered on the first try.` }),
-        el("p", { class: "course-muted", text: "Missed ones come back tomorrow; remembered ones come back later and later." }),
-        el("button", { class: "course-cta", type: "button", onclick: async () => { await refresh(); today.review = []; runNext(); } }, "Continue"),
-      ));
+      const go = async () => { await refresh(); today.review = []; runNext(); };
+      frame({
+        title: "Review",
+        body: el("div", { class: "card-body" },
+          el("h3", { class: "end-title", text: `${right} of ${total} on the first try` }),
+          el("p", { class: "prompt", text: "Missed phrases come back tomorrow. The ones you knew come back later and later." })),
+        actions: [primaryButton("Continue", go)],
+        primary: go,
+      });
     }
 
     if (!queue.length) return showHome();
     next();
   }
 
-  // ---------- learn new phrases ----------
+  // ---------- new phrases ----------
   function runLearn(unit) {
     let i = 0;
     const phrases = unit.phrases;
+    prefetch(phrases.map((p) => [p.jp, {}]));
 
     function show() {
       const p = phrases[i];
-      const result = el("div", { class: "course-result" });
-      const hold = holdButton("Hold and say it", async (blob, ext) => {
-        result.replaceChildren(el("p", { class: "course-muted", text: "Checking…" }));
+      const result = el("div", { class: "result" });
+      const hold = holdControl("Hold and say it", async (blob, ext) => {
+        result.replaceChildren(el("p", { class: "pending", text: "Checking…" }));
         try {
           const r = await api("/api/course/check", { method: "POST", body: audioForm(blob, ext, { phrase_id: p.id }) });
-          const msg = bandMessage(r.band);
-          result.replaceChildren(
-            el("p", { class: "course-verdict " + msg.cls, text: msg.text }),
-            el("p", { class: "course-heard" }, "Heard: ", el("span", { lang: "ja", text: r.heard })),
-          );
+          result.replaceChildren(verdictLine(r.band), heardLine("Heard ", r.heard));
+          if (r.band !== "good") play(p.jp);
         } catch (err) {
-          result.replaceChildren(el("p", { class: "course-verdict off", text: String(err.message || err) }));
+          result.replaceChildren(el("p", { class: "verdict off", text: String(err.message || err) }));
         }
       });
       const last = i === phrases.length - 1;
-      frame(`New phrases · Unit ${unit.number}`, `${i + 1} / ${phrases.length}`, el("div", { class: "course-card" },
-        phraseBlock(p),
-        playButtons(p.jp),
-        el("p", { class: "course-prompt", text: "Listen, then say it out loud:" }),
+      const actions = [];
+      if (i > 0) actions.push(el("button", { type: "button", class: "secondary", onclick: () => { i -= 1; show(); } }, "Back"));
+      actions.push(primaryButton(last ? "Finish" : "Next", next));
+      frame({
+        title: `New phrases, unit ${unit.number}`,
+        index: i,
+        total: phrases.length,
+        body: el("div", { class: "card-body" }, phraseBlock(p), playRow(p.jp), hold, result),
+        actions,
+        primary: next,
         hold,
-        result,
-        el("div", { class: "course-actions" },
-          i > 0 ? el("button", { class: "secondary", type: "button", onclick: () => { i -= 1; show(); } }, "← Back") : null,
-          el("button", { type: "button", onclick: next }, last ? "Done" : "Next →"),
-        ),
-        el("p", { class: "course-foot" }, romajiToggle(show)),
-      ));
+      });
+      keys.replay = () => play(p.jp);
       play(p.jp);
-      if (!last) prefetch(phrases[i + 1].jp);
     }
     async function next() {
       if (i < phrases.length - 1) {
@@ -464,7 +537,7 @@
   // ---------- listen ----------
   function runListen(unit) {
     listenView({
-      title: `Listen · Unit ${unit.number}`,
+      title: `Listen, unit ${unit.number}`,
       dialogue: unit.dialogue,
       questions: unit.questions,
       doneLabel: "Continue",
@@ -477,15 +550,17 @@
   }
 
   async function runExtraListening() {
-    frame("Extra listening", "", el("div", { class: "course-card course-center" },
-      el("p", { class: "course-muted", text: "Writing a new conversation from the phrases you know…" })));
+    frame({ title: "Extra listening", body: el("p", { class: "pending", text: "Writing a conversation from the phrases you know…" }) });
     let story;
     try {
       story = await api("/api/course/story", { method: "POST" });
     } catch (err) {
-      frame("Extra listening", "", el("div", { class: "course-card course-center" },
-        el("p", { class: "course-verdict off", text: String(err.message || err) }),
-        el("button", { type: "button", onclick: runExtraListening }, "Try again")));
+      frame({
+        title: "Extra listening",
+        body: el("p", { class: "verdict off", text: String(err.message || err) }),
+        actions: [primaryButton("Try again", runExtraListening)],
+        primary: runExtraListening,
+      });
       return;
     }
     listenView({
@@ -497,23 +572,27 @@
     });
   }
 
-  function listenView({ title, dialogue, questions: qs, doneLabel, onDone }) {
-    const d = dialogue;
+  function listenView({ title, dialogue: d, questions: qs, doneLabel, onDone }) {
     let showJp = false;
     let showEn = false;
     let playing = false;
     const answered = new Map();
     const lineEls = [];
+    const voice = (line) => ({ voice: line.who === "b" ? "b" : "a" });
+    prefetch(d.lines.map((line) => [line.jp, voice(line)]));
 
-    const linesBox = el("div", { class: "course-dialogue" });
+    const linesBox = el("ol", { class: "dialogue" });
     function renderLines() {
       linesBox.replaceChildren(...d.lines.map((line, idx) => {
-        const row = el("button", { class: `course-line who-${line.who}`, type: "button", onclick: () => play(line.jp, { voice: line.who === "b" ? "b" : "a" }) },
-          el("span", { class: "course-who", text: line.who === "b" ? "B" : "A" }),
-          el("span", { class: "course-line-body" },
-            el("span", { class: "course-jp" + (showJp ? "" : " course-hidden"), lang: "ja", text: showJp ? line.jp : "・・・・・" }),
-            showEn ? el("span", { class: "course-en", text: line.en }) : null,
-            showJp && line.gloss ? el("span", { class: "course-note", text: line.gloss }) : null,
+        const row = el("li", { class: `line who-${line.who}` },
+          el("button", { class: "line-play", type: "button", "aria-label": "Play this line", onclick: () => play(line.jp, voice(line)) },
+            line.who === "b" ? "B" : "A"),
+          el("div", { class: "line-text" },
+            showJp
+              ? el("span", { class: "line-jp", lang: "ja", text: line.jp })
+              : el("span", { class: "line-hidden", text: "Text hidden" }),
+            showEn ? el("span", { class: "line-en", text: line.en }) : null,
+            showJp && line.gloss ? el("span", { class: "line-gloss", text: line.gloss }) : null,
           ),
         );
         lineEls[idx] = row;
@@ -523,103 +602,110 @@
     async function playAll() {
       if (playing) return;
       playing = true;
-      playBtn.disabled = true;
+      playAllBtn.disabled = true;
       for (let idx = 0; idx < d.lines.length; idx++) {
         lineEls[idx]?.classList.add("speaking");
-        await play(d.lines[idx].jp, { voice: d.lines[idx].who === "b" ? "b" : "a" });
+        await play(d.lines[idx].jp, voice(d.lines[idx]));
         lineEls[idx]?.classList.remove("speaking");
-        await new Promise((r) => setTimeout(r, 350));
+        await new Promise((r) => setTimeout(r, 300));
       }
       playing = false;
-      playBtn.disabled = false;
-      playBtn.textContent = "▶ Play again";
+      playAllBtn.disabled = false;
+      playAllBtn.firstChild.textContent = "Play again";
     }
-    const playBtn = el("button", { class: "course-cta", type: "button", onclick: playAll }, "▶ Play the conversation");
-    const toggles = el("div", { class: "course-play-row" },
-      el("button", { class: "secondary", type: "button", onclick: (e) => { showJp = !showJp; e.target.textContent = showJp ? "Hide Japanese" : "Show Japanese"; renderLines(); } }, "Show Japanese"),
-      el("button", { class: "secondary", type: "button", onclick: (e) => { showEn = !showEn; e.target.textContent = showEn ? "Hide English" : "Show English"; renderLines(); } }, "Show English"),
-    );
+    const playAllBtn = el("button", { type: "button", onclick: playAll }, "Play the conversation", kbd("R"));
+    const toggleJp = el("button", { class: "secondary", type: "button", "aria-pressed": "false", onclick: () => {
+      showJp = !showJp; toggleJp.setAttribute("aria-pressed", String(showJp)); renderLines();
+    } }, "Japanese text");
+    const toggleEn = el("button", { class: "secondary", type: "button", "aria-pressed": "false", onclick: () => {
+      showEn = !showEn; toggleEn.setAttribute("aria-pressed", String(showEn)); renderLines();
+    } }, "English");
 
-    const questions = el("div", { class: "course-questions" }, qs.map((q, qi) => {
-      const feedback = el("p", { class: "course-verdict" });
-      const choices = el("div", { class: "course-choices" }, q.choices.map((choice, ci) =>
+    const doneBtn = primaryButton(doneLabel, onDone, { disabled: true });
+    const questionsBox = el("div", { class: "questions" }, qs.map((q, qi) => {
+      const feedback = el("p", { class: "verdict" });
+      const choices = el("div", { class: "choices" }, q.choices.map((choice, ci) =>
         el("button", {
           class: "secondary", type: "button",
           onclick: (e) => {
             const right = ci === q.answer;
             answered.set(qi, right);
             for (const b of choices.children) b.disabled = true;
-            e.target.classList.add(right ? "right" : "wrong");
+            e.currentTarget.classList.add(right ? "right" : "wrong");
             if (!right) choices.children[q.answer].classList.add("right");
-            feedback.className = "course-verdict " + (right ? "good" : "off");
-            feedback.textContent = right ? "Right." : "Not quite — replay the conversation and listen for it.";
-            if (answered.size === qs.length) doneBtn.disabled = false;
+            feedback.className = "verdict " + (right ? "good" : "off");
+            feedback.textContent = right ? "Right." : "Not quite. Play it again and listen for it.";
+            if (answered.size === qs.length) {
+              doneBtn.disabled = false;
+              keys.primary = onDone;
+            }
           },
         }, choice)));
-      return el("div", { class: "course-question" }, el("p", { class: "course-q", text: q.q }), choices, feedback);
+      return el("div", { class: "question" }, el("p", { class: "question-q", text: q.q }), choices, feedback);
     }));
-    const doneBtn = el("button", { class: "course-cta", type: "button", disabled: true, onclick: onDone }, doneLabel);
 
     renderLines();
-    frame(title, "", el("div", { class: "course-card" },
-      el("p", { class: "course-prompt", text: (d.scene ? d.scene + " " : "") + "Listen first — try to follow before showing any text." }),
-      playBtn,
-      toggles,
-      linesBox,
-      el("h3", { class: "course-sub", text: "Did you catch it?" }),
-      questions,
-      doneBtn,
-    ));
-    d.lines.forEach((line) => prefetch(line.jp, { voice: line.who === "b" ? "b" : "a" }));
+    frame({
+      title,
+      body: el("div", { class: "card-body" },
+        el("p", { class: "prompt", text: (d.scene ? d.scene + " " : "") + "Listen first and try to follow before you show any text." }),
+        el("div", { class: "lesson-play" }, playAllBtn, toggleJp, toggleEn),
+        linesBox,
+        el("h3", { class: "questions-title", text: "Did you catch it?" }),
+        questionsBox,
+      ),
+      actions: [doneBtn],
+    });
+    keys.replay = playAll;
   }
 
   // ---------- speak ----------
   function runSpeak(unit) {
     let t = 0;
     const tasks = unit.speak;
+    prefetch(tasks.map((task) => [task.say, {}]));
 
     function show() {
       const task = tasks[t];
-      const result = el("div", { class: "course-result" });
-      const hint = el("div", { class: "course-hint", hidden: true },
-        el("p", { class: "course-jp", lang: "ja", text: task.hint }),
-        el("button", { class: "secondary course-play", type: "button", onclick: () => play(task.hint.replace(/＿/g, "")) }, "▶ Play"),
+      const result = el("div", { class: "result" });
+      const hint = el("div", { class: "hint", hidden: true },
+        el("p", { lang: "ja", text: task.hint }),
+        el("button", { class: "secondary", type: "button", onclick: () => play(task.hint.replace(/＿/g, "")) }, "Play"),
       );
       let pending = false;
       async function submit(fields) {
         if (pending) return;
         pending = true;
         hold.disabled = true;
-        result.replaceChildren(el("p", { class: "course-muted", text: "Kaiwa is listening…" }));
+        result.replaceChildren(el("p", { class: "pending", text: "Kaiwa is listening…" }));
         try {
           const r = await api("/api/course/speak", { method: "POST", body: fields });
           renderVerdict(r);
           typed.value = "";
         } catch (err) {
-          result.replaceChildren(el("p", { class: "course-verdict off", text: String(err.message || err) }));
+          result.replaceChildren(el("p", { class: "verdict off", text: String(err.message || err) }));
         } finally {
           pending = false;
           hold.disabled = false;
         }
       }
       function renderVerdict(r) {
-        const label = { great: "Great answer!", ok: "Understood — one thing to fix", retry: "Let's try that again" }[r.verdict] || "";
+        const label = { great: "Great answer.", ok: "Understood. One thing to fix.", retry: "Try that again." }[r.verdict] || "";
         const cls = { great: "good", ok: "close", retry: "off" }[r.verdict] || "off";
         result.replaceChildren(...[
-          el("p", { class: "course-verdict " + cls, text: label }),
-          el("p", { class: "course-heard" }, "You said: ", el("span", { lang: "ja", text: r.heard }), r.said_en ? ` — “${r.said_en}”` : ""),
-          r.model ? el("div", { class: "course-model" },
-            el("span", { class: "meta", text: r.verdict === "great" ? "Natural way to say it" : "Try saying" }),
-            el("p", { class: "course-jp", lang: "ja", text: r.model }),
-            el("button", { class: "secondary course-play", type: "button", onclick: () => play(r.model) }, "▶ Play"),
-          ) : null,
-          r.tip ? el("p", { class: "course-tip", text: r.tip }) : null,
+          el("p", { class: "verdict " + cls, text: label }),
+          heardLine("You said ", r.heard, r.said_en ? `, which means “${r.said_en}”` : ""),
+          r.model ? el("div", { class: "model" },
+            el("p", { class: "model-label", text: r.verdict === "great" ? "Natural way to say it" : "Try saying" }),
+            el("p", { class: "model-jp", lang: "ja", text: r.model }),
+            el("button", { class: "secondary", type: "button", onclick: () => play(r.model) }, "Play")) : null,
+          r.tip ? el("p", { class: "tip", text: r.tip }) : null,
         ].filter(Boolean));
         if (r.verdict !== "great" && r.model) play(r.model);
       }
-      const hold = holdButton("Hold and answer", (blob, ext) => submit(audioForm(blob, ext, { unit_id: unit.id, task: t })));
-      const typed = el("input", { type: "text", maxlength: "120", placeholder: "…or type your answer", lang: "ja" });
-      const typedForm = el("form", { class: "course-typed", onsubmit: (e) => {
+      const hold = holdControl("Hold and answer", (blob, ext) => submit(audioForm(blob, ext, { unit_id: unit.id, task: t })));
+      const typed = el("input", { type: "text", maxlength: "120", placeholder: "Or type your answer", lang: "ja" });
+      const typedForm = el("form", { class: "typed", onsubmit: (e) => {
         e.preventDefault();
         if (!typed.value.trim()) return;
         const f = new FormData();
@@ -630,22 +716,27 @@
       } }, typed, el("button", { class: "secondary", type: "submit" }, "Send"));
       const last = t === tasks.length - 1;
 
-      frame(`Speak · Unit ${unit.number}`, `${t + 1} / ${tasks.length}`, el("div", { class: "course-card" },
-        el("p", { class: "course-situation", text: task.situation }),
-        el("div", { class: "course-kaiwa-says" },
-          el("span", { class: "meta", text: "Kaiwa says" }),
-          el("p", { class: "course-jp", lang: "ja", text: task.say }),
-          playButtons(task.say),
+      frame({
+        title: `Speak, unit ${unit.number}`,
+        index: t,
+        total: tasks.length,
+        body: el("div", { class: "card-body" },
+          el("p", { class: "situation", text: task.situation }),
+          el("div", { class: "says" },
+            el("p", { class: "says-label", text: "Kaiwa says" }),
+            el("p", { class: "says-jp", lang: "ja", text: task.say }),
+            playRow(task.say)),
+          hold,
+          typedForm,
+          el("button", { class: "secondary hint-toggle", type: "button", onclick: () => { hint.hidden = !hint.hidden; } }, "Show a hint"),
+          hint,
+          result,
         ),
+        actions: [primaryButton(last ? "Finish unit" : "Next", next)],
+        primary: next,
         hold,
-        typedForm,
-        el("button", { class: "secondary course-link", type: "button", onclick: () => { hint.hidden = !hint.hidden; } }, "Need a hint?"),
-        hint,
-        result,
-        el("div", { class: "course-actions" },
-          el("button", { type: "button", onclick: next }, last ? "Finish unit" : "Next →"),
-        ),
-      ));
+      });
+      keys.replay = () => play(task.say);
       play(task.say);
     }
     async function next() {
@@ -660,20 +751,22 @@
   }
 
   function done(unit) {
-    frame(`Unit ${unit.number} complete`, "", el("div", { class: "course-card course-center" },
-      el("h3", { text: `${unit.title} — done` }),
-      el("p", { text: `You learned ${unit.phrases.length} phrases. They'll come back in tomorrow's review so they stick.` }),
-      el("div", { class: "course-actions course-actions-center" },
-        el("button", { class: "secondary", type: "button", onclick: () => goChat() }, "Use them in Chat"),
-        el("button", { type: "button", onclick: () => showHome() }, "Back to Today"),
-      ),
-    ));
+    frame({
+      title: `Unit ${unit.number} done`,
+      body: el("div", { class: "card-body" },
+        el("h3", { class: "end-title", text: unit.title }),
+        el("p", { class: "prompt", text: `You learned ${unit.phrases.length} phrases. They come back in tomorrow's review so they stick.` })),
+      actions: [
+        el("button", { type: "button", class: "secondary", onclick: goChat }, "Use them in Chat"),
+        primaryButton("Back to today", showHome),
+      ],
+      primary: showHome,
+    });
   }
 
   window.KaiwaCourse = { show: showHome };
-})();
 
-// First paint: Learn is the default tab.
-if (document.getElementById("modeLearn")?.classList.contains("active")) {
-  window.KaiwaCourse.show();
-}
+  if (document.getElementById("modeLearn")?.classList.contains("active")) {
+    showHome();
+  }
+})();
