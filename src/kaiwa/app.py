@@ -58,6 +58,7 @@ from kaiwa.learner_memory import (
     should_extract,
 )
 from kaiwa import jsonio
+from kaiwa.course import kana_judge as course_kana_judge
 from kaiwa.course import prerender as course_prerender
 from kaiwa.course import routes as course_routes
 from kaiwa import leftovers
@@ -258,6 +259,7 @@ async def _warm_stt() -> None:
         course_prerender.run(settings)
 
     asyncio.create_task(asyncio.to_thread(_load))
+    threading.Thread(target=course_kana_judge.warm, name="kaiwa-kana-warm", daemon=True).start()
     threading.Thread(target=_warm_tts, name="kaiwa-tts-warm", daemon=True).start()
 
 

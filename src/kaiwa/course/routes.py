@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import io
 import json
 import os
 import time
@@ -15,8 +16,8 @@ from pydantic import BaseModel, Field
 
 from kaiwa import stt, tts
 from kaiwa.config import get_settings
-from kaiwa.course import coach, prerender, state, stories
-from kaiwa.course.speech_check import check_phrase
+from kaiwa.course import coach, kana_judge, prerender, state, stories
+from kaiwa.course.speech_check import check_phrase, normalize
 from kaiwa.secrets_store import user_data_dir
 
 router = APIRouter(prefix="/api/course")
@@ -64,6 +65,7 @@ async def speak(body: TtsBody) -> dict[str, Any]:
 
 async def _transcribe(audio: UploadFile) -> str:
     raw = await audio.read()
+    await audio.seek(0)
     if not raw:
         raise HTTPException(status_code=400, detail="Empty recording — hold the button while you speak.")
     suffix = Path(audio.filename or "utterance.webm").suffix or ".webm"
@@ -107,8 +109,33 @@ async def check(audio: UploadFile = File(...), phrase_id: str = Form(...)) -> di
         raise HTTPException(status_code=404, detail="Unknown phrase")
     heard = await _transcribe(audio)
     result = check_phrase(phrase["jp"], heard, phrase.get("accept"))
-    _keep_clip(audio, phrase_id, phrase["jp"], heard, result.band)
-    return {"heard": heard, "score": result.score, "band": result.band}
+    band, shown, tip = result.band, heard, ""
+    verdict = await asyncio.to_thread(_judge, audio, phrase, heard)
+    if verdict is not None:
+        shown = verdict.sounded_like
+        if verdict.band == "heard":
+            # The audio agrees with Whisper's different hearing: never a pass.
+            band = "close" if band == "good" else band
+        else:
+            band, tip = verdict.band, verdict.tip
+    _keep_clip(audio, phrase_id, phrase["jp"], heard, band)
+    return {"heard": shown, "whisper": heard, "score": result.score, "band": band, "tip": tip}
+
+
+def _judge(audio: UploadFile, phrase: dict[str, Any], heard: str) -> kana_judge.Verdict | None:
+    """Ask the kana model which of the target / Whisper's hearing / a typical slip fits."""
+    if not kana_judge.available():
+        return None
+    try:
+        from faster_whisper.audio import decode_audio
+
+        audio.file.seek(0)
+        samples = decode_audio(io.BytesIO(audio.file.read()), sampling_rate=16000)
+        targets = list(phrase.get("kana") or [phrase["jp"]])
+        targets += [a for a in phrase.get("accept") or [] if "*" not in a]
+        return kana_judge.judge(samples, [normalize(x) for x in targets], normalize(heard))
+    except Exception:
+        return None
 
 
 @router.post("/speak")

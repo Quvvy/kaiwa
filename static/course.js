@@ -440,7 +440,7 @@
         result.replaceChildren(el("p", { class: "pending", text: "Checking…" }));
         try {
           const r = await api("/api/course/check", { method: "POST", body: audioForm(blob, ext, { phrase_id: p.id }) });
-          result.replaceChildren(verdictLine(r.band), heardLine("Heard ", r.heard));
+          result.replaceChildren(verdictLine(r.band), heardLine("Sounded like ", r.heard), r.tip ? el("p", { class: "tip", text: r.tip }) : null);
           showAnswer(r.band === "good");
           if (r.band !== "good") play(p.jp);
         } catch (err) {
@@ -488,7 +488,7 @@
         result.replaceChildren(el("p", { class: "pending", text: "Checking…" }));
         try {
           const r = await api("/api/course/check", { method: "POST", body: audioForm(blob, ext, { phrase_id: p.id }) });
-          result.replaceChildren(verdictLine(r.band), heardLine("Heard ", r.heard));
+          result.replaceChildren(verdictLine(r.band), heardLine("Sounded like ", r.heard), r.tip ? el("p", { class: "tip", text: r.tip }) : null);
           if (r.band !== "good") play(p.jp);
         } catch (err) {
           result.replaceChildren(el("p", { class: "verdict off", text: String(err.message || err) }));

@@ -116,7 +116,11 @@ UNITS: list[dict[str, Any]] = [
              "note": "ゆっくり = slowly."},
             {"id": "u3.nihongode", "jp": "「dog」は、にほんごでなんですか。", "en": "How do you say “dog” in Japanese?",
              "note": "Say the English word first, then はにほんごでなんですか。",
-             "accept": ["*にほんごでなんですか"]},
+             # The English word must sound like "dog" (ドッグ / ダーグ…): "*にほんご…" alone
+             # passed 僕は日本語で何ですか. `kana` is what the kana model listens for.
+             "accept": ["どっぐ*にほんごでなんですか", "どぐ*にほんごでなんですか", "だぐ*にほんごでなんですか",
+                        "どっく*にほんごでなんですか", "どく*にほんごでなんですか", "dog*にほんごでなんですか"],
+             "kana": ["どっぐはにほんごでなんですか", "どぐはにほんごでなんですか", "だぐはにほんごでなんですか"]},
             {"id": "u3.hai", "jp": "はい。", "en": "Yes.", "note": "Also “I'm listening” / “OK”."},
             {"id": "u3.iie", "jp": "いいえ。", "en": "No.", "note": "In speech people often soften it: いえいえ, ううん."},
         ],
