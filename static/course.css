@@ -573,3 +573,147 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* ---------- kana, words, grammar ---------- */
+.kana-big {
+  font-family: var(--font-jp);
+  font-size: 72px;
+  line-height: 1.15;
+}
+
+.kana-word {
+  font-size: 48px;
+}
+
+.kana-ro {
+  font-size: 22px;
+  color: var(--accent);
+}
+
+.lesson-note,
+.grammar-text {
+  font-size: 15px;
+  line-height: 1.6;
+  max-width: 60ch;
+}
+
+.choice-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.choice-block .choices {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  max-width: 520px;
+}
+
+.choice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  text-align: left;
+  font-size: 16px;
+  white-space: normal;
+}
+
+.choice[lang="ja"] {
+  font-family: var(--font-jp);
+  font-size: 18px;
+}
+
+.choice-key {
+  font: 11px/1 var(--font-ui);
+  color: var(--ink-3);
+  border: 1px solid var(--line-strong);
+  border-radius: 2px;
+  padding: 2px 4px;
+}
+
+.choice.right {
+  opacity: 1;
+  border-color: var(--ok);
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+
+.choice.wrong {
+  opacity: 1;
+  border-color: var(--bad);
+  background: var(--bad-soft);
+  color: var(--bad);
+}
+
+.word-table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.word-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+}
+
+.word-table td:first-child {
+  width: 40px;
+  padding-left: 0;
+}
+
+.word-jp {
+  font-family: var(--font-jp);
+  font-size: 20px;
+}
+
+.word-ro {
+  color: var(--accent);
+}
+
+.word-en {
+  color: var(--ink-2);
+}
+
+.grammar-title {
+  font-size: 19px;
+}
+
+.examples {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.examples li {
+  display: grid;
+  grid-template-columns: 40px minmax(0, auto) 1fr;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.example-jp {
+  font-family: var(--font-jp);
+  font-size: 19px;
+}
+
+.example-en {
+  color: var(--ink-2);
+}
+
+@media (max-width: 600px) {
+  .choice-block .choices {
+    grid-template-columns: 1fr;
+  }
+  .examples li {
+    grid-template-columns: 40px 1fr;
+  }
+  .example-en {
+    grid-column: 2;
+  }
+}

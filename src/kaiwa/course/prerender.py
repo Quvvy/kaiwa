@@ -11,6 +11,7 @@ import threading
 
 from kaiwa import tts
 from kaiwa.config import Settings
+from kaiwa.course.kana import KANA_LESSONS
 from kaiwa.course.units import UNITS
 from kaiwa.prefs import load_prefs
 
@@ -32,9 +33,19 @@ def speaker_for(settings: Settings, voice: str) -> tuple[int, str]:
 def lesson_lines() -> list[tuple[str, str, float | None]]:
     """(text, voice, speed) for everything Learn plays, in course order."""
     lines: list[tuple[str, str, float | None]] = []
+    for lesson in KANA_LESSONS:
+        for ch, _ in lesson["kana"]:
+            lines.append((ch, "a", None))
+        for word in lesson["words"]:
+            lines.append((word["jp"], "a", None))
     for unit in UNITS:
         for phrase in unit["phrases"]:
             lines.append((phrase["jp"], "a", None))
+        for word in unit.get("words", []):
+            lines.append((word["jp"], "a", None))
+        for point in unit.get("grammar", []):
+            for ex in point["examples"]:
+                lines.append((ex["jp"], "a", None))
         for line in unit["dialogue"]["lines"]:
             lines.append((line["jp"], "b" if line.get("who") == "b" else "a", None))
         for task in unit["speak"]:

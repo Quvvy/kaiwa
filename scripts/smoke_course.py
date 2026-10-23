@@ -45,6 +45,24 @@ def content() -> None:
                 sample = variant.replace("＿", "ねこ")
                 _check(matches_any(task["expect"], sample), f"{unit['id']} speak {i}: hint 「{sample}」 passes")
     _check(len(UNITS) == 10, "ten units")
+    for unit in UNITS:
+        for d in unit.get("drill", []):
+            _check(0 <= d["answer"] < len(d["choices"]), f"{unit['id']} drill answer index valid")
+    word_ids = [w["id"] for u in UNITS for w in u.get("words", [])]
+    _check(len(word_ids) == len(set(word_ids)), "word ids are unique")
+
+
+def kana_track() -> None:
+    from kaiwa.course.kana import KANA_LESSONS, chars_through
+
+    for i, lesson in enumerate(KANA_LESSONS):
+        known = chars_through(i)
+        for w in lesson["words"]:
+            missing = [c for c in w["jp"] if c not in known]
+            _check(not missing, f"{lesson['id']} word {w['jp']} uses only taught kana")
+            _check(w["ro"] not in w.get("confuse", []), f"{lesson['id']} {w['jp']}: near misses differ from the answer")
+    chars = [ch for lesson in KANA_LESSONS for ch, _ in lesson["kana"]]
+    _check(len(chars) == len(set(chars)), "each kana is taught once")
 
 
 def speech() -> None:
@@ -72,10 +90,25 @@ def srs() -> None:
         _check(course_state.stats(st)["streak"] == 1, "studying today starts a streak")
         _check(not course_state.due_cards(st), "new cards wait until tomorrow")
 
+        _check(course_state.unit_steps(UNITS[0]) == ["learn", "words", "grammar", "listen", "speak"],
+               "unit 1 uses the full template")
+        _check(course_state.unit_steps(UNITS[1]) == ["learn", "listen", "speak"], "older units keep three steps")
         for step in ("listen", "speak"):
             course_state.complete_step("u1", step, path=path)
         st = course_state.load_state(path)
-        _check(bool(st["units"]["u1"].get("done_at")), "all three steps finish the unit")
+        _check(not st["units"]["u1"].get("done_at") and course_state.next_unit(st)["id"] == "u1",
+               "unit 1 isn't done until words and grammar are")
+        for step in ("words", "grammar"):
+            course_state.complete_step("u1", step, path=path)
+        st = course_state.load_state(path)
+        _check(bool(st["units"]["u1"].get("done_at")), "all five steps finish the unit")
+        _check(len(st["cards"]) == 12 + len(UNITS[0]["words"]), "words step schedules a card per word")
+        course_state.complete_kana("h1", path=path)
+        st = course_state.load_state(path)
+        _check("kana.あ:read" in st["cards"], "a kana lesson schedules its characters")
+        payload = course_state.today_payload(path=path)
+        _check(payload["kana"]["id"] == "h2" and payload["kana_done_today"], "next kana lesson is h2, h1 done today")
+        _check(set("あいうえお") <= set(payload["kana_known"]), "known kana feed romaji fading")
         _check(course_state.next_unit(st)["id"] == "u2", "next unit is u2")
 
         # Pretend it's tomorrow: everything from unit 1 is due.
@@ -83,13 +116,17 @@ def srs() -> None:
         course_state._today = lambda: real_today() + timedelta(days=1)
         try:
             st = course_state.load_state(path)
-            due = course_state.due_cards(st)
-            _check(len(due) == 12, "all 12 cards due the next day")
+            due = [c for c in course_state.due_cards(st, limit=100) if c["kind"] == "phrase"]
+            _check(len(due) == 12, "all 12 phrase cards due the next day")
+            kinds = {c["kind"] for c in course_state.due_cards(st, limit=100)}
+            _check(kinds == {"phrase", "word", "kana"}, "word and kana cards come up in review")
             pairs = [due[i]["phrase"]["id"] == due[i + 1]["phrase"]["id"] for i in range(len(due) - 1)]
             _check(not any(pairs), "a phrase's two sides are never back to back")
             good = course_state.grade("u1.ohayou:listen", True, path=path)
             _check(good["box"] == 2 and good["due"] == (real_today() + timedelta(days=1 + 3)).isoformat(),
                    "good answer → box 2, due in 3 days")
+            _check(course_state.grade("kana.あ:read", True, path=path)["box"] == 2, "kana cards grade")
+            _check(course_state.grade("u1w.asa:mean", True, path=path)["box"] == 2, "word cards grade")
             bad = course_state.grade("u1.ohayou:speak", False, path=path)
             _check(bad["box"] == 1 and bad["lapses"] == 1, "miss → box 1 with a lapse")
             _check(course_state.streak(course_state.load_state(path)) == 2, "two days in a row")
@@ -137,6 +174,7 @@ def story_checks() -> None:
 
 def main() -> None:
     content()
+    kana_track()
     speech()
     srs()
     story_checks()

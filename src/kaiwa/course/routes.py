@@ -40,6 +40,10 @@ class GradeBody(BaseModel):
     good: bool
 
 
+class KanaBody(BaseModel):
+    lesson_id: str
+
+
 @router.get("/today")
 def today() -> dict[str, Any]:
     return state.today_payload()
@@ -176,6 +180,15 @@ def step(body: StepBody) -> dict[str, Any]:
     except (KeyError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"unit": row, "stats": state.stats(state.load_state())}
+
+
+@router.post("/kana")
+def kana_done(body: KanaBody) -> dict[str, Any]:
+    try:
+        progress = state.complete_kana(body.lesson_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {"kana_progress": progress}
 
 
 @router.post("/grade")
