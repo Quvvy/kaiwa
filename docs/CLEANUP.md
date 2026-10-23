@@ -30,6 +30,22 @@ Effort: **S** = under an hour, **M** = an afternoon, **L** = a few sessions.
   - the retired `TRY:` / `better_phrase` path
   - the hardcoded `memory_updated: False`
 
+## Course (the new core) — done and next
+
+Kaiwa's home is now the **Learn** tab: a daily lesson (review → new phrases → listen → speak) over
+10 hand-written units, with spaced review, unlimited extra listening, and a Flash speaking coach.
+Chat reads the learned phrases. See `src/kaiwa/course/`.
+
+- [x] Daily lesson, 10 units / 60 phrases, Leitner review, streak, progress.
+- [x] Say-it-back check (Whisper → kana compare), speaking coach (what you said / model / one fix).
+- [x] Extra listening generated from learned phrases; Chat prompt includes learned phrases.
+- [x] Place me no longer hijacks first launch; Practice tab hidden; desktop boot starts TTS and API in parallel.
+- [ ] **M** Try it with a real microphone for a few days and tune: pass marks (`speech_check.GOOD`), review size (20), slow speed (0.75).
+- [ ] **L** Units 11–20 (adjectives/past done → counters, te-form requests, wants (〜たい), giving directions, shopping, family, plans).
+- [ ] **M** Delete the hidden Practice subsystem (`practice/sitting.py`, `cards.py`, `learn.py`, its routes and UI), or fold Chat struggles into Review cards.
+- [ ] **M** Kanji stage: once kana is solid, show kanji with furigana for learned phrases.
+- [ ] **S** The packaged runtime takes ~20 s to answer /api/health while source takes 1.7 s — find out why (antivirus scan of the bundled Python?).
+
 ## P2 — Learning experience
 
 - [ ] **S** Fix the skip-Place-me trap. `governor_pitch` returns `"unknown"` whenever placement isn't done (`persona.py:752`), so Easy stays at the lowest level forever. Let chat evidence (flow streaks) raise the level without the quiz.
