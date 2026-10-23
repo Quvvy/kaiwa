@@ -50,6 +50,13 @@ def content() -> None:
             _check(0 <= d["answer"] < len(d["choices"]), f"{unit['id']} drill answer index valid")
     word_ids = [w["id"] for u in UNITS for w in u.get("words", [])]
     _check(len(word_ids) == len(set(word_ids)), "word ids are unique")
+    word_jp = [w["jp"] for u in UNITS for w in u.get("words", [])]
+    _check(len(word_jp) == len(set(word_jp)), "no word is taught twice")
+    for unit in UNITS:
+        for g in unit.get("grammar", []):
+            _check(bool(g.get("rule")) and len(g["examples"]) >= 3, f"{g['id']} has a rule and examples")
+        for d in unit.get("drill", []):
+            _check(len(set(d["choices"])) == len(d["choices"]), f"{unit['id']} drill choices differ")
 
 
 def kana_track() -> None:
@@ -92,7 +99,7 @@ def srs() -> None:
 
         _check(course_state.unit_steps(UNITS[0]) == ["learn", "words", "grammar", "listen", "speak"],
                "unit 1 uses the full template")
-        _check(course_state.unit_steps(UNITS[1]) == ["learn", "listen", "speak"], "older units keep three steps")
+        _check(all(len(course_state.unit_steps(u)) == 5 for u in UNITS), "every unit uses the full template")
         for step in ("listen", "speak"):
             course_state.complete_step("u1", step, path=path)
         st = course_state.load_state(path)
