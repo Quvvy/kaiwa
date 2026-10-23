@@ -5,6 +5,8 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
+from kaiwa import jsonio
+
 CorrectionStyle = Literal["gentle", "critique"]
 LanguagePolicy = Literal["immerse", "adaptive"]
 SpeechRegister = Literal["formal", "casual"]
@@ -239,27 +241,21 @@ def load_prefs(path: Path | None = None) -> UserPrefs:
     from kaiwa.profiles import prefs_path as active_prefs_path
 
     prefs_file = path or active_prefs_path()
-    if not prefs_file.exists():
-        return default_prefs()
-    try:
-        raw = json.loads(prefs_file.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError, ValueError, TypeError):
-        return default_prefs()
-    if not isinstance(raw, dict):
-        return default_prefs()
-    try:
-        return validate_prefs_dict(raw)
-    except (ValueError, TypeError):
-        return default_prefs()
+    with jsonio.STATE_LOCK:
+        raw = jsonio.read_json_dict(prefs_file)
+        if raw is None:
+            return default_prefs()
+        try:
+            return validate_prefs_dict(raw)
+        except (ValueError, TypeError) as exc:
+            jsonio.quarantine(prefs_file, f"bad prefs: {exc}")
+            return default_prefs()
 
 
 def save_prefs(prefs: UserPrefs, path: Path | None = None) -> UserPrefs:
     from kaiwa.profiles import prefs_path as active_prefs_path
 
     prefs_file = path or active_prefs_path()
-    prefs_file.parent.mkdir(parents=True, exist_ok=True)
-    prefs_file.write_text(
-        json.dumps(prefs.to_dict(), ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
+    with jsonio.STATE_LOCK:
+        jsonio.write_json_atomic(prefs_file, prefs.to_dict())
     return prefs

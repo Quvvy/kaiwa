@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from kaiwa import jsonio
 from kaiwa import secrets_store
 from kaiwa.config import ROOT
 
@@ -73,8 +74,8 @@ def _slugify_label(label: str) -> str:
 
 
 def _write_json(path: Path, data: Any) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    with jsonio.STATE_LOCK:
+        jsonio.write_json_atomic(path, data)
 
 
 def _read_json(path: Path) -> Any:

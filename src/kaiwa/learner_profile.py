@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
 
+from kaiwa import jsonio
 from kaiwa.config import Settings
 from kaiwa.prefs import UserPrefs
 
@@ -210,30 +211,24 @@ def load_profile(path: Path | None = None) -> LearnerProfile:
     from kaiwa.profiles import learner_profile_path
 
     profile_file = path or learner_profile_path()
-    if not profile_file.exists():
-        return default_profile()
-    try:
-        raw = json.loads(profile_file.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError, ValueError, TypeError):
-        return default_profile()
-    if not isinstance(raw, dict):
-        return default_profile()
-    try:
-        return profile_from_dict(raw)
-    except (ValueError, TypeError):
-        return default_profile()
+    with jsonio.STATE_LOCK:
+        raw = jsonio.read_json_dict(profile_file)
+        if raw is None:
+            return default_profile()
+        try:
+            return profile_from_dict(raw)
+        except (ValueError, TypeError) as exc:
+            jsonio.quarantine(profile_file, f"bad profile: {exc}")
+            return default_profile()
 
 
 def save_profile(profile: LearnerProfile, path: Path | None = None) -> LearnerProfile:
     from kaiwa.profiles import learner_profile_path
 
     profile_file = path or learner_profile_path()
-    profile_file.parent.mkdir(parents=True, exist_ok=True)
     profile.updated_at = _now_iso()
-    profile_file.write_text(
-        json.dumps(profile.to_dict(), ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
+    with jsonio.STATE_LOCK:
+        jsonio.write_json_atomic(profile_file, profile.to_dict())
     return profile
 
 
@@ -447,7 +442,7 @@ def merge_assess_result(profile: LearnerProfile, data: dict[str, Any]) -> Learne
     return profile
 
 
-def run_assess(
+def fetch_assess(
     settings: Settings,
     profile: LearnerProfile,
     *,
@@ -455,8 +450,8 @@ def run_assess(
     learner_state: str,
     prefs: UserPrefs,
     client: Any = None,
-) -> LearnerProfile:
-    """Occasional Flash JSON assess. Fails soft on errors."""
+) -> dict[str, Any] | None:
+    """Flash JSON assess call only (slow; never hold STATE_LOCK). None on failure."""
     from kaiwa.llm import _completion
 
     placement_hint = ""
@@ -482,17 +477,20 @@ def run_assess(
             client=client,
             model=settings.deepseek_model,
         )
-        data = _extract_json(raw_text)
-        if data:
-            profile = merge_assess_result(profile, data)
-        else:
-            profile.stats.last_assess_turn = profile.stats.chat_turns
     except Exception:
-        profile.stats.last_assess_turn = profile.stats.chat_turns
+        return None
+    return _extract_json(raw_text) or None
+
+
+def apply_assess(profile: LearnerProfile, data: dict[str, Any] | None) -> LearnerProfile:
+    """Merge a fetch_assess result (or record a failed attempt) into `profile`."""
+    if data:
+        return merge_assess_result(profile, data)
+    profile.stats.last_assess_turn = profile.stats.chat_turns
     return profile
 
 
-def maybe_run_assess(
+def run_assess(
     settings: Settings,
     profile: LearnerProfile,
     *,
@@ -501,9 +499,8 @@ def maybe_run_assess(
     prefs: UserPrefs,
     client: Any = None,
 ) -> LearnerProfile:
-    if not should_assess(profile, prefs):
-        return profile
-    return run_assess(
+    """Occasional Flash JSON assess. Fails soft on errors."""
+    data = fetch_assess(
         settings,
         profile,
         transcript=transcript,
@@ -511,6 +508,7 @@ def maybe_run_assess(
         prefs=prefs,
         client=client,
     )
+    return apply_assess(profile, data)
 
 
 def needs_pro_routing(

@@ -79,6 +79,7 @@ Extra AivisSpeech voices (from AivisHub):
 .\.venv\Scripts\python.exe scripts\smoke_stt.py
 .\.venv\Scripts\python.exe scripts\smoke_practice.py
 .\.venv\Scripts\python.exe scripts\smoke_reply_shape.py
+.\.venv\Scripts\python.exe scripts\smoke_state_files.py
 .\.venv\Scripts\python.exe scripts\eval_turn_latency.py
 ```
 

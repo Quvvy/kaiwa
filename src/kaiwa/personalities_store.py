@@ -6,6 +6,8 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
+from kaiwa import jsonio
+
 MAX_USER_PRESETS = 20
 _SLUG_RE = re.compile(r"[^a-z0-9_]+")
 
@@ -53,11 +55,8 @@ def _save_raw(presets: list[dict[str, Any]], path: Path | None = None) -> None:
     from kaiwa.profiles import personalities_path
 
     prefs_path = path or personalities_path()
-    prefs_path.parent.mkdir(parents=True, exist_ok=True)
-    prefs_path.write_text(
-        json.dumps({"presets": presets}, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
+    with jsonio.STATE_LOCK:
+        jsonio.write_json_atomic(prefs_path, {"presets": presets})
 
 
 def _validate_fields(

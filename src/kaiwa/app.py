@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import logging
 import threading
 import time
 from collections import deque
@@ -38,25 +39,30 @@ from kaiwa import ptt_sounds
 from kaiwa.learner_profile import (
     apply_chat_signals,
     apply_manual_override,
+    apply_assess,
     apply_practice_score,
+    fetch_assess,
     load_profile,
-    maybe_run_assess,
     reset_profile,
     save_profile,
+    should_assess,
 )
 from kaiwa.rescue import apply_rescue_signals, next_rescue_step
 from kaiwa.learner_memory import (
+    apply_extract,
     apply_manual_memory,
     clip_preferred_name,
+    fetch_extract,
     load_memory,
-    maybe_run_extract,
     next_recycle_target,
     next_vocab_target,
     note_chat_turn,
     note_practice_result,
     reset_memory,
     save_memory,
+    should_extract,
 )
+from kaiwa import jsonio
 from kaiwa import leftovers
 from kaiwa import session_store
 from kaiwa.stream_util import SentenceBuffer
@@ -70,6 +76,8 @@ from kaiwa.quiz import (
     public_items,
     start_quiz_session,
 )
+
+_log = logging.getLogger(__name__)
 
 profiles.ensure_migrated()
 settings = get_settings()
@@ -624,19 +632,20 @@ def put_profile(body: ProfileUpdate) -> dict[str, Any]:
     if body.reset:
         profile = reset_profile()
     else:
-        profile = load_profile()
-        try:
-            profile = apply_manual_override(
-                profile,
-                speaking_level=body.speaking_level,
-                comprehension_level=body.comprehension_level,
-                topic_tags=body.topic_tags,
-                notes=body.notes,
-                confidence=body.confidence,
-            )
-        except (TypeError, ValueError) as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-        save_profile(profile)
+        with jsonio.STATE_LOCK:
+            profile = load_profile()
+            try:
+                profile = apply_manual_override(
+                    profile,
+                    speaking_level=body.speaking_level,
+                    comprehension_level=body.comprehension_level,
+                    topic_tags=body.topic_tags,
+                    notes=body.notes,
+                    confidence=body.confidence,
+                )
+            except (TypeError, ValueError) as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+            save_profile(profile)
     return {
         "profile": profile.to_dict(),
         "goal_level": prefs.goal_level,
@@ -654,19 +663,20 @@ def put_memory(body: MemoryUpdate) -> dict[str, Any]:
     if body.reset:
         memory = reset_memory()
     else:
-        memory = load_memory()
-        try:
-            memory = apply_manual_memory(
-                memory,
-                preferred_name=body.preferred_name,
-                vibe_notes=body.vibe_notes,
-                do=body.do,
-                dont=body.dont,
-                topics=body.topics,
-            )
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-        save_memory(memory)
+        with jsonio.STATE_LOCK:
+            memory = load_memory()
+            try:
+                memory = apply_manual_memory(
+                    memory,
+                    preferred_name=body.preferred_name,
+                    vibe_notes=body.vibe_notes,
+                    do=body.do,
+                    dont=body.dont,
+                    topics=body.topics,
+                )
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+            save_memory(memory)
     return {"memory": memory.to_dict()}
 
 
@@ -1057,10 +1067,10 @@ async def rescue_turn(body: RescueBody) -> dict[str, Any]:
             break
 
     prefs = load_prefs()
-    profile = load_profile()
     memory = load_memory()
-    profile = apply_rescue_signals(profile)
-    save_profile(profile)
+    with jsonio.STATE_LOCK:
+        profile = apply_rescue_signals(load_profile())
+        save_profile(profile)
     step = next_rescue_step(last_assistant)
 
     t0 = time.perf_counter()
@@ -1265,11 +1275,11 @@ def _stream_chat_events(
     history = session_store.ensure_ram(_sessions, settings.sessions_dir, sid)
     history.append({"role": "user", "content": transcript})
     prefs = load_prefs()
-    profile = load_profile()
     memory = load_memory()
     learner_state = infer_learner_state(transcript, last_assistant_line(history))
-    profile = apply_chat_signals(profile, learner_state, transcript)
-    save_profile(profile)
+    with jsonio.STATE_LOCK:
+        profile = apply_chat_signals(load_profile(), learner_state, transcript)
+        save_profile(profile)
 
     yield _sse_pack(
         "transcript",
@@ -1392,8 +1402,9 @@ def _stream_chat_events(
         retry=shape_retry,
     )
 
-    memory = note_chat_turn(memory)
-    save_memory(memory)
+    # Re-load: the turn-start copy is seconds old and sidework may have saved since.
+    with jsonio.STATE_LOCK:
+        memory = save_memory(note_chat_turn(load_memory()))
     history_snapshot = [{"role": m["role"], "content": m["content"]} for m in history]
     threading.Thread(
         target=_chat_sidework,
@@ -1535,34 +1546,48 @@ def _chat_sidework(
     learner_state: str,
     history_snapshot: list[dict[str, str]],
 ) -> None:
-    """Assess + extract after the reply is already returned (soft-fail)."""
+    """Assess + extract after the reply is already returned (soft-fail).
+
+    LLM calls run unlocked on a snapshot; each result merges into a fresh load
+    under STATE_LOCK, so turns that finished meanwhile aren't overwritten.
+    Paths are pinned up front so a profile switch mid-call can't misfile it.
+    """
+    profile_file = profiles.learner_profile_path()
+    memory_file = profiles.memory_path()
     try:
         prefs = load_prefs()
-        profile = load_profile()
-        profile = maybe_run_assess(
-            settings,
-            profile,
-            transcript=transcript,
-            learner_state=learner_state,
-            prefs=prefs,
-        )
-        save_profile(profile)
+        profile = load_profile(profile_file)
+        if should_assess(profile, prefs):
+            data = fetch_assess(
+                settings,
+                profile,
+                transcript=transcript,
+                learner_state=learner_state,
+                prefs=prefs,
+            )
+            with jsonio.STATE_LOCK:
+                save_profile(apply_assess(load_profile(profile_file), data), profile_file)
     except Exception:
-        pass
+        _log.exception("chat sidework: assess failed")
     try:
         prefs = load_prefs()
-        profile = load_profile()
-        memory = load_memory()
-        memory, _ = maybe_run_extract(
-            settings,
-            memory,
-            prefs=prefs,
-            profile=profile,
-            recent_messages=history_snapshot,
-        )
-        save_memory(memory)
+        profile = load_profile(profile_file)
+        memory = load_memory(memory_file)
+        if should_extract(memory, profile):
+            data = fetch_extract(
+                settings,
+                memory,
+                prefs=prefs,
+                profile=profile,
+                recent_messages=history_snapshot,
+            )
+            with jsonio.STATE_LOCK:
+                memory = apply_extract(
+                    load_memory(memory_file), data, recent_messages=history_snapshot
+                )
+                save_memory(memory, memory_file)
     except Exception:
-        pass
+        _log.exception("chat sidework: memory extract failed")
 
 
 async def _run_chat_turn(
@@ -1578,12 +1603,12 @@ async def _run_chat_turn(
     history = session_store.ensure_ram(_sessions, settings.sessions_dir, sid)
     history.append({"role": "user", "content": transcript})
     prefs = load_prefs()
-    profile = load_profile()
     memory = load_memory()
     learner_state = infer_learner_state(transcript, last_assistant_line(history))
     # Persist streak/signals before LLM; defer assess off the critical path.
-    profile = apply_chat_signals(profile, learner_state, transcript)
-    save_profile(profile)
+    with jsonio.STATE_LOCK:
+        profile = apply_chat_signals(load_profile(), learner_state, transcript)
+        save_profile(profile)
 
     t1 = time.perf_counter()
     try:
@@ -1655,8 +1680,9 @@ async def _run_chat_turn(
             timing["stt_accepted"] = accepted
 
 
-    memory = note_chat_turn(memory)
-    save_memory(memory)
+    # Re-load: the turn-start copy is seconds old and sidework may have saved since.
+    with jsonio.STATE_LOCK:
+        memory = save_memory(note_chat_turn(load_memory()))
     history_snapshot = [{"role": m["role"], "content": m["content"]} for m in history]
     threading.Thread(
         target=_chat_sidework,
@@ -2161,19 +2187,20 @@ def quiz_finish(body: QuizFinishRequest) -> dict[str, Any]:
             detail=f"Answer all questions first ({len(unanswered)} remaining)",
         )
 
-    prefs = load_prefs()
-    profile = load_profile()
-    profile, prefs, summary = apply_self_assessment(profile, prefs, session.answers())
-    save_profile(profile)
-    save_prefs(prefs)
-    raw_name = clip_preferred_name(str(session.answers().get("preferred_name") or ""))
-    if raw_name:
-        memory = load_memory()
-        try:
-            memory = apply_manual_memory(memory, preferred_name=raw_name)
-            save_memory(memory)
-        except ValueError:
-            raw_name = ""
+    with jsonio.STATE_LOCK:
+        prefs = load_prefs()
+        profile = load_profile()
+        profile, prefs, summary = apply_self_assessment(profile, prefs, session.answers())
+        save_profile(profile)
+        save_prefs(prefs)
+        raw_name = clip_preferred_name(str(session.answers().get("preferred_name") or ""))
+        if raw_name:
+            memory = load_memory()
+            try:
+                memory = apply_manual_memory(memory, preferred_name=raw_name)
+                save_memory(memory)
+            except ValueError:
+                raw_name = ""
     if raw_name:
         summary["preferred_name"] = raw_name
     session.finished = True

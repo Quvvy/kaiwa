@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from kaiwa import jsonio
 from kaiwa.persona import PROMPT_REVISION
 from kaiwa.session_log import append_session_log
 
@@ -156,7 +157,7 @@ def load_meta(sessions_dir: Path, session_id: str) -> SessionMeta | None:
 def save_meta(sessions_dir: Path, meta: SessionMeta) -> None:
     sessions_dir.mkdir(parents=True, exist_ok=True)
     path = meta_path(sessions_dir, meta.id)
-    path.write_text(json.dumps(meta.to_dict(), indent=2) + "\n", encoding="utf-8")
+    jsonio.write_json_atomic(path, meta.to_dict(), ensure_ascii=True)
 
 
 def iter_jsonl(sessions_dir: Path, session_id: str) -> list[dict[str, Any]]:

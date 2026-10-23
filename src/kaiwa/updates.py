@@ -12,6 +12,7 @@ from typing import Any
 
 import httpx
 
+from kaiwa import jsonio
 from kaiwa import __version__
 from kaiwa.secrets_store import user_data_dir
 
@@ -84,10 +85,9 @@ def _load_cache() -> dict[str, Any]:
 
 def _save_cache(patch: dict[str, Any]) -> dict[str, Any]:
     path = cache_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
     state = _load_cache()
     state.update(patch)
-    path.write_text(json.dumps(state, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    jsonio.write_json_atomic(path, state)
     return state
 
 

@@ -11,6 +11,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from kaiwa import jsonio
 from kaiwa.persona import PROMPT_REVISION
 from kaiwa.secrets_store import user_data_dir
 
@@ -42,9 +43,8 @@ def stored_revision() -> int:
 
 def write_revision(revision: int) -> None:
     path = stamp_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
     payload: dict[str, Any] = {"revision": int(revision)}
-    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    jsonio.write_json_atomic(path, payload, ensure_ascii=True)
 
 
 def apply_on_startup(sessions: dict[str, Any]) -> bool:

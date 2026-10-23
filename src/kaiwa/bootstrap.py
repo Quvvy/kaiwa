@@ -12,6 +12,7 @@ from typing import Any
 
 import httpx
 
+from kaiwa import jsonio
 from kaiwa.secrets_store import user_data_dir
 
 ProgressFn = Callable[[dict[str, Any]], None]
@@ -96,10 +97,9 @@ def _load_state() -> dict[str, Any]:
 
 def _save_state(patch: dict[str, Any]) -> None:
     path = bootstrap_state_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
     state = _load_state()
     state.update(patch)
-    path.write_text(json.dumps(state, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    jsonio.write_json_atomic(path, state)
 
 
 def whisper_ready(model_id: str = DEFAULT_WHISPER_MODEL) -> bool:

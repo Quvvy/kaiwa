@@ -9,6 +9,8 @@ from typing import Any
 
 import httpx
 
+from kaiwa import jsonio
+
 SECRETS_FILENAME = "secrets.json"
 KEY_FIELD = "deepseek_api_key"
 REGISTRY_FILENAME = "profiles.json"
@@ -84,10 +86,7 @@ def save_secret_key(key: str) -> Path:
         except (OSError, json.JSONDecodeError, TypeError, ValueError):
             payload = {}
     payload[KEY_FIELD] = cleaned
-    path.write_text(
-        json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
+    jsonio.write_json_atomic(path, payload)
     try:
         os.chmod(path, 0o600)
     except OSError:

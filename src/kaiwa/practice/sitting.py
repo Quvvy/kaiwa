@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from kaiwa import jsonio
 from kaiwa import profiles
 from kaiwa.practice.cards import (
     SPEAKABLE_AGAIN,
@@ -87,16 +88,12 @@ def load_state(path: Path | None = None) -> dict[str, Any]:
 
 def save_state(state: dict[str, Any], *, path: Path | None = None) -> None:
     file = path or state_path()
-    file.parent.mkdir(parents=True, exist_ok=True)
     payload = {
         "used_card_ids": list(state.get("used_card_ids") or []),
         "sitting": state.get("sitting"),
         "pending_elicit": str(state.get("pending_elicit") or "").strip(),
     }
-    file.write_text(
-        json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
+    jsonio.write_json_atomic(file, payload)
 
 
 def _profile_key() -> str:

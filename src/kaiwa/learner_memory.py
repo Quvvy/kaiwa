@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from kaiwa import jsonio
 from kaiwa.config import Settings
 from kaiwa.learner_profile import LearnerProfile
 from kaiwa.prefs import UserPrefs
@@ -295,30 +296,24 @@ def load_memory(path: Path | None = None) -> LearnerMemory:
     from kaiwa.profiles import memory_path as active_memory_path
 
     mem_file = path or active_memory_path()
-    if not mem_file.exists():
-        return default_memory()
-    try:
-        raw = json.loads(mem_file.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError, ValueError, TypeError):
-        return default_memory()
-    if not isinstance(raw, dict):
-        return default_memory()
-    try:
-        return memory_from_dict(raw)
-    except (ValueError, TypeError):
-        return default_memory()
+    with jsonio.STATE_LOCK:
+        raw = jsonio.read_json_dict(mem_file)
+        if raw is None:
+            return default_memory()
+        try:
+            return memory_from_dict(raw)
+        except (ValueError, TypeError) as exc:
+            jsonio.quarantine(mem_file, f"bad memory: {exc}")
+            return default_memory()
 
 
 def save_memory(memory: LearnerMemory, path: Path | None = None) -> LearnerMemory:
     from kaiwa.profiles import memory_path as active_memory_path
 
     mem_file = path or active_memory_path()
-    mem_file.parent.mkdir(parents=True, exist_ok=True)
     memory.updated_at = _now_iso()
-    mem_file.write_text(
-        json.dumps(memory.to_dict(), ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
+    with jsonio.STATE_LOCK:
+        jsonio.write_json_atomic(mem_file, memory.to_dict())
     return memory
 
 
@@ -596,7 +591,10 @@ Rules:
 """
 
 
-def run_extract(
+EXTRACT_RECENT = 4
+
+
+def fetch_extract(
     settings: Settings,
     memory: LearnerMemory,
     *,
@@ -604,11 +602,11 @@ def run_extract(
     profile: LearnerProfile,
     recent_messages: list[dict[str, str]],
     client: Any = None,
-) -> LearnerMemory:
-    """Occasional Flash JSON extract. Fails soft."""
+) -> dict[str, Any] | None:
+    """Flash JSON extract call only (slow; never hold STATE_LOCK). None on failure."""
     from kaiwa.llm import _completion
 
-    recent = recent_messages[-4:]
+    recent = recent_messages[-EXTRACT_RECENT:]
     dialogue = "\n".join(
         f"{m.get('role', '?')}: {m.get('content', '')}" for m in recent
     )
@@ -636,21 +634,28 @@ def run_extract(
             client=client,
             model=settings.deepseek_model,
         )
-        data = _extract_json(raw_text)
-        if data:
-            memory = merge_extract_result(
-                memory, data, recent_messages=recent
-            )
-        else:
-            memory.stats.chat_turns_since_extract = 0
-            memory.stats.last_extract_turn = memory.stats.chat_turns
     except Exception:
-        memory.stats.chat_turns_since_extract = 0
-        memory.stats.last_extract_turn = memory.stats.chat_turns
+        return None
+    return _extract_json(raw_text) or None
+
+
+def apply_extract(
+    memory: LearnerMemory,
+    data: dict[str, Any] | None,
+    *,
+    recent_messages: list[dict[str, str]],
+) -> LearnerMemory:
+    """Merge a fetch_extract result (or record a failed attempt) into `memory`."""
+    if data:
+        return merge_extract_result(
+            memory, data, recent_messages=recent_messages[-EXTRACT_RECENT:]
+        )
+    memory.stats.chat_turns_since_extract = 0
+    memory.stats.last_extract_turn = memory.stats.chat_turns
     return memory
 
 
-def maybe_run_extract(
+def run_extract(
     settings: Settings,
     memory: LearnerMemory,
     *,
@@ -658,11 +663,9 @@ def maybe_run_extract(
     profile: LearnerProfile,
     recent_messages: list[dict[str, str]],
     client: Any = None,
-) -> tuple[LearnerMemory, bool]:
-    if not should_extract(memory, profile):
-        return memory, False
-    before = memory.stats.total_extracts
-    memory = run_extract(
+) -> LearnerMemory:
+    """Occasional Flash JSON extract. Fails soft."""
+    data = fetch_extract(
         settings,
         memory,
         prefs=prefs,
@@ -670,7 +673,7 @@ def maybe_run_extract(
         recent_messages=recent_messages,
         client=client,
     )
-    return memory, memory.stats.total_extracts >= before
+    return apply_extract(memory, data, recent_messages=recent_messages)
 
 
 def memory_prompt_block(memory: LearnerMemory, prefs: UserPrefs) -> str:
