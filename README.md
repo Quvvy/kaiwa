@@ -29,7 +29,7 @@ Chat:     Mic → faster-whisper → DeepSeek V4 Flash (knows your learned phras
 | STT | Local `faster-whisper` `large-v3-turbo` (CUDA when available, else CPU) |
 | LLM | `deepseek-v4-flash` (thinking disabled by default) |
 | TTS | **AivisSpeech** default (`:10101`); **VOICEVOX** fallback (`:50021`) |
-| Course | 10 hand-written units / 60 phrases (`src/kaiwa/course/units.py`), Leitner review, extra listening |
+| Course | 20 hand-written units (120 phrases, 324 words, 40 grammar points) in `src/kaiwa/course/units.py`, a 20-lesson kana track (`kana.py`), capped Leitner review with sentence reviews, extra listening |
 | Tutor prefs | Goals, Immersion/Adaptive, Formal/Casual, naturalness, personalities, TTS engine/voice, Flash/Pro routing |
 | Learner profile | Live speaking/comprehension estimates (auto-updating) |
 | Long-term memory | Comfort prefs, topics, vocab, grammar (auto-updating) |

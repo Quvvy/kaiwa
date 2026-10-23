@@ -44,7 +44,7 @@ def content() -> None:
             for variant in task["hint"].split("／"):
                 sample = variant.replace("＿", "ねこ")
                 _check(matches_any(task["expect"], sample), f"{unit['id']} speak {i}: hint 「{sample}」 passes")
-    _check(len(UNITS) == 10, "ten units")
+    _check(len(UNITS) == 20, "twenty units")
     for unit in UNITS:
         for d in unit.get("drill", []):
             _check(0 <= d["answer"] < len(d["choices"]), f"{unit['id']} drill answer index valid")

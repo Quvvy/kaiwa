@@ -2612,6 +2612,3662 @@ UNITS: list[dict[str, Any]] = [
              "expect": ["はい*", "いいえ*", "*しました", "*しませんでした"]},
         ],
     },
+    {
+        "id": "u11",
+        "title": "Shopping",
+        "title_jp": "おみせで",
+        "goal": "Ask for things in a shop, count them, and understand prices.",
+        "phrases": [
+            {
+                "id": "u11.arimasuka",
+                "jp": "シャツはありますか。",
+                "en": "Do you have shirts?",
+                "note": "＿はありますか = Do you have ＿? / Is there ＿?",
+                "accept": [
+                    "*はありますか"
+                ]
+            },
+            {
+                "id": "u11.futatsu",
+                "jp": "これをふたつください。",
+                "en": "Two of these, please.",
+                "note": "Count things with ひとつ, ふたつ, みっつ before ください.",
+                "accept": [
+                    "これを*ください"
+                ]
+            },
+            {
+                "id": "u11.zenbu",
+                "jp": "ぜんぶで、いくらですか。",
+                "en": "How much is it altogether?",
+                "note": "ぜんぶで = in total."
+            },
+            {
+                "id": "u11.chotto",
+                "jp": "ちょっと、たかいですね。",
+                "en": "It's a bit expensive, isn't it.",
+                "note": "ね asks the other person to agree."
+            },
+            {
+                "id": "u11.dake",
+                "jp": "みているだけです。",
+                "en": "I'm just looking.",
+                "note": "Handy when shop staff offer help."
+            },
+            {
+                "id": "u11.kaado",
+                "jp": "カードで、いいですか。",
+                "en": "Is card OK?",
+                "note": "＿で いいですか = Is ＿ OK? で = by, with."
+            }
+        ],
+        "words": [
+            {
+                "id": "u11w.hyaku",
+                "jp": "ひゃく",
+                "ro": "hyaku",
+                "en": "hundred"
+            },
+            {
+                "id": "u11w.sen",
+                "jp": "せん",
+                "ro": "sen",
+                "en": "thousand"
+            },
+            {
+                "id": "u11w.man",
+                "jp": "まん",
+                "ro": "man",
+                "en": "ten thousand"
+            },
+            {
+                "id": "u11w.mittsu",
+                "jp": "みっつ",
+                "ro": "mittsu",
+                "en": "three (things)"
+            },
+            {
+                "id": "u11w.yottsu",
+                "jp": "よっつ",
+                "ro": "yottsu",
+                "en": "four (things)"
+            },
+            {
+                "id": "u11w.zenbu",
+                "jp": "ぜんぶ",
+                "ro": "zenbu",
+                "en": "all, everything"
+            },
+            {
+                "id": "u11w.shatsu",
+                "jp": "シャツ",
+                "ro": "shatsu",
+                "en": "shirt"
+            },
+            {
+                "id": "u11w.kutsu",
+                "jp": "くつ",
+                "ro": "kutsu",
+                "en": "shoes"
+            },
+            {
+                "id": "u11w.boushi",
+                "jp": "ぼうし",
+                "ro": "boushi",
+                "en": "hat"
+            },
+            {
+                "id": "u11w.kasa",
+                "jp": "かさ",
+                "ro": "kasa",
+                "en": "umbrella"
+            },
+            {
+                "id": "u11w.tokei",
+                "jp": "とけい",
+                "ro": "tokei",
+                "en": "watch, clock"
+            },
+            {
+                "id": "u11w.akai",
+                "jp": "あかい",
+                "ro": "akai",
+                "en": "red"
+            },
+            {
+                "id": "u11w.aoi",
+                "jp": "あおい",
+                "ro": "aoi",
+                "en": "blue"
+            },
+            {
+                "id": "u11w.shiroi",
+                "jp": "しろい",
+                "ro": "shiroi",
+                "en": "white"
+            },
+            {
+                "id": "u11w.kuroi",
+                "jp": "くろい",
+                "ro": "kuroi",
+                "en": "black"
+            },
+            {
+                "id": "u11w.kaado",
+                "jp": "カード",
+                "ro": "kaado",
+                "en": "card"
+            }
+        ],
+        "grammar": [
+            {
+                "id": "u11g.price",
+                "title": "Prices: ひゃく, せん, まん",
+                "rule": "Number ＋ ひゃく / せん / まん ＋ えん. Watch: さんびゃく, ろっぴゃく, はっぴゃく, さんぜん, はっせん.",
+                "explain": [
+                    "Prices are built from ひゃく (100), せん (1,000) and まん (10,000): にせんごひゃくえん is 2,500 yen.",
+                    "A few combinations change sound: さんびゃく (300), ろっぴゃく (600), はっぴゃく (800), さんぜん (3,000), はっせん (8,000). Big numbers count in まん: 50,000 is ごまん."
+                ],
+                "examples": [
+                    {
+                        "jp": "ひゃくえんです。",
+                        "en": "It's 100 yen."
+                    },
+                    {
+                        "jp": "さんびゃくえんです。",
+                        "en": "It's 300 yen."
+                    },
+                    {
+                        "jp": "せんごひゃくえんです。",
+                        "en": "It's 1,500 yen."
+                    },
+                    {
+                        "jp": "いちまんえんです。",
+                        "en": "It's 10,000 yen."
+                    }
+                ]
+            },
+            {
+                "id": "u11g.arimasu",
+                "title": "＿はありますか and counting",
+                "rule": "＿はありますか = Do you have ＿? Count things with ひとつ, ふたつ, みっつ… before ください.",
+                "explain": [
+                    "あります means there is or have, for things. ＿はありますか asks a shop if they have it; the answer is はい、あります or いいえ、ありません.",
+                    "Count general things with ひとつ, ふたつ, みっつ, よっつ: これをみっつください (three of these, please)."
+                ],
+                "examples": [
+                    {
+                        "jp": "シャツはありますか。",
+                        "en": "Do you have shirts?"
+                    },
+                    {
+                        "jp": "はい、あります。",
+                        "en": "Yes, we do."
+                    },
+                    {
+                        "jp": "いいえ、ありません。",
+                        "en": "No, we don't."
+                    },
+                    {
+                        "jp": "ケーキをみっつください。",
+                        "en": "Three cakes, please."
+                    }
+                ]
+            }
+        ],
+        "drill": [
+            {
+                "q": "Ask if they have hats.",
+                "choices": [
+                    "ぼうしはありますか。",
+                    "ぼうしをありますか。",
+                    "ぼうしがいますか。"
+                ],
+                "answer": 0,
+                "explain": "Things: あります."
+            },
+            {
+                "q": "You work in the shop. You have none.",
+                "say": "かさはありますか。",
+                "choices": [
+                    "いいえ、ありません。",
+                    "いいえ、あります。",
+                    "いいえ、いません。"
+                ],
+                "answer": 0,
+                "explain": "ありません = there isn't."
+            },
+            {
+                "q": "Say 300 yen.",
+                "choices": [
+                    "さんびゃくえんです。",
+                    "さんひゃくえんです。",
+                    "さんぜんえんです。"
+                ],
+                "answer": 0,
+                "explain": "3 ＋ ひゃく = さんびゃく."
+            },
+            {
+                "q": "Say 8,000 yen.",
+                "choices": [
+                    "はっせんえんです。",
+                    "はちせんえんです。",
+                    "はっぴゃくえんです。"
+                ],
+                "answer": 0,
+                "explain": "8 ＋ せん = はっせん."
+            },
+            {
+                "q": "Order three of these.",
+                "choices": [
+                    "これをみっつください。",
+                    "これをさんください。",
+                    "みっつをこれください。"
+                ],
+                "answer": 0,
+                "explain": "Things count ひとつ, ふたつ, みっつ."
+            },
+            {
+                "q": "Ask how much it is altogether.",
+                "choices": [
+                    "ぜんぶで、いくらですか。",
+                    "ぜんぶは、なんですか。",
+                    "ぜんぶで、どこですか。"
+                ],
+                "answer": 0
+            },
+            {
+                "q": "A clerk offers help. You're just looking.",
+                "say": "なにか、おさがしですか。",
+                "choices": [
+                    "みているだけです。",
+                    "みています、ください。",
+                    "みるだけですか。"
+                ],
+                "answer": 0
+            },
+            {
+                "q": "Ask if you can pay by card.",
+                "choices": [
+                    "カードで、いいですか。",
+                    "カードを、いいですか。",
+                    "カードは、いますか。"
+                ],
+                "answer": 0,
+                "explain": "で = by, with."
+            }
+        ],
+        "dialogue": {
+            "scene": "Buying a hat at a small shop.",
+            "lines": [
+                {
+                    "who": "a",
+                    "jp": "いらっしゃいませ。",
+                    "en": "Welcome."
+                },
+                {
+                    "who": "b",
+                    "jp": "すみません、ぼうしはありますか。",
+                    "en": "Excuse me, do you have hats?"
+                },
+                {
+                    "who": "a",
+                    "jp": "はい、こちらです。",
+                    "en": "Yes, this way.",
+                    "gloss": "こちら = this way (polite)"
+                },
+                {
+                    "who": "b",
+                    "jp": "これ、いくらですか。",
+                    "en": "How much is this one?"
+                },
+                {
+                    "who": "a",
+                    "jp": "にせんはっぴゃくえんです。",
+                    "en": "It's 2,800 yen."
+                },
+                {
+                    "who": "b",
+                    "jp": "ちょっと、たかいですね。じゃあ、みているだけです。",
+                    "en": "That's a bit expensive. I'm just looking, then."
+                }
+            ]
+        },
+        "questions": [
+            {
+                "q": "What is the customer looking for?",
+                "choices": [
+                    "Shoes",
+                    "A hat",
+                    "An umbrella"
+                ],
+                "answer": 1
+            },
+            {
+                "q": "How much is it?",
+                "choices": [
+                    "800 yen",
+                    "2,800 yen",
+                    "2,300 yen"
+                ],
+                "answer": 1
+            },
+            {
+                "q": "Does the customer buy it?",
+                "choices": [
+                    "Yes, two of them",
+                    "Yes, by card",
+                    "No, just looking"
+                ],
+                "answer": 2
+            }
+        ],
+        "speak": [
+            {
+                "say": "いらっしゃいませ。",
+                "situation": "You walk into a shop. Ask if they have umbrellas.",
+                "hint": "かさはありますか。",
+                "expect": [
+                    "*はありますか*"
+                ]
+            },
+            {
+                "say": "はい、ありますよ。いくつですか。",
+                "situation": "They have them. Ask for two.",
+                "hint": "ふたつください。",
+                "expect": [
+                    "*ふたつ*"
+                ]
+            },
+            {
+                "say": "ぜんぶで、さんぜんえんです。",
+                "situation": "Ask if you can pay by card.",
+                "hint": "カードで、いいですか。",
+                "expect": [
+                    "*カード*"
+                ]
+            }
+        ]
+    },
+    {
+        "id": "u12",
+        "title": "Family",
+        "title_jp": "かぞく",
+        "goal": "Talk about your family and ask about someone else's.",
+        "phrases": [
+            {
+                "id": "u12.yonin",
+                "jp": "かぞくは、よにんです。",
+                "en": "There are four of us in my family.",
+                "note": "People count ひとり, ふたり, さんにん, よにん."
+            },
+            {
+                "id": "u12.ani",
+                "jp": "あにがいます。",
+                "en": "I have an older brother.",
+                "note": "＿がいます = there is, I have (people and animals).",
+                "accept": [
+                    "*がいます"
+                ]
+            },
+            {
+                "id": "u12.kyoudai",
+                "jp": "きょうだいは、いますか。",
+                "en": "Do you have brothers or sisters?"
+            },
+            {
+                "id": "u12.hitorikko",
+                "jp": "ひとりっこです。",
+                "en": "I'm an only child."
+            },
+            {
+                "id": "u12.shashin",
+                "jp": "これは、ははのしゃしんです。",
+                "en": "This is a photo of my mother.",
+                "note": "の joins nouns: ははのしゃしん = mother's photo."
+            },
+            {
+                "id": "u12.okaasan",
+                "jp": "おかあさんは、げんきですか。",
+                "en": "Is your mother well?",
+                "note": "Someone else's mother is おかあさん; your own is はは."
+            }
+        ],
+        "words": [
+            {
+                "id": "u12w.kazoku",
+                "jp": "かぞく",
+                "ro": "kazoku",
+                "en": "family"
+            },
+            {
+                "id": "u12w.chichi",
+                "jp": "ちち",
+                "ro": "chichi",
+                "en": "my father"
+            },
+            {
+                "id": "u12w.haha",
+                "jp": "はは",
+                "ro": "haha",
+                "en": "my mother"
+            },
+            {
+                "id": "u12w.ani",
+                "jp": "あに",
+                "ro": "ani",
+                "en": "my older brother"
+            },
+            {
+                "id": "u12w.ane",
+                "jp": "あね",
+                "ro": "ane",
+                "en": "my older sister"
+            },
+            {
+                "id": "u12w.otouto",
+                "jp": "おとうと",
+                "ro": "otouto",
+                "en": "younger brother"
+            },
+            {
+                "id": "u12w.imouto",
+                "jp": "いもうと",
+                "ro": "imouto",
+                "en": "younger sister"
+            },
+            {
+                "id": "u12w.otousan",
+                "jp": "おとうさん",
+                "ro": "otousan",
+                "en": "(someone's) father"
+            },
+            {
+                "id": "u12w.okaasan",
+                "jp": "おかあさん",
+                "ro": "okaasan",
+                "en": "(someone's) mother"
+            },
+            {
+                "id": "u12w.kyoudai",
+                "jp": "きょうだい",
+                "ro": "kyoudai",
+                "en": "brothers and sisters"
+            },
+            {
+                "id": "u12w.hitori",
+                "jp": "ひとり",
+                "ro": "hitori",
+                "en": "one person"
+            },
+            {
+                "id": "u12w.futari",
+                "jp": "ふたり",
+                "ro": "futari",
+                "en": "two people"
+            },
+            {
+                "id": "u12w.shashin",
+                "jp": "しゃしん",
+                "ro": "shashin",
+                "en": "photo"
+            },
+            {
+                "id": "u12w.genki",
+                "jp": "げんき",
+                "ro": "genki",
+                "en": "well, healthy"
+            },
+            {
+                "id": "u12w.imasu",
+                "jp": "います",
+                "ro": "imasu",
+                "en": "there is (people, animals)"
+            },
+            {
+                "id": "u12w.imasen",
+                "jp": "いません",
+                "ro": "imasen",
+                "en": "there isn't (people, animals)"
+            }
+        ],
+        "grammar": [
+            {
+                "id": "u12g.imasu",
+                "title": "います and あります",
+                "rule": "People and animals: います. Things and events: あります.",
+                "explain": [
+                    "Japanese has two verbs for there is: います for living things (people, animals), あります for everything else. ＿がいます also means I have: あにがいます (I have an older brother).",
+                    "Count people with ひとり, ふたり, then さんにん, よにん, ごにん."
+                ],
+                "examples": [
+                    {
+                        "jp": "あにがいます。",
+                        "en": "I have an older brother."
+                    },
+                    {
+                        "jp": "いぬがいます。",
+                        "en": "I have a dog."
+                    },
+                    {
+                        "jp": "きょうだいは、いません。",
+                        "en": "I don't have any brothers or sisters."
+                    },
+                    {
+                        "jp": "かぞくは、さんにんです。",
+                        "en": "There are three of us."
+                    }
+                ]
+            },
+            {
+                "id": "u12g.no",
+                "title": "の: my, your, of",
+                "rule": "A の B = A's B. わたしのかばん = my bag.",
+                "explain": [
+                    "の joins two nouns; the first owns or describes the second: わたしのかばん (my bag), ははのしゃしん (my mother's photo).",
+                    "Japanese uses different words for your own family (はは, ちち) and someone else's (おかあさん, おとうさん)."
+                ],
+                "examples": [
+                    {
+                        "jp": "わたしのかばんです。",
+                        "en": "It's my bag."
+                    },
+                    {
+                        "jp": "ははのしゃしんです。",
+                        "en": "It's my mother's photo."
+                    },
+                    {
+                        "jp": "ともだちのいぬです。",
+                        "en": "It's my friend's dog."
+                    },
+                    {
+                        "jp": "にほんごのほんです。",
+                        "en": "It's a Japanese book."
+                    }
+                ]
+            }
+        ],
+        "drill": [
+            {
+                "q": "Say you have a younger sister.",
+                "choices": [
+                    "いもうとがいます。",
+                    "いもうとがあります。",
+                    "いもうとをいます。"
+                ],
+                "answer": 0,
+                "explain": "People take います."
+            },
+            {
+                "q": "Say you have a cat.",
+                "choices": [
+                    "ねこがいます。",
+                    "ねこがあります。",
+                    "ねこです、います。"
+                ],
+                "answer": 0,
+                "explain": "Animals take います too."
+            },
+            {
+                "q": "Say you have a test tomorrow.",
+                "choices": [
+                    "あした、しけんがあります。",
+                    "あした、しけんがいます。",
+                    "あした、しけんをいます。"
+                ],
+                "answer": 0,
+                "explain": "Things and events take あります."
+            },
+            {
+                "q": "Say it's your bag.",
+                "choices": [
+                    "わたしのかばんです。",
+                    "わたしかばんです。",
+                    "かばんのわたしです。"
+                ],
+                "answer": 0,
+                "explain": "Owner ＋ の ＋ thing."
+            },
+            {
+                "q": "Ask after a friend's mother.",
+                "choices": [
+                    "おかあさんは、げんきですか。",
+                    "ははは、げんきですか。",
+                    "わたしのおかあさんですか。"
+                ],
+                "answer": 0,
+                "explain": "Someone else's mother is おかあさん."
+            },
+            {
+                "q": "Say your own mother is a teacher.",
+                "choices": [
+                    "ははは、せんせいです。",
+                    "おかあさんは、せんせいです。",
+                    "わたしのおかあさんさんです。"
+                ],
+                "answer": 0,
+                "explain": "Your own mother is はは."
+            },
+            {
+                "q": "There are four people in your family.",
+                "choices": [
+                    "かぞくは、よにんです。",
+                    "かぞくは、よんにんです。",
+                    "かぞくは、よっつです。"
+                ],
+                "answer": 0,
+                "explain": "People: ひとり, ふたり, さんにん, よにん."
+            },
+            {
+                "q": "You have no brothers or sisters.",
+                "say": "きょうだいは、いますか。",
+                "choices": [
+                    "ひとりっこです。",
+                    "ひとりです、きょうだい。",
+                    "きょうだいがあります。"
+                ],
+                "answer": 0
+            }
+        ],
+        "dialogue": {
+            "scene": "Yuki and a friend look at photos on the friend's phone.",
+            "lines": [
+                {
+                    "who": "a",
+                    "jp": "これは、だれですか。",
+                    "en": "Who's this?"
+                },
+                {
+                    "who": "b",
+                    "jp": "ははです。こっちは、あにです。",
+                    "en": "That's my mother. This one is my older brother.",
+                    "gloss": "こっち = this one (casual)"
+                },
+                {
+                    "who": "a",
+                    "jp": "やさしそうですね。",
+                    "en": "They look kind.",
+                    "gloss": "やさしそう = looks kind"
+                },
+                {
+                    "who": "b",
+                    "jp": "はい、やさしいです。ユキさんは、きょうだいがいますか。",
+                    "en": "Yes, they are. Do you have brothers or sisters, Yuki?"
+                },
+                {
+                    "who": "a",
+                    "jp": "いいえ、ひとりっこです。でも、いぬがいます！",
+                    "en": "No, I'm an only child. But I have a dog!"
+                }
+            ]
+        },
+        "questions": [
+            {
+                "q": "Who is in the first photo?",
+                "choices": [
+                    "The friend's mother",
+                    "The friend's sister",
+                    "Yuki's mother"
+                ],
+                "answer": 0
+            },
+            {
+                "q": "Does Yuki have brothers or sisters?",
+                "choices": [
+                    "Yes, a brother",
+                    "No, she's an only child",
+                    "Yes, a sister"
+                ],
+                "answer": 1
+            },
+            {
+                "q": "What does Yuki have?",
+                "choices": [
+                    "A photo of her brother",
+                    "A dog",
+                    "A cat"
+                ],
+                "answer": 1
+            }
+        ],
+        "speak": [
+            {
+                "say": "かぞくは、なんにんですか。",
+                "situation": "Say how many people are in your family.",
+                "hint": "＿にんです。／よにんです。",
+                "expect": [
+                    "*にんです*",
+                    "*りです*"
+                ]
+            },
+            {
+                "say": "きょうだいは、いますか。",
+                "situation": "Answer about your brothers and sisters.",
+                "hint": "あにがいます。／ひとりっこです。",
+                "expect": [
+                    "*います*",
+                    "*いません*",
+                    "ひとりっこ*"
+                ]
+            },
+            {
+                "say": "これ、わたしのいぬです。",
+                "situation": "Your friend shows you their dog. Ask its name.",
+                "hint": "なまえは、なんですか。",
+                "expect": [
+                    "*なまえ*"
+                ]
+            }
+        ]
+    },
+    {
+        "id": "u13",
+        "title": "Wants",
+        "title_jp": "ほしいもの",
+        "goal": "Say what you want, and what you want to do.",
+        "phrases": [
+            {
+                "id": "u13.tabetai",
+                "jp": "すしがたべたいです。",
+                "en": "I want to eat sushi.",
+                "note": "Drop ます, add たいです: たべます → たべたいです.",
+                "accept": [
+                    "*たべたいです"
+                ]
+            },
+            {
+                "id": "u13.ikitai",
+                "jp": "にほんにいきたいです。",
+                "en": "I want to go to Japan."
+            },
+            {
+                "id": "u13.shitai",
+                "jp": "なにがしたいですか。",
+                "en": "What do you want to do?"
+            },
+            {
+                "id": "u13.hoshii",
+                "jp": "あたらしいかばんがほしいです。",
+                "en": "I want a new bag.",
+                "note": "ほしい is for things; たい is for doing.",
+                "accept": [
+                    "*がほしいです"
+                ]
+            },
+            {
+                "id": "u13.nanika",
+                "jp": "なにか、のみたいです。",
+                "en": "I want to drink something.",
+                "note": "なにか = something."
+            },
+            {
+                "id": "u13.yasumitai",
+                "jp": "つかれました。やすみたいです。",
+                "en": "I'm tired. I want to rest.",
+                "note": "つかれました = I'm tired (I got tired)."
+            }
+        ],
+        "words": [
+            {
+                "id": "u13w.hoshii",
+                "jp": "ほしい",
+                "ro": "hoshii",
+                "en": "want (a thing)"
+            },
+            {
+                "id": "u13w.nanika",
+                "jp": "なにか",
+                "ro": "nanika",
+                "en": "something"
+            },
+            {
+                "id": "u13w.dokoka",
+                "jp": "どこか",
+                "ro": "dokoka",
+                "en": "somewhere"
+            },
+            {
+                "id": "u13w.yasumimasu",
+                "jp": "やすみます",
+                "ro": "yasumimasu",
+                "en": "rest; take a day off"
+            },
+            {
+                "id": "u13w.asobimasu",
+                "jp": "あそびます",
+                "ro": "asobimasu",
+                "en": "play, hang out"
+            },
+            {
+                "id": "u13w.aimasu",
+                "jp": "あいます",
+                "ro": "aimasu",
+                "en": "meet"
+            },
+            {
+                "id": "u13w.kaimasu",
+                "jp": "かいます",
+                "ro": "kaimasu",
+                "en": "buy"
+            },
+            {
+                "id": "u13w.tsukaremashita",
+                "jp": "つかれました",
+                "ro": "tsukaremashita",
+                "en": "I'm tired"
+            },
+            {
+                "id": "u13w.onakagasukimashita",
+                "jp": "おなかがすきました",
+                "ro": "onaka ga sukimashita",
+                "en": "I'm hungry"
+            },
+            {
+                "id": "u13w.nodogakawakimashita",
+                "jp": "のどがかわきました",
+                "ro": "nodo ga kawakimashita",
+                "en": "I'm thirsty"
+            },
+            {
+                "id": "u13w.umi",
+                "jp": "うみ",
+                "ro": "umi",
+                "en": "the sea"
+            },
+            {
+                "id": "u13w.yama",
+                "jp": "やま",
+                "ro": "yama",
+                "en": "mountain"
+            },
+            {
+                "id": "u13w.onsen",
+                "jp": "おんせん",
+                "ro": "onsen",
+                "en": "hot spring"
+            },
+            {
+                "id": "u13w.kuruma",
+                "jp": "くるま",
+                "ro": "kuruma",
+                "en": "car"
+            },
+            {
+                "id": "u13w.itsuka",
+                "jp": "いつか",
+                "ro": "itsuka",
+                "en": "someday"
+            },
+            {
+                "id": "u13w.yukkurishimasu",
+                "jp": "ゆっくりします",
+                "ro": "yukkuri shimasu",
+                "en": "take it easy"
+            }
+        ],
+        "grammar": [
+            {
+                "id": "u13g.tai",
+                "title": "Want to: ＿たいです",
+                "rule": "ます-stem ＋ たいです = want to. たべます → たべたいです.",
+                "explain": [
+                    "Drop ます and add たいです: たべます → たべたいです (want to eat), いきます → いきたいです (want to go).",
+                    "Ask with か: なにがしたいですか。 What you want to eat or see can take が or を: すしがたべたいです."
+                ],
+                "examples": [
+                    {
+                        "jp": "すしがたべたいです。",
+                        "en": "I want to eat sushi."
+                    },
+                    {
+                        "jp": "にほんにいきたいです。",
+                        "en": "I want to go to Japan."
+                    },
+                    {
+                        "jp": "えいがをみたいです。",
+                        "en": "I want to watch a movie."
+                    },
+                    {
+                        "jp": "なにがしたいですか。",
+                        "en": "What do you want to do?"
+                    }
+                ]
+            },
+            {
+                "id": "u13g.hoshii",
+                "title": "Want a thing: ＿がほしいです",
+                "rule": "Thing ＋ が ほしいです = I want (thing). たい is for doing, ほしい for things.",
+                "explain": [
+                    "ほしい is for things: くるまがほしいです (I want a car). たい is for actions: くるまをかいたいです (I want to buy a car).",
+                    "Not wanting follows the い rule from unit 9: ほしくないです, いきたくないです."
+                ],
+                "examples": [
+                    {
+                        "jp": "あたらしいかばんがほしいです。",
+                        "en": "I want a new bag."
+                    },
+                    {
+                        "jp": "くるまがほしいです。",
+                        "en": "I want a car."
+                    },
+                    {
+                        "jp": "なにがほしいですか。",
+                        "en": "What do you want?"
+                    },
+                    {
+                        "jp": "いきたくないです。",
+                        "en": "I don't want to go."
+                    }
+                ]
+            }
+        ],
+        "drill": [
+            {
+                "q": "Say you want to eat ramen.",
+                "choices": [
+                    "ラーメンがたべたいです。",
+                    "ラーメンがたべますたいです。",
+                    "ラーメンをほしいです。"
+                ],
+                "answer": 0,
+                "explain": "Drop ます, add たいです."
+            },
+            {
+                "q": "Say you want to go to the sea.",
+                "choices": [
+                    "うみにいきたいです。",
+                    "うみにいきますたい。",
+                    "うみがいきたいです。"
+                ],
+                "answer": 0,
+                "explain": "に marks where you go."
+            },
+            {
+                "q": "Say you want a new bag.",
+                "choices": [
+                    "あたらしいかばんがほしいです。",
+                    "あたらしいかばんをたいです。",
+                    "あたらしいかばんがほしいたいです。"
+                ],
+                "answer": 0,
+                "explain": "Things: ほしい."
+            },
+            {
+                "q": "Ask what they want to do.",
+                "choices": [
+                    "なにがしたいですか。",
+                    "なにがほしいですか。",
+                    "なにをしますか、たい。"
+                ],
+                "answer": 0,
+                "explain": "したい = want to do."
+            },
+            {
+                "q": "You're tired. Say you want to rest.",
+                "choices": [
+                    "やすみたいです。",
+                    "やすみほしいです。",
+                    "やすみますたいです。"
+                ],
+                "answer": 0
+            },
+            {
+                "q": "Say you don't want to go.",
+                "choices": [
+                    "いきたくないです。",
+                    "いきたいないです。",
+                    "いきないたいです。"
+                ],
+                "answer": 0,
+                "explain": "たい → たくない, like any い word."
+            },
+            {
+                "q": "Say you're hungry.",
+                "choices": [
+                    "おなかがすきました。",
+                    "のどがかわきました。",
+                    "つかれました。"
+                ],
+                "answer": 0
+            },
+            {
+                "q": "Your friend asks what you want for your birthday.",
+                "say": "たんじょうび、なにがほしいですか。",
+                "choices": [
+                    "ゲームがほしいです。",
+                    "ゲームがしたいです。",
+                    "ゲームをたべたいです。"
+                ],
+                "answer": 0
+            }
+        ],
+        "dialogue": {
+            "scene": "Two friends planning a day off.",
+            "lines": [
+                {
+                    "who": "a",
+                    "jp": "あした、やすみですね。なにがしたいですか。",
+                    "en": "Tomorrow's a day off. What do you want to do?",
+                    "gloss": "やすみ = day off"
+                },
+                {
+                    "who": "b",
+                    "jp": "うみにいきたいです！",
+                    "en": "I want to go to the sea!"
+                },
+                {
+                    "who": "a",
+                    "jp": "いいですね。わたしは、おいしいものがたべたいです。",
+                    "en": "Nice. I want to eat something tasty.",
+                    "gloss": "もの = thing(s)"
+                },
+                {
+                    "who": "b",
+                    "jp": "じゃあ、うみで、すしをたべましょう。",
+                    "en": "Then let's eat sushi at the sea.",
+                    "gloss": "〜ましょう = let's"
+                },
+                {
+                    "who": "a",
+                    "jp": "いいですね！",
+                    "en": "Sounds good!"
+                }
+            ]
+        },
+        "questions": [
+            {
+                "q": "Where does B want to go?",
+                "choices": [
+                    "A hot spring",
+                    "The sea",
+                    "The mountains"
+                ],
+                "answer": 1
+            },
+            {
+                "q": "What does A want?",
+                "choices": [
+                    "To buy a bag",
+                    "To rest at home",
+                    "To eat something tasty"
+                ],
+                "answer": 2
+            }
+        ],
+        "speak": [
+            {
+                "say": "しゅうまつ、なにがしたいですか。",
+                "situation": "Say what you want to do this weekend.",
+                "hint": "＿にいきたいです。／＿がしたいです。",
+                "expect": [
+                    "*たいです*",
+                    "*たい*"
+                ]
+            },
+            {
+                "say": "なにがほしいですか。",
+                "situation": "Say something you want.",
+                "hint": "＿がほしいです。",
+                "expect": [
+                    "*ほしい*"
+                ]
+            },
+            {
+                "say": "つかれましたか。",
+                "situation": "You're tired. Say so, and that you want to rest.",
+                "hint": "はい、つかれました。やすみたいです。",
+                "expect": [
+                    "*つかれ*",
+                    "*やすみたい*"
+                ]
+            }
+        ]
+    },
+    {
+        "id": "u14",
+        "title": "Requests",
+        "title_jp": "おねがい",
+        "goal": "Ask people to do things, and ask them not to.",
+        "phrases": [
+            {
+                "id": "u14.matte",
+                "jp": "すこしまってください。",
+                "en": "Please wait a moment.",
+                "note": "て-form ＋ ください = please do."
+            },
+            {
+                "id": "u14.mite",
+                "jp": "これをみてください。",
+                "en": "Please look at this."
+            },
+            {
+                "id": "u14.kaite",
+                "jp": "ここに、なまえをかいてください。",
+                "en": "Please write your name here."
+            },
+            {
+                "id": "u14.hanashite",
+                "jp": "ゆっくりはなしてください。",
+                "en": "Please speak slowly."
+            },
+            {
+                "id": "u14.oshiete",
+                "jp": "おしえてください。",
+                "en": "Please tell me. / Please teach me."
+            },
+            {
+                "id": "u14.tabenaide",
+                "jp": "たべないでください。",
+                "en": "Please don't eat it.",
+                "note": "ないで ＋ ください = please don't."
+            }
+        ],
+        "words": [
+            {
+                "id": "u14w.matte",
+                "jp": "まって",
+                "ro": "matte",
+                "en": "wait (て-form)"
+            },
+            {
+                "id": "u14w.mite",
+                "jp": "みて",
+                "ro": "mite",
+                "en": "look (て-form)"
+            },
+            {
+                "id": "u14w.kaite",
+                "jp": "かいて",
+                "ro": "kaite",
+                "en": "write (て-form)"
+            },
+            {
+                "id": "u14w.hanashite",
+                "jp": "はなして",
+                "ro": "hanashite",
+                "en": "speak (て-form)"
+            },
+            {
+                "id": "u14w.oshiete",
+                "jp": "おしえて",
+                "ro": "oshiete",
+                "en": "tell, teach (て-form)"
+            },
+            {
+                "id": "u14w.kiite",
+                "jp": "きいて",
+                "ro": "kiite",
+                "en": "listen, ask (て-form)"
+            },
+            {
+                "id": "u14w.yonde",
+                "jp": "よんで",
+                "ro": "yonde",
+                "en": "read, call (て-form)"
+            },
+            {
+                "id": "u14w.tatte",
+                "jp": "たって",
+                "ro": "tatte",
+                "en": "stand up (て-form)"
+            },
+            {
+                "id": "u14w.suwatte",
+                "jp": "すわって",
+                "ro": "suwatte",
+                "en": "sit down (て-form)"
+            },
+            {
+                "id": "u14w.akete",
+                "jp": "あけて",
+                "ro": "akete",
+                "en": "open (て-form)"
+            },
+            {
+                "id": "u14w.shimete",
+                "jp": "しめて",
+                "ro": "shimete",
+                "en": "close (て-form)"
+            },
+            {
+                "id": "u14w.mado",
+                "jp": "まど",
+                "ro": "mado",
+                "en": "window"
+            },
+            {
+                "id": "u14w.doa",
+                "jp": "ドア",
+                "ro": "doa",
+                "en": "door"
+            },
+            {
+                "id": "u14w.denwa",
+                "jp": "でんわ",
+                "ro": "denwa",
+                "en": "phone"
+            },
+            {
+                "id": "u14w.bangou",
+                "jp": "ばんごう",
+                "ro": "bangou",
+                "en": "number"
+            },
+            {
+                "id": "u14w.mochiron",
+                "jp": "もちろん",
+                "ro": "mochiron",
+                "en": "of course"
+            }
+        ],
+        "grammar": [
+            {
+                "id": "u14g.te",
+                "title": "Please do: て-form ＋ ください",
+                "rule": "て-form ＋ ください = please (do). みます → みて, かきます → かいて.",
+                "explain": [
+                    "To ask someone to do something, use the verb's て-form with ください: みてください (please look).",
+                    "The て-form has a few patterns; for now learn these as words: みて, まって, かいて, よんで, はなして, おしえて, すわって. A later unit covers the rules."
+                ],
+                "examples": [
+                    {
+                        "jp": "これをみてください。",
+                        "en": "Please look at this."
+                    },
+                    {
+                        "jp": "すこしまってください。",
+                        "en": "Please wait a moment."
+                    },
+                    {
+                        "jp": "ここにすわってください。",
+                        "en": "Please sit here."
+                    },
+                    {
+                        "jp": "まどをあけてください。",
+                        "en": "Please open the window."
+                    }
+                ]
+            },
+            {
+                "id": "u14g.naide",
+                "title": "Please don't: ＿ないでください",
+                "rule": "ない-form ＋ でください = please don't. たべない → たべないでください.",
+                "explain": [
+                    "For please don't, use the ない form (not doing) with でください: たべないでください, みないでください.",
+                    "Soften any request with すみません first; agree to one with はい or もちろん (of course)."
+                ],
+                "examples": [
+                    {
+                        "jp": "たべないでください。",
+                        "en": "Please don't eat it."
+                    },
+                    {
+                        "jp": "みないでください。",
+                        "en": "Please don't look."
+                    },
+                    {
+                        "jp": "ここで、たべないでください。",
+                        "en": "Please don't eat here."
+                    },
+                    {
+                        "jp": "はい、もちろん。",
+                        "en": "Yes, of course."
+                    }
+                ]
+            }
+        ],
+        "drill": [
+            {
+                "q": "Ask them to look at this.",
+                "choices": [
+                    "これをみてください。",
+                    "これをみますください。",
+                    "これがみてください。"
+                ],
+                "answer": 0,
+                "explain": "て-form ＋ ください."
+            },
+            {
+                "q": "Ask them to wait a moment.",
+                "choices": [
+                    "すこしまってください。",
+                    "すこしまちますください。",
+                    "すこしまってです。"
+                ],
+                "answer": 0
+            },
+            {
+                "q": "Ask them to speak slowly.",
+                "choices": [
+                    "ゆっくりはなしてください。",
+                    "ゆっくりはなしますください。",
+                    "ゆっくりはなしてくださいか。"
+                ],
+                "answer": 0
+            },
+            {
+                "q": "Ask them to write it here.",
+                "choices": [
+                    "ここにかいてください。",
+                    "ここにかきてください。",
+                    "ここでかいてです。"
+                ],
+                "answer": 0,
+                "explain": "かきます → かいて."
+            },
+            {
+                "q": "Ask them not to eat it.",
+                "choices": [
+                    "たべないでください。",
+                    "たべませんください。",
+                    "たべてないください。"
+                ],
+                "answer": 0,
+                "explain": "ない ＋ でください = please don't."
+            },
+            {
+                "q": "Ask them to sit down.",
+                "choices": [
+                    "すわってください。",
+                    "すわりてください。",
+                    "すわってます。"
+                ],
+                "answer": 0
+            },
+            {
+                "q": "Someone asks you to wait. Agree.",
+                "say": "すこしまってください。",
+                "choices": [
+                    "はい、もちろん。",
+                    "いいえ、もちろん。",
+                    "はい、まってください。"
+                ],
+                "answer": 0
+            },
+            {
+                "q": "Ask them to teach you Japanese.",
+                "choices": [
+                    "にほんごをおしえてください。",
+                    "にほんごをおしえますください。",
+                    "にほんごがおしえてください。"
+                ],
+                "answer": 0
+            }
+        ],
+        "dialogue": {
+            "scene": "At a doctor's reception desk.",
+            "lines": [
+                {
+                    "who": "a",
+                    "jp": "こんにちは。ここに、なまえをかいてください。",
+                    "en": "Hello. Please write your name here."
+                },
+                {
+                    "who": "b",
+                    "jp": "すみません、ゆっくりはなしてください。",
+                    "en": "Sorry, please speak slowly."
+                },
+                {
+                    "who": "a",
+                    "jp": "あ、はい。ここに、なまえを、かいてください。",
+                    "en": "Oh, sure. Please. Write. Your name. Here."
+                },
+                {
+                    "who": "b",
+                    "jp": "わかりました。",
+                    "en": "Got it.",
+                    "gloss": "わかりました = understood, OK"
+                },
+                {
+                    "who": "a",
+                    "jp": "ありがとうございます。そこにすわって、すこしまってください。",
+                    "en": "Thank you. Please sit there and wait a moment."
+                },
+                {
+                    "who": "b",
+                    "jp": "はい。",
+                    "en": "OK."
+                }
+            ]
+        },
+        "questions": [
+            {
+                "q": "What does the receptionist ask first?",
+                "choices": [
+                    "To write a name",
+                    "To show a card",
+                    "To wait outside"
+                ],
+                "answer": 0
+            },
+            {
+                "q": "What does B ask for?",
+                "choices": [
+                    "Water",
+                    "English",
+                    "Slower speech"
+                ],
+                "answer": 2
+            },
+            {
+                "q": "What should B do at the end?",
+                "choices": [
+                    "Sit and wait",
+                    "Go home",
+                    "Come back tomorrow"
+                ],
+                "answer": 0
+            }
+        ],
+        "speak": [
+            {
+                "say": "ここに、なまえをかいてください。",
+                "situation": "You didn't catch it. Ask them to speak slowly.",
+                "hint": "ゆっくりはなしてください。",
+                "expect": [
+                    "*ゆっくり*"
+                ]
+            },
+            {
+                "say": "なにか、しつもんはありますか。",
+                "situation": "Ask them to teach you how to say \"cat\".",
+                "hint": "「cat」をおしえてください。／「cat」は、にほんごでなんですか。",
+                "expect": [
+                    "*おしえて*",
+                    "*にほんごで*"
+                ]
+            },
+            {
+                "say": "これ、たべてもいいですか。",
+                "situation": "Your friend wants to eat your cake. Ask them not to.",
+                "hint": "たべないでください。",
+                "expect": [
+                    "*ないで*"
+                ]
+            }
+        ]
+    },
+    {
+        "id": "u15",
+        "title": "Invitations",
+        "title_jp": "さそう",
+        "goal": "Invite people, say yes, and say no politely.",
+        "phrases": [
+            {
+                "id": "u15.mimasenka",
+                "jp": "いっしょに、えいがをみませんか。",
+                "en": "Would you like to watch a movie together?",
+                "note": "〜ませんか = won't you…? A soft invitation."
+            },
+            {
+                "id": "u15.ikimashou",
+                "jp": "いきましょう！",
+                "en": "Let's go!",
+                "note": "〜ましょう = let's."
+            },
+            {
+                "id": "u15.iidesune",
+                "jp": "いいですね。",
+                "en": "Sounds good."
+            },
+            {
+                "id": "u15.chotto",
+                "jp": "あしたは、ちょっと…。",
+                "en": "Tomorrow is a bit… (difficult).",
+                "note": "Trailing off after ちょっと is the polite way to say no."
+            },
+            {
+                "id": "u15.itsu",
+                "jp": "いつがいいですか。",
+                "en": "When is good for you?"
+            },
+            {
+                "id": "u15.kondo",
+                "jp": "また、こんど。",
+                "en": "Next time, then."
+            }
+        ],
+        "words": [
+            {
+                "id": "u15w.isshoni",
+                "jp": "いっしょに",
+                "ro": "issho ni",
+                "en": "together"
+            },
+            {
+                "id": "u15w.itsu",
+                "jp": "いつ",
+                "ro": "itsu",
+                "en": "when"
+            },
+            {
+                "id": "u15w.kondo",
+                "jp": "こんど",
+                "ro": "kondo",
+                "en": "next time"
+            },
+            {
+                "id": "u15w.hima",
+                "jp": "ひま",
+                "ro": "hima",
+                "en": "free (not busy)"
+            },
+            {
+                "id": "u15w.isogashii",
+                "jp": "いそがしい",
+                "ro": "isogashii",
+                "en": "busy"
+            },
+            {
+                "id": "u15w.zannen",
+                "jp": "ざんねん",
+                "ro": "zannen",
+                "en": "too bad, a shame"
+            },
+            {
+                "id": "u15w.paatii",
+                "jp": "パーティー",
+                "ro": "paatii",
+                "en": "party"
+            },
+            {
+                "id": "u15w.karaoke",
+                "jp": "カラオケ",
+                "ro": "karaoke",
+                "en": "karaoke"
+            },
+            {
+                "id": "u15w.konsaato",
+                "jp": "コンサート",
+                "ro": "konsaato",
+                "en": "concert"
+            },
+            {
+                "id": "u15w.shokuji",
+                "jp": "しょくじ",
+                "ro": "shokuji",
+                "en": "a meal"
+            },
+            {
+                "id": "u15w.yotei",
+                "jp": "よてい",
+                "ro": "yotei",
+                "en": "plans"
+            },
+            {
+                "id": "u15w.youji",
+                "jp": "ようじ",
+                "ro": "youji",
+                "en": "something to do, an errand"
+            },
+            {
+                "id": "u15w.doudesuka",
+                "jp": "どうですか",
+                "ro": "dou desu ka",
+                "en": "how about…?"
+            },
+            {
+                "id": "u15w.jaa",
+                "jp": "じゃあ",
+                "ro": "jaa",
+                "en": "well then"
+            },
+            {
+                "id": "u15w.mata",
+                "jp": "また",
+                "ro": "mata",
+                "en": "again"
+            },
+            {
+                "id": "u15w.zehi",
+                "jp": "ぜひ",
+                "ro": "zehi",
+                "en": "definitely, I'd love to"
+            }
+        ],
+        "grammar": [
+            {
+                "id": "u15g.masenka",
+                "title": "Won't you…? ＿ませんか",
+                "rule": "ます → ませんか = won't you…? (an invitation). ます → ましょう = let's.",
+                "explain": [
+                    "Asking in the negative is the polite way to invite: えいがをみませんか (won't you watch a movie?). It leaves room to say no.",
+                    "Once you agree, switch to ましょう (let's): いきましょう！"
+                ],
+                "examples": [
+                    {
+                        "jp": "いっしょに、しょくじをしませんか。",
+                        "en": "Shall we have a meal together?"
+                    },
+                    {
+                        "jp": "カラオケにいきませんか。",
+                        "en": "Want to go to karaoke?"
+                    },
+                    {
+                        "jp": "いいですね。いきましょう！",
+                        "en": "Sounds good. Let's go!"
+                    },
+                    {
+                        "jp": "なんじにあいましょうか。",
+                        "en": "What time shall we meet?"
+                    }
+                ]
+            },
+            {
+                "id": "u15g.chotto",
+                "title": "Saying no softly: ちょっと…",
+                "rule": "Day ＋ は、ちょっと… = that day is difficult. No flat no.",
+                "explain": [
+                    "Japanese rarely answers an invitation with a flat いいえ. Name the problem day and trail off: あしたは、ちょっと….",
+                    "Add a reason or a next time to stay friendly: ようじがあります (I have something on), また、こんど."
+                ],
+                "examples": [
+                    {
+                        "jp": "あしたは、ちょっと…。",
+                        "en": "Tomorrow is a bit…"
+                    },
+                    {
+                        "jp": "すみません、ようじがあります。",
+                        "en": "Sorry, I have something on."
+                    },
+                    {
+                        "jp": "ざんねんです。",
+                        "en": "That's a shame."
+                    },
+                    {
+                        "jp": "また、こんど。",
+                        "en": "Next time, then."
+                    }
+                ]
+            }
+        ],
+        "drill": [
+            {
+                "q": "Invite them to karaoke.",
+                "choices": [
+                    "カラオケにいきませんか。",
+                    "カラオケにいきません。",
+                    "カラオケにいきますか、いいえ。"
+                ],
+                "answer": 0,
+                "explain": "ませんか = won't you…?"
+            },
+            {
+                "q": "Agree enthusiastically.",
+                "say": "カラオケにいきませんか。",
+                "choices": [
+                    "いいですね。いきましょう！",
+                    "いいえ、いきましょう。",
+                    "いいですね。いきません。"
+                ],
+                "answer": 0,
+                "explain": "ましょう = let's."
+            },
+            {
+                "q": "You're busy tomorrow. Decline politely.",
+                "say": "あした、えいがをみませんか。",
+                "choices": [
+                    "あしたは、ちょっと…。",
+                    "いいえ、いきません！",
+                    "あしたは、いいですね。"
+                ],
+                "answer": 0,
+                "explain": "Trail off after ちょっと."
+            },
+            {
+                "q": "Ask when is good.",
+                "choices": [
+                    "いつがいいですか。",
+                    "いつですか、いい。",
+                    "なにがいいですか。"
+                ],
+                "answer": 0
+            },
+            {
+                "q": "Suggest next time.",
+                "choices": [
+                    "また、こんど。",
+                    "また、きのう。",
+                    "こんど、ちょっと。"
+                ],
+                "answer": 0
+            },
+            {
+                "q": "Ask: shall we eat together?",
+                "choices": [
+                    "いっしょに、しょくじをしませんか。",
+                    "いっしょに、しょくじをしましたか。",
+                    "いっしょに、しょくじですか。"
+                ],
+                "answer": 0
+            },
+            {
+                "q": "Say you have something on.",
+                "choices": [
+                    "ようじがあります。",
+                    "ようじがいます。",
+                    "ようじをします。"
+                ],
+                "answer": 0,
+                "explain": "Things and events take あります."
+            },
+            {
+                "q": "Your friend can't come. Say that's a shame.",
+                "say": "すみません、いそがしいです。",
+                "choices": [
+                    "ざんねんです。",
+                    "よかったです。",
+                    "いいですね。"
+                ],
+                "answer": 0
+            }
+        ],
+        "dialogue": {
+            "scene": "Three friends making weekend plans.",
+            "lines": [
+                {
+                    "who": "a",
+                    "jp": "しゅうまつ、いっしょにカラオケにいきませんか。",
+                    "en": "Want to go to karaoke together this weekend?"
+                },
+                {
+                    "who": "b",
+                    "jp": "いいですね！いきましょう。",
+                    "en": "Sounds great! Let's go."
+                },
+                {
+                    "who": "c",
+                    "jp": "すみません、どようびは、ちょっと…。",
+                    "en": "Sorry, Saturday is a bit…",
+                    "gloss": "どようび = Saturday"
+                },
+                {
+                    "who": "a",
+                    "jp": "そうですか。にちようびは、どうですか。",
+                    "en": "I see. How about Sunday?",
+                    "gloss": "にちようび = Sunday"
+                },
+                {
+                    "who": "c",
+                    "jp": "にちようびは、ひまです！",
+                    "en": "I'm free on Sunday!"
+                },
+                {
+                    "who": "b",
+                    "jp": "じゃあ、にちようびにいきましょう。",
+                    "en": "Then let's go on Sunday."
+                }
+            ]
+        },
+        "questions": [
+            {
+                "q": "What's the plan?",
+                "choices": [
+                    "A movie",
+                    "Karaoke",
+                    "A meal"
+                ],
+                "answer": 1
+            },
+            {
+                "q": "Why does the third friend hesitate?",
+                "choices": [
+                    "They're sick",
+                    "Saturday doesn't work",
+                    "They don't like karaoke"
+                ],
+                "answer": 1
+            },
+            {
+                "q": "When will they go?",
+                "choices": [
+                    "Saturday",
+                    "Sunday",
+                    "Tomorrow"
+                ],
+                "answer": 1
+            }
+        ],
+        "speak": [
+            {
+                "say": "しゅうまつ、ひまですか。",
+                "situation": "You're free. Invite them to a movie.",
+                "hint": "はい。えいがをみませんか。",
+                "expect": [
+                    "*ませんか*"
+                ]
+            },
+            {
+                "say": "あした、カラオケにいきませんか。",
+                "situation": "You're busy tomorrow. Decline softly.",
+                "hint": "あしたは、ちょっと…。",
+                "expect": [
+                    "*ちょっと*",
+                    "*ようじ*",
+                    "*いそがしい*"
+                ]
+            },
+            {
+                "say": "いっしょに、しょくじをしませんか。",
+                "situation": "Accept: let's do it.",
+                "hint": "いいですね。しましょう！",
+                "expect": [
+                    "*ましょう*",
+                    "いいですね*"
+                ]
+            }
+        ]
+    },
+    {
+        "id": "u16",
+        "title": "Where things are",
+        "title_jp": "どこにありますか",
+        "goal": "Say where things and people are: on, under, in, next to.",
+        "phrases": [
+            {
+                "id": "u16.ue",
+                "jp": "つくえのうえに、ほんがあります。",
+                "en": "There's a book on the desk.",
+                "note": "Place ＋ に ＋ thing ＋ があります."
+            },
+            {
+                "id": "u16.shita",
+                "jp": "いすのしたに、ねこがいます。",
+                "en": "There's a cat under the chair."
+            },
+            {
+                "id": "u16.kagi",
+                "jp": "かぎは、どこにありますか。",
+                "en": "Where are the keys?"
+            },
+            {
+                "id": "u16.naka",
+                "jp": "かばんのなかです。",
+                "en": "In the bag."
+            },
+            {
+                "id": "u16.mae",
+                "jp": "えきのまえで、まっています。",
+                "en": "I'm waiting in front of the station.",
+                "note": "まっています = I'm waiting."
+            },
+            {
+                "id": "u16.tonari",
+                "jp": "ぎんこうのとなりです。",
+                "en": "It's next to the bank."
+            }
+        ],
+        "words": [
+            {
+                "id": "u16w.ue",
+                "jp": "うえ",
+                "ro": "ue",
+                "en": "on, above"
+            },
+            {
+                "id": "u16w.shita",
+                "jp": "した",
+                "ro": "shita",
+                "en": "under, below"
+            },
+            {
+                "id": "u16w.naka",
+                "jp": "なか",
+                "ro": "naka",
+                "en": "inside"
+            },
+            {
+                "id": "u16w.soto",
+                "jp": "そと",
+                "ro": "soto",
+                "en": "outside"
+            },
+            {
+                "id": "u16w.mae",
+                "jp": "まえ",
+                "ro": "mae",
+                "en": "in front"
+            },
+            {
+                "id": "u16w.ushiro",
+                "jp": "うしろ",
+                "ro": "ushiro",
+                "en": "behind"
+            },
+            {
+                "id": "u16w.tonari",
+                "jp": "となり",
+                "ro": "tonari",
+                "en": "next to"
+            },
+            {
+                "id": "u16w.chikaku",
+                "jp": "ちかく",
+                "ro": "chikaku",
+                "en": "near"
+            },
+            {
+                "id": "u16w.tsukue",
+                "jp": "つくえ",
+                "ro": "tsukue",
+                "en": "desk"
+            },
+            {
+                "id": "u16w.isu",
+                "jp": "いす",
+                "ro": "isu",
+                "en": "chair"
+            },
+            {
+                "id": "u16w.kagi",
+                "jp": "かぎ",
+                "ro": "kagi",
+                "en": "key"
+            },
+            {
+                "id": "u16w.heya",
+                "jp": "へや",
+                "ro": "heya",
+                "en": "room"
+            },
+            {
+                "id": "u16w.beddo",
+                "jp": "ベッド",
+                "ro": "beddo",
+                "en": "bed"
+            },
+            {
+                "id": "u16w.reizouko",
+                "jp": "れいぞうこ",
+                "ro": "reizouko",
+                "en": "fridge"
+            },
+            {
+                "id": "u16w.hako",
+                "jp": "はこ",
+                "ro": "hako",
+                "en": "box"
+            },
+            {
+                "id": "u16w.saifu",
+                "jp": "さいふ",
+                "ro": "saifu",
+                "en": "wallet"
+            }
+        ],
+        "grammar": [
+            {
+                "id": "u16g.ni",
+                "title": "Place ＋ に ＋ ＿があります / います",
+                "rule": "Place に thing が あります (things) / います (people, animals).",
+                "explain": [
+                    "To say where something is, start with the place and に: つくえのうえに、ほんがあります。",
+                    "Same split as unit 12: あります for things, います for people and animals."
+                ],
+                "examples": [
+                    {
+                        "jp": "つくえのうえに、ほんがあります。",
+                        "en": "There's a book on the desk."
+                    },
+                    {
+                        "jp": "いすのしたに、ねこがいます。",
+                        "en": "There's a cat under the chair."
+                    },
+                    {
+                        "jp": "へやに、ともだちがいます。",
+                        "en": "My friend is in the room."
+                    },
+                    {
+                        "jp": "れいぞうこに、ケーキがあります。",
+                        "en": "There's cake in the fridge."
+                    }
+                ]
+            },
+            {
+                "id": "u16g.position",
+                "title": "Position words with の",
+                "rule": "Thing ＋ の ＋ うえ / した / なか / まえ / うしろ / となり.",
+                "explain": [
+                    "Position words come after the reference thing and の: つくえのうえ (on the desk), えきのまえ (in front of the station).",
+                    "Ask with どこにありますか or どこにいますか; a short answer is enough: かばんのなかです。"
+                ],
+                "examples": [
+                    {
+                        "jp": "かばんのなかです。",
+                        "en": "It's in the bag."
+                    },
+                    {
+                        "jp": "えきのまえです。",
+                        "en": "It's in front of the station."
+                    },
+                    {
+                        "jp": "ぎんこうのとなりです。",
+                        "en": "It's next to the bank."
+                    },
+                    {
+                        "jp": "ドアのうしろに、いぬがいます。",
+                        "en": "There's a dog behind the door."
+                    }
+                ]
+            }
+        ],
+        "drill": [
+            {
+                "q": "Say the book is on the desk.",
+                "choices": [
+                    "つくえのうえに、ほんがあります。",
+                    "つくえのうえに、ほんがいます。",
+                    "ほんのうえに、つくえがあります。"
+                ],
+                "answer": 0,
+                "explain": "Things: あります."
+            },
+            {
+                "q": "Say the cat is under the chair.",
+                "choices": [
+                    "いすのしたに、ねこがいます。",
+                    "いすのしたに、ねこがあります。",
+                    "ねこのしたに、いすがいます。"
+                ],
+                "answer": 0,
+                "explain": "Animals: います."
+            },
+            {
+                "q": "Ask where the keys are.",
+                "choices": [
+                    "かぎは、どこにありますか。",
+                    "かぎは、どこにいますか。",
+                    "かぎに、どこがありますか。"
+                ],
+                "answer": 0
+            },
+            {
+                "q": "The wallet is in the bag.",
+                "say": "さいふは、どこですか。",
+                "choices": [
+                    "かばんのなかです。",
+                    "かばんのうえです。",
+                    "かばんのそとです。"
+                ],
+                "answer": 0
+            },
+            {
+                "q": "Say it's next to the bank.",
+                "choices": [
+                    "ぎんこうのとなりです。",
+                    "ぎんこうのまえです。",
+                    "ぎんこうのしたです。"
+                ],
+                "answer": 0,
+                "explain": "となり = next to."
+            },
+            {
+                "q": "Say you're waiting in front of the station.",
+                "choices": [
+                    "えきのまえで、まっています。",
+                    "えきのうしろで、まっています。",
+                    "えきのなかで、まっています。"
+                ],
+                "answer": 0
+            },
+            {
+                "q": "Say your friend is in the room.",
+                "choices": [
+                    "へやに、ともだちがいます。",
+                    "へやに、ともだちがあります。",
+                    "ともだちに、へやがいます。"
+                ],
+                "answer": 0
+            },
+            {
+                "q": "Say the dog is behind the door.",
+                "choices": [
+                    "ドアのうしろに、いぬがいます。",
+                    "ドアのまえに、いぬがいます。",
+                    "いぬのうしろに、ドアがいます。"
+                ],
+                "answer": 0
+            }
+        ],
+        "dialogue": {
+            "scene": "Getting ready to leave; the keys are missing.",
+            "lines": [
+                {
+                    "who": "a",
+                    "jp": "あれ？かぎは、どこですか。",
+                    "en": "Huh? Where are the keys?",
+                    "gloss": "あれ？ = huh?"
+                },
+                {
+                    "who": "b",
+                    "jp": "つくえのうえに、ありませんか。",
+                    "en": "Aren't they on the desk?"
+                },
+                {
+                    "who": "a",
+                    "jp": "ありません。",
+                    "en": "They're not there."
+                },
+                {
+                    "who": "b",
+                    "jp": "じゃあ、かばんのなかは？",
+                    "en": "Then what about in your bag?"
+                },
+                {
+                    "who": "a",
+                    "jp": "あ、ありました！",
+                    "en": "Oh, here they are!",
+                    "gloss": "ありました = (oh,) there it is"
+                },
+                {
+                    "who": "b",
+                    "jp": "よかった。じゃあ、いきましょう。",
+                    "en": "Good. Let's go, then."
+                }
+            ]
+        },
+        "questions": [
+            {
+                "q": "What is missing?",
+                "choices": [
+                    "The wallet",
+                    "The keys",
+                    "The bag"
+                ],
+                "answer": 1
+            },
+            {
+                "q": "Where were they in the end?",
+                "choices": [
+                    "On the desk",
+                    "Under the chair",
+                    "In the bag"
+                ],
+                "answer": 2
+            }
+        ],
+        "speak": [
+            {
+                "say": "かぎは、どこですか。",
+                "situation": "The keys are on the desk. Tell them.",
+                "hint": "つくえのうえです。",
+                "expect": [
+                    "*うえ*"
+                ]
+            },
+            {
+                "say": "ねこは、どこにいますか。",
+                "situation": "The cat is under the bed. Say so.",
+                "hint": "ベッドのしたにいます。",
+                "expect": [
+                    "*した*"
+                ]
+            },
+            {
+                "say": "いま、どこですか。",
+                "situation": "You're in front of the station. Say you're waiting there.",
+                "hint": "えきのまえで、まっています。",
+                "expect": [
+                    "*まえ*"
+                ]
+            }
+        ]
+    },
+    {
+        "id": "u17",
+        "title": "My day",
+        "title_jp": "いちにち",
+        "goal": "Describe your day: when you get up, work, and go to bed.",
+        "phrases": [
+            {
+                "id": "u17.okimasu",
+                "jp": "まいあさ、しちじにおきます。",
+                "en": "I get up at seven every morning.",
+                "note": "Clock time ＋ に = at."
+            },
+            {
+                "id": "u17.karamade",
+                "jp": "くじからごじまで、はたらきます。",
+                "en": "I work from nine to five.",
+                "note": "から = from, まで = until."
+            },
+            {
+                "id": "u17.nemasu",
+                "jp": "なんじにねますか。",
+                "en": "What time do you go to bed?"
+            },
+            {
+                "id": "u17.sorekara",
+                "jp": "それから、あさごはんをたべます。",
+                "en": "Then I eat breakfast.",
+                "note": "それから = and then."
+            },
+            {
+                "id": "u17.demasu",
+                "jp": "はちじに、うちをでます。",
+                "en": "I leave home at eight.",
+                "note": "＿をでます = leave ＿."
+            },
+            {
+                "id": "u17.tokidoki",
+                "jp": "ときどき、ジムにいきます。",
+                "en": "Sometimes I go to the gym.",
+                "note": "ときどき = sometimes."
+            }
+        ],
+        "words": [
+            {
+                "id": "u17w.hatarakimasu",
+                "jp": "はたらきます",
+                "ro": "hatarakimasu",
+                "en": "work"
+            },
+            {
+                "id": "u17w.demasu",
+                "jp": "でます",
+                "ro": "demasu",
+                "en": "leave, go out"
+            },
+            {
+                "id": "u17w.shawaa",
+                "jp": "シャワー",
+                "ro": "shawaa",
+                "en": "shower"
+            },
+            {
+                "id": "u17w.abimasu",
+                "jp": "あびます",
+                "ro": "abimasu",
+                "en": "take (a shower)"
+            },
+            {
+                "id": "u17w.sorekara",
+                "jp": "それから",
+                "ro": "sorekara",
+                "en": "and then"
+            },
+            {
+                "id": "u17w.tokidoki",
+                "jp": "ときどき",
+                "ro": "tokidoki",
+                "en": "sometimes"
+            },
+            {
+                "id": "u17w.itsumo",
+                "jp": "いつも",
+                "ro": "itsumo",
+                "en": "always"
+            },
+            {
+                "id": "u17w.yoku",
+                "jp": "よく",
+                "ro": "yoku",
+                "en": "often"
+            },
+            {
+                "id": "u17w.zenzen",
+                "jp": "ぜんぜん",
+                "ro": "zenzen",
+                "en": "not at all (with a negative)"
+            },
+            {
+                "id": "u17w.jimu",
+                "jp": "ジム",
+                "ro": "jimu",
+                "en": "gym"
+            },
+            {
+                "id": "u17w.goji",
+                "jp": "ごじ",
+                "ro": "goji",
+                "en": "five o'clock"
+            },
+            {
+                "id": "u17w.hachiji",
+                "jp": "はちじ",
+                "ro": "hachiji",
+                "en": "eight o'clock"
+            },
+            {
+                "id": "u17w.juuji",
+                "jp": "じゅうじ",
+                "ro": "juuji",
+                "en": "ten o'clock"
+            },
+            {
+                "id": "u17w.made",
+                "jp": "まで",
+                "ro": "made",
+                "en": "until"
+            },
+            {
+                "id": "u17w.maiban",
+                "jp": "まいばん",
+                "ro": "maiban",
+                "en": "every night"
+            },
+            {
+                "id": "u17w.osoku",
+                "jp": "おそく",
+                "ro": "osoku",
+                "en": "late"
+            }
+        ],
+        "grammar": [
+            {
+                "id": "u17g.ni",
+                "title": "At a time: ＿じに",
+                "rule": "Clock time ＋ に ＋ verb = at that time. まいあさ, きょう, あした take no に.",
+                "explain": [
+                    "Put に after a clock time: しちじにおきます (I get up at 7). Words like まいあさ, きょう and あした don't take に.",
+                    "Ask with なんじに: なんじにねますか。"
+                ],
+                "examples": [
+                    {
+                        "jp": "しちじにおきます。",
+                        "en": "I get up at seven."
+                    },
+                    {
+                        "jp": "じゅうじにねます。",
+                        "en": "I go to bed at ten."
+                    },
+                    {
+                        "jp": "なんじにねますか。",
+                        "en": "What time do you go to bed?"
+                    },
+                    {
+                        "jp": "まいあさ、はちじにうちをでます。",
+                        "en": "I leave home at eight every morning."
+                    }
+                ]
+            },
+            {
+                "id": "u17g.karamade",
+                "title": "From… until…: から まで, and how often",
+                "rule": "A から B まで = from A until B. いつも, よく, ときどき, ぜんぜん say how often.",
+                "explain": [
+                    "から means from and まで means until: くじからごじまで (from 9 to 5). It works for places too.",
+                    "How-often words go near the front: いつも (always), よく (often), ときどき (sometimes), ぜんぜん with a negative (never)."
+                ],
+                "examples": [
+                    {
+                        "jp": "くじからごじまで、はたらきます。",
+                        "en": "I work from nine to five."
+                    },
+                    {
+                        "jp": "いつも、しちじにおきます。",
+                        "en": "I always get up at seven."
+                    },
+                    {
+                        "jp": "ときどき、ジムにいきます。",
+                        "en": "Sometimes I go to the gym."
+                    },
+                    {
+                        "jp": "ぜんぜん、テレビをみません。",
+                        "en": "I never watch TV."
+                    }
+                ]
+            }
+        ],
+        "drill": [
+            {
+                "q": "Say you get up at seven.",
+                "choices": [
+                    "しちじにおきます。",
+                    "しちじをおきます。",
+                    "しちじがおきます。"
+                ],
+                "answer": 0,
+                "explain": "Clock time ＋ に."
+            },
+            {
+                "q": "Ask what time they go to bed.",
+                "choices": [
+                    "なんじにねますか。",
+                    "なんじがねますか。",
+                    "なんじですか、ねます。"
+                ],
+                "answer": 0
+            },
+            {
+                "q": "Say you work from nine to five.",
+                "choices": [
+                    "くじからごじまで、はたらきます。",
+                    "くじまでごじから、はたらきます。",
+                    "くじにごじに、はたらきます。"
+                ],
+                "answer": 0,
+                "explain": "から = from, まで = until."
+            },
+            {
+                "q": "Say you leave home at eight.",
+                "choices": [
+                    "はちじに、うちをでます。",
+                    "はちじに、うちにでます。",
+                    "はちじを、うちをでます。"
+                ],
+                "answer": 0,
+                "explain": "＿をでます = leave ＿."
+            },
+            {
+                "q": "Say you sometimes go to the gym.",
+                "choices": [
+                    "ときどき、ジムにいきます。",
+                    "いつも、ジムにいきません。",
+                    "ときどき、ジムをいきます。"
+                ],
+                "answer": 0
+            },
+            {
+                "q": "Say you never watch TV.",
+                "choices": [
+                    "ぜんぜん、テレビをみません。",
+                    "ぜんぜん、テレビをみます。",
+                    "いつも、テレビをみません。"
+                ],
+                "answer": 0,
+                "explain": "ぜんぜん goes with a negative."
+            },
+            {
+                "q": "Say you always get up at six.",
+                "choices": [
+                    "いつも、ろくじにおきます。",
+                    "いつも、ろくじをおきます。",
+                    "いつもに、ろくじおきます。"
+                ],
+                "answer": 0
+            },
+            {
+                "q": "Say: then I eat breakfast.",
+                "choices": [
+                    "それから、あさごはんをたべます。",
+                    "それから、あさごはんがたべます。",
+                    "あさごはんを、それからです。"
+                ],
+                "answer": 0
+            }
+        ],
+        "dialogue": {
+            "scene": "Two coworkers, Ken and Mika, compare their mornings.",
+            "lines": [
+                {
+                    "who": "a",
+                    "jp": "まいあさ、なんじにおきますか。",
+                    "en": "What time do you get up every morning?"
+                },
+                {
+                    "who": "b",
+                    "jp": "ろくじにおきます。それから、ジムにいきます。",
+                    "en": "I get up at six. Then I go to the gym."
+                },
+                {
+                    "who": "a",
+                    "jp": "え、まいにちですか。",
+                    "en": "What, every day?"
+                },
+                {
+                    "who": "b",
+                    "jp": "いいえ、ときどきです。ケンさんは？",
+                    "en": "No, sometimes. What about you, Ken?"
+                },
+                {
+                    "who": "a",
+                    "jp": "わたしは、はちじにおきます。いつも、おそくねますから。",
+                    "en": "I get up at eight. I always go to bed late.",
+                    "gloss": "から = because"
+                },
+                {
+                    "who": "b",
+                    "jp": "ああ、なるほど。",
+                    "en": "Ah, I see.",
+                    "gloss": "なるほど = I see, that makes sense"
+                }
+            ]
+        },
+        "questions": [
+            {
+                "q": "What time does Mika get up?",
+                "choices": [
+                    "Seven",
+                    "Eight",
+                    "Six"
+                ],
+                "answer": 2
+            },
+            {
+                "q": "Does Mika go to the gym every day?",
+                "choices": [
+                    "Yes, every day",
+                    "No, sometimes",
+                    "Never"
+                ],
+                "answer": 1
+            },
+            {
+                "q": "Why does Ken get up late?",
+                "choices": [
+                    "He works at night",
+                    "He hates mornings",
+                    "He always goes to bed late"
+                ],
+                "answer": 2
+            }
+        ],
+        "speak": [
+            {
+                "say": "まいあさ、なんじにおきますか。",
+                "situation": "Say what time you get up.",
+                "hint": "＿じにおきます。",
+                "expect": [
+                    "*じにおきます*",
+                    "*おきます*"
+                ]
+            },
+            {
+                "say": "なんじから、なんじまで、はたらきますか。",
+                "situation": "Say your work or school hours.",
+                "hint": "＿じから＿じまでです。",
+                "expect": [
+                    "*から*まで*"
+                ]
+            },
+            {
+                "say": "よく、ジムにいきますか。",
+                "situation": "Say how often you go.",
+                "hint": "ときどきいきます。／ぜんぜんいきません。",
+                "expect": [
+                    "*いき*"
+                ]
+            }
+        ]
+    },
+    {
+        "id": "u18",
+        "title": "Getting around",
+        "title_jp": "のりもの",
+        "goal": "Say how you travel and how long it takes, and ask the way.",
+        "phrases": [
+            {
+                "id": "u18.densha",
+                "jp": "でんしゃで、がっこうにいきます。",
+                "en": "I go to school by train.",
+                "note": "Vehicle ＋ で = by."
+            },
+            {
+                "id": "u18.kakarimasu",
+                "jp": "どのくらい、かかりますか。",
+                "en": "How long does it take?"
+            },
+            {
+                "id": "u18.juppun",
+                "jp": "じゅっぷんぐらいです。",
+                "en": "About ten minutes.",
+                "note": "ぐらい = about."
+            },
+            {
+                "id": "u18.massugu",
+                "jp": "このみちを、まっすぐです。",
+                "en": "It's straight along this road."
+            },
+            {
+                "id": "u18.noriba",
+                "jp": "バスのりばは、どこですか。",
+                "en": "Where's the bus stop?",
+                "note": "のりば = place to get on."
+            },
+            {
+                "id": "u18.aruite",
+                "jp": "あるいて、いきます。",
+                "en": "I'll walk.",
+                "note": "あるいて = on foot."
+            }
+        ],
+        "words": [
+            {
+                "id": "u18w.densha",
+                "jp": "でんしゃ",
+                "ro": "densha",
+                "en": "train"
+            },
+            {
+                "id": "u18w.basu",
+                "jp": "バス",
+                "ro": "basu",
+                "en": "bus"
+            },
+            {
+                "id": "u18w.takushii",
+                "jp": "タクシー",
+                "ro": "takushii",
+                "en": "taxi"
+            },
+            {
+                "id": "u18w.jitensha",
+                "jp": "じてんしゃ",
+                "ro": "jitensha",
+                "en": "bicycle"
+            },
+            {
+                "id": "u18w.hikouki",
+                "jp": "ひこうき",
+                "ro": "hikouki",
+                "en": "airplane"
+            },
+            {
+                "id": "u18w.chikatetsu",
+                "jp": "ちかてつ",
+                "ro": "chikatetsu",
+                "en": "subway"
+            },
+            {
+                "id": "u18w.aruite",
+                "jp": "あるいて",
+                "ro": "aruite",
+                "en": "on foot"
+            },
+            {
+                "id": "u18w.michi",
+                "jp": "みち",
+                "ro": "michi",
+                "en": "road, way"
+            },
+            {
+                "id": "u18w.massugu",
+                "jp": "まっすぐ",
+                "ro": "massugu",
+                "en": "straight ahead"
+            },
+            {
+                "id": "u18w.magarimasu",
+                "jp": "まがります",
+                "ro": "magarimasu",
+                "en": "turn"
+            },
+            {
+                "id": "u18w.kakarimasu",
+                "jp": "かかります",
+                "ro": "kakarimasu",
+                "en": "take (time)"
+            },
+            {
+                "id": "u18w.gofun",
+                "jp": "ごふん",
+                "ro": "gofun",
+                "en": "five minutes"
+            },
+            {
+                "id": "u18w.juppun",
+                "jp": "じゅっぷん",
+                "ro": "juppun",
+                "en": "ten minutes"
+            },
+            {
+                "id": "u18w.ichijikan",
+                "jp": "いちじかん",
+                "ro": "ichijikan",
+                "en": "one hour"
+            },
+            {
+                "id": "u18w.gurai",
+                "jp": "ぐらい",
+                "ro": "gurai",
+                "en": "about"
+            },
+            {
+                "id": "u18w.tooi",
+                "jp": "とおい",
+                "ro": "tooi",
+                "en": "far"
+            }
+        ],
+        "grammar": [
+            {
+                "id": "u18g.de",
+                "title": "By: ＿で",
+                "rule": "Vehicle ＋ で = by (vehicle). On foot is あるいて, with no で.",
+                "explain": [
+                    "で marks how you do something: でんしゃでいきます (go by train), バスでかえります (go home by bus).",
+                    "Walking is the exception: あるいていきます."
+                ],
+                "examples": [
+                    {
+                        "jp": "でんしゃで、がっこうにいきます。",
+                        "en": "I go to school by train."
+                    },
+                    {
+                        "jp": "バスで、かえります。",
+                        "en": "I go home by bus."
+                    },
+                    {
+                        "jp": "ひこうきで、にほんにいきます。",
+                        "en": "I'll go to Japan by plane."
+                    },
+                    {
+                        "jp": "あるいて、いきます。",
+                        "en": "I'll walk."
+                    }
+                ]
+            },
+            {
+                "id": "u18g.kakaru",
+                "title": "How long: どのくらい かかりますか",
+                "rule": "どのくらいかかりますか = how long does it take? Answer: time ＋ ぐらいです (about).",
+                "explain": [
+                    "かかります means it takes (time or money). Ask with どのくらい, answer with a length of time and ぐらい (about).",
+                    "Minutes: いっぷん, にふん, さんぷん, ごふん, じゅっぷん. Hours: いちじかん, にじかん. いちじかん is one hour; いちじ is one o'clock."
+                ],
+                "examples": [
+                    {
+                        "jp": "どのくらい、かかりますか。",
+                        "en": "How long does it take?"
+                    },
+                    {
+                        "jp": "じゅっぷんぐらいです。",
+                        "en": "About ten minutes."
+                    },
+                    {
+                        "jp": "でんしゃで、いちじかんぐらいかかります。",
+                        "en": "It takes about an hour by train."
+                    },
+                    {
+                        "jp": "ごふんぐらいです。",
+                        "en": "About five minutes."
+                    }
+                ]
+            }
+        ],
+        "drill": [
+            {
+                "q": "Say you go to school by bus.",
+                "choices": [
+                    "バスで、がっこうにいきます。",
+                    "バスに、がっこうでいきます。",
+                    "バスを、がっこうにいきます。"
+                ],
+                "answer": 0,
+                "explain": "で = by."
+            },
+            {
+                "q": "Say you'll walk.",
+                "choices": [
+                    "あるいて、いきます。",
+                    "あるいてで、いきます。",
+                    "あるきで、いきます。"
+                ],
+                "answer": 0,
+                "explain": "On foot: あるいて, no で."
+            },
+            {
+                "q": "Ask how long it takes.",
+                "choices": [
+                    "どのくらい、かかりますか。",
+                    "どのくらい、ありますか。",
+                    "いくら、かかりますか。"
+                ],
+                "answer": 0,
+                "explain": "いくら would ask how much money."
+            },
+            {
+                "q": "Say about ten minutes.",
+                "say": "どのくらい、かかりますか。",
+                "choices": [
+                    "じゅっぷんぐらいです。",
+                    "じゅうふんぐらいです。",
+                    "じゅっぷんまでです。"
+                ],
+                "answer": 0,
+                "explain": "Ten minutes is じゅっぷん."
+            },
+            {
+                "q": "Say it takes about an hour by train.",
+                "choices": [
+                    "でんしゃで、いちじかんぐらいかかります。",
+                    "でんしゃに、いちじかんぐらいかかります。",
+                    "でんしゃで、いちじぐらいかかります。"
+                ],
+                "answer": 0,
+                "explain": "いちじかん = one hour; いちじ = one o'clock."
+            },
+            {
+                "q": "Ask where the bus stop is.",
+                "choices": [
+                    "バスのりばは、どこですか。",
+                    "バスのりばに、どこですか。",
+                    "バスは、のりばですか。"
+                ],
+                "answer": 0
+            },
+            {
+                "q": "Tell them it's straight ahead.",
+                "say": "えきは、どっちですか。",
+                "choices": [
+                    "まっすぐです。",
+                    "みぎです。",
+                    "とおいです。"
+                ],
+                "answer": 0
+            },
+            {
+                "q": "Say you'll go to Japan by plane.",
+                "choices": [
+                    "ひこうきで、にほんにいきます。",
+                    "ひこうきに、にほんでいきます。",
+                    "ひこうきを、にほんにいきます。"
+                ],
+                "answer": 0
+            }
+        ],
+        "dialogue": {
+            "scene": "Asking a stranger the way to the station.",
+            "lines": [
+                {
+                    "who": "a",
+                    "jp": "すみません、えきは、とおいですか。",
+                    "en": "Excuse me, is the station far?"
+                },
+                {
+                    "who": "b",
+                    "jp": "いいえ、ちかいですよ。このみちを、まっすぐです。",
+                    "en": "No, it's close. Straight along this road.",
+                    "gloss": "ちかい = near"
+                },
+                {
+                    "who": "a",
+                    "jp": "あるいて、どのくらいかかりますか。",
+                    "en": "How long does it take on foot?"
+                },
+                {
+                    "who": "b",
+                    "jp": "ごふんぐらいです。",
+                    "en": "About five minutes."
+                },
+                {
+                    "who": "a",
+                    "jp": "ありがとうございます。",
+                    "en": "Thank you."
+                },
+                {
+                    "who": "b",
+                    "jp": "いいえ。きをつけて。",
+                    "en": "Not at all. Take care.",
+                    "gloss": "きをつけて = take care"
+                }
+            ]
+        },
+        "questions": [
+            {
+                "q": "Is the station far?",
+                "choices": [
+                    "No, it's close",
+                    "Yes, very far",
+                    "Only by train"
+                ],
+                "answer": 0
+            },
+            {
+                "q": "How long is the walk?",
+                "choices": [
+                    "About ten minutes",
+                    "About five minutes",
+                    "About an hour"
+                ],
+                "answer": 1
+            }
+        ],
+        "speak": [
+            {
+                "say": "がっこうに、なんでいきますか。",
+                "situation": "Say how you get to school or work.",
+                "hint": "＿でいきます。／あるいていきます。",
+                "expect": [
+                    "*でいきます*",
+                    "*あるいて*",
+                    "*で*"
+                ]
+            },
+            {
+                "say": "うちから、どのくらいかかりますか。",
+                "situation": "Say how long it takes from your home.",
+                "hint": "＿ぐらいです。／じゅっぷんぐらいです。",
+                "expect": [
+                    "*ぐらい*",
+                    "*くらい*"
+                ]
+            },
+            {
+                "say": "どうしましたか。",
+                "situation": "You're lost. Ask where the bus stop is.",
+                "hint": "バスのりばは、どこですか。",
+                "expect": [
+                    "*どこ*"
+                ]
+            }
+        ]
+    },
+    {
+        "id": "u19",
+        "title": "Weather",
+        "title_jp": "てんき",
+        "goal": "Talk about the weather and the seasons.",
+        "phrases": [
+            {
+                "id": "u19.iitenki",
+                "jp": "いいてんきですね。",
+                "en": "Nice weather, isn't it.",
+                "note": "ね invites agreement. The classic small-talk opener."
+            },
+            {
+                "id": "u19.samui",
+                "jp": "きょうは、さむいですね。",
+                "en": "It's cold today, isn't it."
+            },
+            {
+                "id": "u19.ame",
+                "jp": "あしたは、あめです。",
+                "en": "It'll rain tomorrow."
+            },
+            {
+                "id": "u19.deshita",
+                "jp": "きのうは、あめでした。",
+                "en": "It rained yesterday.",
+                "note": "Noun ＋ でした = was."
+            },
+            {
+                "id": "u19.kisetsu",
+                "jp": "どのきせつが、すきですか。",
+                "en": "Which season do you like?"
+            },
+            {
+                "id": "u19.ichiban",
+                "jp": "はるが、いちばんすきです。",
+                "en": "I like spring best.",
+                "note": "いちばん = most, best."
+            }
+        ],
+        "words": [
+            {
+                "id": "u19w.tenki",
+                "jp": "てんき",
+                "ro": "tenki",
+                "en": "weather"
+            },
+            {
+                "id": "u19w.hare",
+                "jp": "はれ",
+                "ro": "hare",
+                "en": "sunny"
+            },
+            {
+                "id": "u19w.ame",
+                "jp": "あめ",
+                "ro": "ame",
+                "en": "rain"
+            },
+            {
+                "id": "u19w.yuki",
+                "jp": "ゆき",
+                "ro": "yuki",
+                "en": "snow"
+            },
+            {
+                "id": "u19w.kumori",
+                "jp": "くもり",
+                "ro": "kumori",
+                "en": "cloudy"
+            },
+            {
+                "id": "u19w.kaze",
+                "jp": "かぜ",
+                "ro": "kaze",
+                "en": "wind"
+            },
+            {
+                "id": "u19w.atsui",
+                "jp": "あつい",
+                "ro": "atsui",
+                "en": "hot"
+            },
+            {
+                "id": "u19w.samui",
+                "jp": "さむい",
+                "ro": "samui",
+                "en": "cold"
+            },
+            {
+                "id": "u19w.atatakai",
+                "jp": "あたたかい",
+                "ro": "atatakai",
+                "en": "warm"
+            },
+            {
+                "id": "u19w.suzushii",
+                "jp": "すずしい",
+                "ro": "suzushii",
+                "en": "cool"
+            },
+            {
+                "id": "u19w.haru",
+                "jp": "はる",
+                "ro": "haru",
+                "en": "spring"
+            },
+            {
+                "id": "u19w.natsu",
+                "jp": "なつ",
+                "ro": "natsu",
+                "en": "summer"
+            },
+            {
+                "id": "u19w.aki",
+                "jp": "あき",
+                "ro": "aki",
+                "en": "autumn"
+            },
+            {
+                "id": "u19w.fuyu",
+                "jp": "ふゆ",
+                "ro": "fuyu",
+                "en": "winter"
+            },
+            {
+                "id": "u19w.kisetsu",
+                "jp": "きせつ",
+                "ro": "kisetsu",
+                "en": "season"
+            },
+            {
+                "id": "u19w.ichiban",
+                "jp": "いちばん",
+                "ro": "ichiban",
+                "en": "most, best"
+            }
+        ],
+        "grammar": [
+            {
+                "id": "u19g.deshita",
+                "title": "Was: noun ＋ でした",
+                "rule": "Noun ＋ でした = was. Noun ＋ じゃなかったです = wasn't.",
+                "explain": [
+                    "Nouns use でした for the past: あめでした (it was rainy). Describing words still use かった: さむかったです (unit 10).",
+                    "Not: あめじゃなかったです (it wasn't rainy)."
+                ],
+                "examples": [
+                    {
+                        "jp": "きのうは、あめでした。",
+                        "en": "It rained yesterday."
+                    },
+                    {
+                        "jp": "やすみでした。",
+                        "en": "It was a day off."
+                    },
+                    {
+                        "jp": "いいてんきでした。",
+                        "en": "The weather was nice."
+                    },
+                    {
+                        "jp": "ゆきじゃなかったです。",
+                        "en": "It didn't snow."
+                    }
+                ]
+            },
+            {
+                "id": "u19g.neyo",
+                "title": "ね and よ",
+                "rule": "ね = …isn't it? (a shared feeling). よ = …you know (news for them).",
+                "explain": [
+                    "End with ね when you expect the other person agrees: さむいですね (cold, isn't it).",
+                    "End with よ when you're telling them something they don't know: あしたは、あめですよ (it's going to rain tomorrow, you know)."
+                ],
+                "examples": [
+                    {
+                        "jp": "いいてんきですね。",
+                        "en": "Nice weather, isn't it."
+                    },
+                    {
+                        "jp": "あついですね。",
+                        "en": "Hot, isn't it."
+                    },
+                    {
+                        "jp": "あしたは、あめですよ。",
+                        "en": "It's going to rain tomorrow, you know."
+                    },
+                    {
+                        "jp": "このラーメン、おいしいですよ。",
+                        "en": "This ramen is good, you know."
+                    }
+                ]
+            }
+        ],
+        "drill": [
+            {
+                "q": "Say it rained yesterday.",
+                "choices": [
+                    "きのうは、あめでした。",
+                    "きのうは、あめかったです。",
+                    "きのうは、あめです。"
+                ],
+                "answer": 0,
+                "explain": "Nouns: でした."
+            },
+            {
+                "q": "Say it was cold yesterday.",
+                "choices": [
+                    "きのうは、さむかったです。",
+                    "きのうは、さむいでした。",
+                    "きのうは、さむでした。"
+                ],
+                "answer": 0,
+                "explain": "い words: かったです."
+            },
+            {
+                "q": "You both feel the heat. Say it's hot.",
+                "choices": [
+                    "あついですね。",
+                    "あついですよ。",
+                    "あついですか。"
+                ],
+                "answer": 0,
+                "explain": "ね = a shared feeling."
+            },
+            {
+                "q": "Your friend doesn't know it'll rain tomorrow. Tell them.",
+                "choices": [
+                    "あしたは、あめですよ。",
+                    "あしたは、あめですね。",
+                    "あしたは、あめでした。"
+                ],
+                "answer": 0,
+                "explain": "よ = telling them something new."
+            },
+            {
+                "q": "Say you like winter best.",
+                "choices": [
+                    "ふゆが、いちばんすきです。",
+                    "ふゆを、いちばんすきです。",
+                    "ふゆは、いちばんですか。"
+                ],
+                "answer": 0
+            },
+            {
+                "q": "Ask which season they like.",
+                "choices": [
+                    "どのきせつが、すきですか。",
+                    "どのきせつを、すきですか。",
+                    "きせつは、どこですか。"
+                ],
+                "answer": 0
+            },
+            {
+                "q": "Say it didn't snow.",
+                "choices": [
+                    "ゆきじゃなかったです。",
+                    "ゆきくなかったです。",
+                    "ゆきでしたじゃない。"
+                ],
+                "answer": 0,
+                "explain": "Nouns: じゃなかったです."
+            },
+            {
+                "q": "It's a lovely day. Start some small talk.",
+                "choices": [
+                    "いいてんきですね。",
+                    "いいてんきでした。",
+                    "いいてんきですか。"
+                ],
+                "answer": 0
+            }
+        ],
+        "dialogue": {
+            "scene": "Small talk with a neighbour in the morning.",
+            "lines": [
+                {
+                    "who": "a",
+                    "jp": "おはようございます。きょうは、いいてんきですね。",
+                    "en": "Good morning. Nice weather today, isn't it."
+                },
+                {
+                    "who": "b",
+                    "jp": "そうですね。でも、ちょっとさむいですね。",
+                    "en": "It is. A little cold, though.",
+                    "gloss": "そうですね = yes, it is"
+                },
+                {
+                    "who": "a",
+                    "jp": "ええ。あしたは、ゆきですよ。",
+                    "en": "Yes. It's going to snow tomorrow, you know.",
+                    "gloss": "ええ = yes (soft)"
+                },
+                {
+                    "who": "b",
+                    "jp": "え、ほんとうですか。",
+                    "en": "Really?",
+                    "gloss": "ほんとう = really, true"
+                },
+                {
+                    "who": "a",
+                    "jp": "はい。もう、ふゆですね。",
+                    "en": "Yes. It's winter already.",
+                    "gloss": "もう = already"
+                },
+                {
+                    "who": "b",
+                    "jp": "わたしは、ふゆがいちばんすきです。",
+                    "en": "Winter is my favourite season."
+                }
+            ]
+        },
+        "questions": [
+            {
+                "q": "How is the weather today?",
+                "choices": [
+                    "Rainy",
+                    "Nice but a little cold",
+                    "Hot"
+                ],
+                "answer": 1
+            },
+            {
+                "q": "What will the weather be tomorrow?",
+                "choices": [
+                    "Snow",
+                    "Sunny",
+                    "Rain"
+                ],
+                "answer": 0
+            },
+            {
+                "q": "Which season does the neighbour like best?",
+                "choices": [
+                    "Spring",
+                    "Summer",
+                    "Winter"
+                ],
+                "answer": 2
+            }
+        ],
+        "speak": [
+            {
+                "say": "いいてんきですね。",
+                "situation": "Agree with your neighbour.",
+                "hint": "そうですね。",
+                "expect": [
+                    "そうですね*",
+                    "*いいてんき*"
+                ]
+            },
+            {
+                "say": "きのうは、どうでしたか。",
+                "situation": "It rained yesterday. Say so.",
+                "hint": "あめでした。",
+                "expect": [
+                    "*あめ*"
+                ]
+            },
+            {
+                "say": "どのきせつが、すきですか。",
+                "situation": "Say your favourite season.",
+                "hint": "＿がいちばんすきです。／なつがすきです。",
+                "expect": [
+                    "*すきです*"
+                ]
+            }
+        ]
+    },
+    {
+        "id": "u20",
+        "title": "Making plans",
+        "title_jp": "やくそく",
+        "goal": "Plan a day out with a friend: when, where and why not.",
+        "phrases": [
+            {
+                "id": "u20.kara",
+                "jp": "あめですから、うちにいます。",
+                "en": "It's raining, so I'm staying home.",
+                "note": "Reason ＋ から = because. The reason comes first."
+            },
+            {
+                "id": "u20.doushite",
+                "jp": "どうしてですか。",
+                "en": "Why?"
+            },
+            {
+                "id": "u20.aimashouka",
+                "jp": "なんじに、あいましょうか。",
+                "en": "What time shall we meet?",
+                "note": "ましょうか = shall we?"
+            },
+            {
+                "id": "u20.ekide",
+                "jp": "えきで、あいましょう。",
+                "en": "Let's meet at the station.",
+                "note": "Place where something happens ＋ で."
+            },
+            {
+                "id": "u20.tanoshimi",
+                "jp": "たのしみです！",
+                "en": "I'm looking forward to it!"
+            },
+            {
+                "id": "u20.mataashita",
+                "jp": "じゃあ、またあした。",
+                "en": "See you tomorrow, then."
+            }
+        ],
+        "words": [
+            {
+                "id": "u20w.doushite",
+                "jp": "どうして",
+                "ro": "doushite",
+                "en": "why"
+            },
+            {
+                "id": "u20w.tanoshimi",
+                "jp": "たのしみ",
+                "ro": "tanoshimi",
+                "en": "something to look forward to"
+            },
+            {
+                "id": "u20w.yakusoku",
+                "jp": "やくそく",
+                "ro": "yakusoku",
+                "en": "a promise, plans"
+            },
+            {
+                "id": "u20w.jikan",
+                "jp": "じかん",
+                "ro": "jikan",
+                "en": "time"
+            },
+            {
+                "id": "u20w.choudo",
+                "jp": "ちょうど",
+                "ro": "choudo",
+                "en": "exactly, just"
+            },
+            {
+                "id": "u20w.hayaku",
+                "jp": "はやく",
+                "ro": "hayaku",
+                "en": "early, quickly"
+            },
+            {
+                "id": "u20w.okuremasu",
+                "jp": "おくれます",
+                "ro": "okuremasu",
+                "en": "be late"
+            },
+            {
+                "id": "u20w.machimasu",
+                "jp": "まちます",
+                "ro": "machimasu",
+                "en": "wait"
+            },
+            {
+                "id": "u20w.basho",
+                "jp": "ばしょ",
+                "ro": "basho",
+                "en": "place"
+            },
+            {
+                "id": "u20w.doyoubi",
+                "jp": "どようび",
+                "ro": "doyoubi",
+                "en": "Saturday"
+            },
+            {
+                "id": "u20w.nichiyoubi",
+                "jp": "にちようび",
+                "ro": "nichiyoubi",
+                "en": "Sunday"
+            },
+            {
+                "id": "u20w.getsuyoubi",
+                "jp": "げつようび",
+                "ro": "getsuyoubi",
+                "en": "Monday"
+            },
+            {
+                "id": "u20w.kin'youbi",
+                "jp": "きんようび",
+                "ro": "kin'youbi",
+                "en": "Friday"
+            },
+            {
+                "id": "u20w.gomennasai",
+                "jp": "ごめんなさい",
+                "ro": "gomennasai",
+                "en": "sorry"
+            },
+            {
+                "id": "u20w.atode",
+                "jp": "あとで",
+                "ro": "atode",
+                "en": "later"
+            },
+            {
+                "id": "u20w.sonoato",
+                "jp": "そのあと",
+                "ro": "sono ato",
+                "en": "after that"
+            }
+        ],
+        "grammar": [
+            {
+                "id": "u20g.kara",
+                "title": "Because: ＿から",
+                "rule": "Reason ＋ から、result. The reason comes first.",
+                "explain": [
+                    "Put から after the reason: あめですから、うちにいます (it's raining, so I'm staying home). Japanese gives the reason before the result.",
+                    "Answer どうして (why?) with the reason and から: いそがしいですから。"
+                ],
+                "examples": [
+                    {
+                        "jp": "あめですから、うちにいます。",
+                        "en": "It's raining, so I'm staying home."
+                    },
+                    {
+                        "jp": "いそがしいですから、いきません。",
+                        "en": "I'm busy, so I'm not going."
+                    },
+                    {
+                        "jp": "どうしてですか。",
+                        "en": "Why?"
+                    },
+                    {
+                        "jp": "じかんがありませんから。",
+                        "en": "Because I don't have time."
+                    }
+                ]
+            },
+            {
+                "id": "u20g.mashouka",
+                "title": "Shall we? ＿ましょうか, and place ＋ で",
+                "rule": "ます → ましょうか = shall we? Place ＋ で = where something happens.",
+                "explain": [
+                    "ましょう is let's; add か to make it a suggestion: なんじにあいましょうか (what time shall we meet?).",
+                    "で marks the place where an action happens: えきであいましょう (let's meet at the station). に is for where you go or where something is."
+                ],
+                "examples": [
+                    {
+                        "jp": "なんじに、あいましょうか。",
+                        "en": "What time shall we meet?"
+                    },
+                    {
+                        "jp": "えきで、あいましょう。",
+                        "en": "Let's meet at the station."
+                    },
+                    {
+                        "jp": "どこで、たべましょうか。",
+                        "en": "Where shall we eat?"
+                    },
+                    {
+                        "jp": "こうえんで、まちます。",
+                        "en": "I'll wait at the park."
+                    }
+                ]
+            }
+        ],
+        "drill": [
+            {
+                "q": "It's raining, so you're staying home.",
+                "choices": [
+                    "あめですから、うちにいます。",
+                    "うちにいますから、あめです。",
+                    "あめですまで、うちにいます。"
+                ],
+                "answer": 0,
+                "explain": "Reason first, then から."
+            },
+            {
+                "q": "Ask why.",
+                "choices": [
+                    "どうしてですか。",
+                    "どこですか。",
+                    "どうですか。"
+                ],
+                "answer": 0
+            },
+            {
+                "q": "You're busy, so you won't go.",
+                "choices": [
+                    "いそがしいですから、いきません。",
+                    "いきませんから、いそがしいです。",
+                    "いそがしいですね、いきません。"
+                ],
+                "answer": 0
+            },
+            {
+                "q": "Ask what time you should meet.",
+                "choices": [
+                    "なんじに、あいましょうか。",
+                    "なんじで、あいましょうか。",
+                    "なんじ、あいましたか。"
+                ],
+                "answer": 0
+            },
+            {
+                "q": "Suggest meeting at the station.",
+                "choices": [
+                    "えきで、あいましょう。",
+                    "えきに、あいましょう。",
+                    "えきを、あいましょう。"
+                ],
+                "answer": 0,
+                "explain": "で = where something happens."
+            },
+            {
+                "q": "You'll be late. Apologise.",
+                "choices": [
+                    "ごめんなさい、おくれます。",
+                    "ごめんなさい、はやくです。",
+                    "たのしみです、おくれます。"
+                ],
+                "answer": 0
+            },
+            {
+                "q": "Say you're looking forward to it.",
+                "say": "じゃあ、どようびに！",
+                "choices": [
+                    "たのしみです！",
+                    "たのしかったです！",
+                    "たのしみでした！"
+                ],
+                "answer": 0
+            },
+            {
+                "q": "Say you'll wait at the park.",
+                "choices": [
+                    "こうえんで、まちます。",
+                    "こうえんに、まちます。",
+                    "こうえんを、まちます。"
+                ],
+                "answer": 0
+            }
+        ],
+        "dialogue": {
+            "scene": "Two friends make plans on the phone.",
+            "lines": [
+                {
+                    "who": "a",
+                    "jp": "どようび、ひまですか。",
+                    "en": "Are you free on Saturday?"
+                },
+                {
+                    "who": "b",
+                    "jp": "どようびは、ちょっと…。しごとがありますから。",
+                    "en": "Saturday's a bit… I have work."
+                },
+                {
+                    "who": "a",
+                    "jp": "そうですか。じゃあ、にちようびは？",
+                    "en": "I see. Then how about Sunday?"
+                },
+                {
+                    "who": "b",
+                    "jp": "にちようびは、だいじょうぶです！",
+                    "en": "Sunday works!"
+                },
+                {
+                    "who": "a",
+                    "jp": "じゃあ、じゅうじに、えきであいましょう。",
+                    "en": "Then let's meet at the station at ten."
+                },
+                {
+                    "who": "b",
+                    "jp": "はい。たのしみです！",
+                    "en": "OK. I'm looking forward to it!"
+                }
+            ]
+        },
+        "questions": [
+            {
+                "q": "Why can't B do Saturday?",
+                "choices": [
+                    "B is sick",
+                    "B has a test",
+                    "B has work"
+                ],
+                "answer": 2
+            },
+            {
+                "q": "When and where will they meet?",
+                "choices": [
+                    "Sunday at noon, at home",
+                    "Sunday at ten, at the station",
+                    "Saturday at ten, at the park"
+                ],
+                "answer": 1
+            }
+        ],
+        "speak": [
+            {
+                "say": "どようび、えいがをみませんか。",
+                "situation": "You're busy on Saturday. Decline and give a reason.",
+                "hint": "いそがしいですから、ちょっと…。",
+                "expect": [
+                    "*から*",
+                    "*ちょっと*"
+                ]
+            },
+            {
+                "say": "なんじに、あいましょうか。",
+                "situation": "Suggest a time.",
+                "hint": "＿じにあいましょう。／じゅうじはどうですか。",
+                "expect": [
+                    "*ましょう*",
+                    "*どうですか*"
+                ]
+            },
+            {
+                "say": "どこで、あいましょうか。",
+                "situation": "Suggest meeting at the station.",
+                "hint": "えきで、あいましょう。",
+                "expect": [
+                    "*えき*"
+                ]
+            }
+        ]
+    },
 ]
 
 # Hand-written romaji (particles as learners hear them: は→wa, を→o, へ→e).
@@ -2676,4 +6332,64 @@ ROMAJI: dict[str, str] = {
     "u10.tanoshikatta": "tanoshikatta desu.",
     "u10.masendeshita": "benkyou shimasen deshita.",
     "u10.doudeshita": "dou deshita ka.",
+    "u11.arimasuka": "shatsu wa arimasu ka.",
+    "u11.futatsu": "kore o futatsu kudasai.",
+    "u11.zenbu": "zenbu de, ikura desu ka.",
+    "u11.chotto": "chotto, takai desu ne.",
+    "u11.dake": "mite iru dake desu.",
+    "u11.kaado": "kaado de, ii desu ka.",
+    "u12.yonin": "kazoku wa, yonin desu.",
+    "u12.ani": "ani ga imasu.",
+    "u12.kyoudai": "kyoudai wa, imasu ka.",
+    "u12.hitorikko": "hitorikko desu.",
+    "u12.shashin": "kore wa, haha no shashin desu.",
+    "u12.okaasan": "okaasan wa, genki desu ka.",
+    "u13.tabetai": "sushi ga tabetai desu.",
+    "u13.ikitai": "nihon ni ikitai desu.",
+    "u13.shitai": "nani ga shitai desu ka.",
+    "u13.hoshii": "atarashii kaban ga hoshii desu.",
+    "u13.nanika": "nanika, nomitai desu.",
+    "u13.yasumitai": "tsukaremashita. yasumitai desu.",
+    "u14.matte": "sukoshi matte kudasai.",
+    "u14.mite": "kore o mite kudasai.",
+    "u14.kaite": "koko ni, namae o kaite kudasai.",
+    "u14.hanashite": "yukkuri hanashite kudasai.",
+    "u14.oshiete": "oshiete kudasai.",
+    "u14.tabenaide": "tabenaide kudasai.",
+    "u15.mimasenka": "issho ni, eiga o mimasen ka.",
+    "u15.ikimashou": "ikimashou!",
+    "u15.iidesune": "ii desu ne.",
+    "u15.chotto": "ashita wa, chotto...",
+    "u15.itsu": "itsu ga ii desu ka.",
+    "u15.kondo": "mata, kondo.",
+    "u16.ue": "tsukue no ue ni, hon ga arimasu.",
+    "u16.shita": "isu no shita ni, neko ga imasu.",
+    "u16.kagi": "kagi wa, doko ni arimasu ka.",
+    "u16.naka": "kaban no naka desu.",
+    "u16.mae": "eki no mae de, matte imasu.",
+    "u16.tonari": "ginkou no tonari desu.",
+    "u17.okimasu": "maiasa, shichiji ni okimasu.",
+    "u17.karamade": "kuji kara goji made, hatarakimasu.",
+    "u17.nemasu": "nanji ni nemasu ka.",
+    "u17.sorekara": "sorekara, asagohan o tabemasu.",
+    "u17.demasu": "hachiji ni, uchi o demasu.",
+    "u17.tokidoki": "tokidoki, jimu ni ikimasu.",
+    "u18.densha": "densha de, gakkou ni ikimasu.",
+    "u18.kakarimasu": "dono kurai, kakarimasu ka.",
+    "u18.juppun": "juppun gurai desu.",
+    "u18.massugu": "kono michi o, massugu desu.",
+    "u18.noriba": "basu noriba wa, doko desu ka.",
+    "u18.aruite": "aruite, ikimasu.",
+    "u19.iitenki": "ii tenki desu ne.",
+    "u19.samui": "kyou wa, samui desu ne.",
+    "u19.ame": "ashita wa, ame desu.",
+    "u19.deshita": "kinou wa, ame deshita.",
+    "u19.kisetsu": "dono kisetsu ga, suki desu ka.",
+    "u19.ichiban": "haru ga, ichiban suki desu.",
+    "u20.kara": "ame desu kara, uchi ni imasu.",
+    "u20.doushite": "doushite desu ka.",
+    "u20.aimashouka": "nanji ni, aimashou ka.",
+    "u20.ekide": "eki de, aimashou.",
+    "u20.tanoshimi": "tanoshimi desu!",
+    "u20.mataashita": "jaa, mata ashita.",
 }

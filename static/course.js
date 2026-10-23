@@ -564,7 +564,7 @@
               el("h1", { class: "home-title" }, unit.title, " ", el("span", { lang: "ja", text: unit.title_jp })),
               el("p", { class: "home-goal", text: unit.goal }))
           : el("div", { class: "home-unit" },
-              el("h1", { class: "home-title", text: "You've finished all ten units" }),
+              el("h1", { class: "home-title", text: `You've finished all ${s.units_total} units` }),
               el("p", { class: "home-goal", text: "Reviews continue daily. Use Extra listening and Chat for more practice." })),
         el("p", { class: "home-progress", text: progressText }),
         el("div", { class: "home-bar", role: "progressbar", "aria-valuenow": String(pct), "aria-valuemin": "0", "aria-valuemax": "100" },
