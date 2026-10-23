@@ -5,7 +5,6 @@ from __future__ import annotations
 import base64
 import io
 import threading
-import time
 import wave
 from pathlib import Path
 from typing import Any, Callable
@@ -231,17 +230,40 @@ class PttController:
             else:
                 self._maybe_stop(name)
 
-        kb_listener = keyboard.Listener(on_press=on_press, on_release=on_release)
-        ms_listener = mouse.Listener(on_click=on_click)
-        kb_listener.start()
-        ms_listener.start()
-        self._log("ptt hooks listening")
+        # Low-level hooks route every click and keypress on the whole system
+        # through this Python process; while the GIL is busy, input everywhere
+        # lags. So the hooks exist only while PTT is on (or a key is being bound).
+        listeners: list[Any] = []
+
+        def want_hooks() -> bool:
+            with self._lock:
+                return self._prefs_enabled or self._bind_capture
+
+        def install() -> None:
+            kb = keyboard.Listener(on_press=on_press, on_release=on_release)
+            ms = mouse.Listener(on_click=on_click)
+            kb.start()
+            ms.start()
+            listeners.extend([kb, ms])
+            self._log("ptt hooks listening")
+
+        def remove() -> None:
+            for listener in listeners:
+                listener.stop()
+            listeners.clear()
+            self._log("ptt hooks removed (PTT off)")
+
         try:
             while not self._stop.is_set():
-                time.sleep(0.2)
+                wanted = want_hooks()
+                if wanted and not listeners:
+                    install()
+                elif not wanted and listeners:
+                    remove()
+                self._stop.wait(0.3)
         finally:
-            kb_listener.stop()
-            ms_listener.stop()
+            if listeners:
+                remove()
 
     def _active_binding(self) -> str:
         with self._lock:
