@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 from collections.abc import Callable
 from typing import Any
 
@@ -64,14 +65,27 @@ class Lifecycle:
             status("Preparing models…")
             aivis = run_bootstrap(on_progress=progress)
             engine = read_preferred_tts_engine()
-            status(f"Starting TTS ({engine})…")
-            start_tts_engine(
-                engine,
-                self.registry,
-                exe_path=aivis if engine == "aivisspeech" else None,
-            )
             status("Starting Kaiwa…")
+            # The voice engine and the API don't depend on each other: start them
+            # together so launch waits for the slower one, not the sum.
+            tts_errors: list[BaseException] = []
+
+            def tts_job() -> None:
+                try:
+                    start_tts_engine(
+                        engine,
+                        self.registry,
+                        exe_path=aivis if engine == "aivisspeech" else None,
+                    )
+                except BaseException as exc:  # re-raised on the boot thread
+                    tts_errors.append(exc)
+
+            tts_thread = threading.Thread(target=tts_job, name="kaiwa-tts-start", daemon=True)
+            tts_thread.start()
             start_kaiwa(self.registry)
+            tts_thread.join()
+            if tts_errors:
+                raise tts_errors[0]
         except Exception:
             stop_all(self.registry)
             self.running = False
