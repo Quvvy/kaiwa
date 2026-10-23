@@ -1494,3 +1494,10 @@ body:not([data-mode="learn"]) .ask-dock {
 .stats-section > button {
   align-self: flex-start;
 }
+
+.stats-rules {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13.5px;
+  line-height: 1.6;
+}

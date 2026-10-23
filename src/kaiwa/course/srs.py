@@ -132,6 +132,13 @@ def known(stored: dict[str, Any]) -> bool:
     return not is_learning(stored) and int(stored.get("reps") or 0) >= 2
 
 
+def speed_ratio(ms: int | None, times: list[int]) -> float | None:
+    """This answer's time as a multiple of the learner's usual for the format, or None."""
+    if not ms or ms >= TIMING_IGNORE_MS or len(times) < TIMING_MIN_SAMPLES:
+        return None
+    return round(ms / max(1.0, median(times)), 3)
+
+
 def rating_for(
     *,
     correct: bool,
@@ -141,17 +148,28 @@ def rating_for(
     band: str,
     reps: int,
     times: list[int],
+    hard_ratio: float = 2.0,
+    easy_ratio: float = 0.6,
+    close_grade: int = HARD,
+    helped_grade: int = HARD,
 ) -> int:
-    """Again / Hard / Good / Easy from what happened, never asked of the learner."""
+    """Again / Hard / Good / Easy from what happened, never asked of the learner.
+
+    The ratios and what "close" / "helped" mean come from grader.tune (the
+    learner's own corrections); the defaults are the starting point.
+    """
     if not correct or band == "off":
         return AGAIN
-    if guessed or helped or band == "close":
+    if guessed:
         return HARD
-    if ms and ms < TIMING_IGNORE_MS and len(times) >= TIMING_MIN_SAMPLES:
-        usual = median(times)
-        if ms > 2 * usual:
+    flagged = (band == "close" and close_grade == HARD) or (helped and helped_grade == HARD)
+    if flagged:
+        return HARD
+    ratio = speed_ratio(ms, times)
+    if ratio is not None:
+        if ratio > hard_ratio:
             return HARD
-        if ms < 0.6 * usual and reps >= EASY_MIN_REPS:
+        if ratio < easy_ratio and reps >= EASY_MIN_REPS and band != "close" and not helped:
             return EASY
     return GOOD
 

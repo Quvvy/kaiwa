@@ -301,6 +301,65 @@ def undo_and_regrade() -> None:
                "stats count the relearning card and today's answer")
 
 
+def grader_tuning() -> None:
+    import random
+
+    from kaiwa.course import grader
+
+    rng = random.Random(7)
+
+    def learner(n, hard_at, fmt="word:produce:type", close_good=False):
+        """Rows from someone who calls anything over `hard_at`× their usual time Hard."""
+        rows = []
+        for _ in range(n):
+            ratio = round(rng.uniform(0.5, 3.0), 2)
+            auto = srs.HARD if ratio > 2.0 else srs.GOOD
+            final = srs.HARD if ratio > hard_at else srs.GOOD
+            rows.append({"fmt": fmt, "ratio": ratio, "auto": auto, "final": final, "correct": True,
+                         "close": False, "helped": False, "guessed": False, "seasoned": True})
+        for _ in range(8):  # "close" speech checks the learner keeps at Good (or not)
+            rows.append({"fmt": fmt, "ratio": None, "auto": srs.HARD, "final": srs.GOOD if close_good else srs.HARD,
+                         "correct": True, "close": True, "helped": False, "guessed": False, "seasoned": True})
+        return rows
+
+    _check(not grader.tune(learner(10, 1.5))["tuned"], "too few answers: defaults stay")
+    strict = grader.tune(learner(120, 1.5))
+    _check(strict["tuned"] and 1.4 <= strict["hard"] < 1.9, f"a stricter learner pulls Hard down (got {strict['hard']})")
+    _check(strict["close"] == srs.HARD, "close stays Hard when the learner agrees")
+    lenient = grader.tune(learner(120, 2.8, close_good=True))
+    _check(lenient["hard"] > 2.2, f"a lenient learner pushes Hard up (got {lenient['hard']})")
+    _check(lenient["close"] == srs.GOOD, "close becomes Good when the learner keeps changing it to Good")
+    _check(HARD_RANGE_OK(lenient["hard"]), "thresholds stay in bounds")
+    mixed = grader.tune(learner(60, 1.5, fmt="kana:produce:type") + learner(60, 2.8, fmt="word:produce:say"))
+    _check(mixed["formats"]["kana:produce:type"]["hard"] < mixed["formats"]["word:produce:say"]["hard"],
+           "each answer format gets its own threshold once it has enough answers")
+    used = grader.for_format(strict, "word:produce:type")
+    _check(srs.rating_for(correct=True, ms=1700, helped=False, guessed=False, band="", reps=5,
+                          times=[1000] * 10, **used) == srs.HARD,
+           "the tuned threshold changes the grade (1.7× usual is Hard for this learner)")
+    _check("Default settings" in grader.describe(None)["basis"], "stats explain the defaults")
+
+    # Through the real path: corrections are logged, and a change refits right away.
+    with tempfile.TemporaryDirectory() as raw:
+        path = Path(raw) / "course_state.json"
+        st = course_state.load_state(path)
+        st["grades"] = learner(60, 1.5)
+        st["cards"]["u1w.asa:mean"] = srs.from_legacy({"box": 3, "due": course_state._today().isoformat(), "reps": 4})
+        course_state.save_state(st, path)
+        course_state.grade("u1w.asa:mean", correct=True, ms=2000, path=path)
+        course_state.regrade("u1w.asa:mean", srs.HARD, path=path)
+        st = course_state.load_state(path)
+        _check(st["grades"][-1]["final"] == srs.HARD and st["grades"][-1]["auto"] == srs.GOOD, "a change is logged as a correction")
+        _check(st["grader"] and st["grader"]["tuned"], "a grade change refits the grader")
+        _check(course_state.course_stats(path=path)["grading"]["tuned"], "the stats page reports the tuned grader")
+
+
+def HARD_RANGE_OK(x):
+    from kaiwa.course import grader
+
+    return grader.HARD_RANGE[0] <= x <= grader.HARD_RANGE[1]
+
+
 def pacing() -> None:
     real_today = course_state._today
     day = [real_today()]
@@ -357,6 +416,7 @@ def main() -> None:
     auto_grades()
     leeches_and_retention()
     undo_and_regrade()
+    grader_tuning()
     pacing()
     story_checks()
     sentence_checks()

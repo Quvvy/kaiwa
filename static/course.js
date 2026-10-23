@@ -1308,6 +1308,10 @@
             runReview(s.leeches, { title: "Tricky cards", planStep: "tricky" }) }, "Practise these now")]
         : el("p", { class: "status", text: "None. A card shows up here after you've forgotten it 4 times." }));
 
+    const grading = section("How Kaiwa grades you",
+      el("ul", { class: "stats-rules" }, s.grading.lines.map((line) => el("li", { text: line }))),
+      el("p", { class: "stats-caption", text: s.grading.basis + (s.grading.tuned ? "" : " Changing a grade with 1–4 teaches it.") }));
+
     const how = section("How scheduling works",
       el("p", { class: "stats-text", text: "Kaiwa estimates how long you'll remember each card and brings it back just before you'd forget, aiming for 90% recall." }),
       el("p", { class: "stats-text", text: "New and missed cards come back within minutes, then the next day, then further apart each time you get them right. That's why you see some cards twice in a session." }),
@@ -1317,7 +1321,7 @@
       el("div", { class: "lesson-top" },
         el("button", { class: "secondary lesson-exit", type: "button", onclick: () => showHome() }, "Back"),
         el("h2", { class: "lesson-title", text: "Stats" })),
-      today, retention, forecast, cardsTable, intervals, calendar, tricky, how));
+      today, retention, forecast, cardsTable, intervals, calendar, tricky, grading, how));
     keys.primary = showHome;
   }
   function figure(value, label) {

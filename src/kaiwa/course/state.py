@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Any
 
 from kaiwa import jsonio
-from kaiwa.course import srs
+from kaiwa.course import grader, srs
 from kaiwa.course.kana import KANA_LESSONS, KANA_ROMAJI, LESSON_BY_ID, lesson_chars
 from kaiwa.course.units import ROMAJI, UNITS
 
@@ -59,6 +59,7 @@ LEECH_LAPSES = 4
 LEECH_STABLE_DAYS = 3
 # Review log for retention stats: one small row per real review.
 LOG_KEPT = 3000
+RETUNE_EVERY = 10    # refit the auto-grader every N answers (and after every grade change)
 UNDO_KEPT = 20       # answers Ctrl+Z can take back (survives a refresh)
 OVERRIDES_KEPT = 500  # "Kaiwa picked X, I chose Y": for tuning the auto-grader later
 DAILY_KEPT = 400
@@ -79,7 +80,7 @@ def card_cost(kind: str, skill: str) -> int:
 
 def _empty() -> dict[str, Any]:
     return {"version": 2, "units": {}, "cards": {}, "days": [], "kana": {}, "questions": [], "reviewed": {}, "timing": {}, "log": [],
-            "undo": [], "overrides": [], "daily": {}, "seq": 0}
+            "undo": [], "overrides": [], "daily": {}, "seq": 0, "grades": [], "grader": None}
 
 
 def load_state(path: Path | None = None) -> dict[str, Any]:
@@ -98,6 +99,10 @@ def load_state(path: Path | None = None) -> dict[str, Any]:
     if isinstance(raw.get("daily"), dict):
         state["daily"] = {k: v for k, v in raw["daily"].items() if isinstance(v, dict)}
     state["seq"] = int(raw.get("seq") or 0)
+    if isinstance(raw.get("grades"), list):
+        state["grades"] = [r for r in raw["grades"] if isinstance(r, dict)][-grader.ROWS_KEPT:]
+    if isinstance(raw.get("grader"), dict):
+        state["grader"] = raw["grader"]
     if isinstance(raw.get("log"), list):
         state["log"] = [r for r in raw["log"] if isinstance(r, dict)][-LOG_KEPT:]
     if isinstance(raw.get("timing"), dict):
@@ -281,14 +286,22 @@ def _apply_grade(state: dict[str, Any], card_id: str, kind: tuple, outcome: dict
     today = _today().isoformat()
     was_review = not srs.is_learning(card)
     intervals = srs.preview(card)
+    times = state["timing"].get(outcome["fmt"], [])
+    reps = int(card.get("reps") or 0)
     auto = srs.rating_for(
         correct=outcome["correct"], ms=outcome["ms"], helped=outcome["helped"], guessed=outcome["guessed"],
-        band=outcome["band"], reps=int(card.get("reps") or 0), times=state["timing"].get(outcome["fmt"], []),
+        band=outcome["band"], reps=reps, times=times, **grader.for_format(state["grader"], outcome["fmt"]),
     )
     rating = forced if forced in (srs.AGAIN, srs.HARD, srs.GOOD, srs.EASY) else auto
     state["seq"] += 1
     entry: dict[str, Any] = {"seq": state["seq"], "card_id": card_id, "before": before, "outcome": outcome,
                              "auto": auto, "rating": rating, "day": today, "cost": 0, "log": None, "time": None}
+    # The grader learns from what each answer looked like and which grade stuck.
+    state["grades"] = (state["grades"] + [{
+        "seq": state["seq"], "fmt": outcome["fmt"], "ratio": srs.speed_ratio(outcome["ms"], times),
+        "auto": auto, "final": rating, "correct": bool(outcome["correct"]), "close": outcome["band"] == "close",
+        "helped": bool(outcome["helped"]), "guessed": bool(outcome["guessed"]), "seasoned": reps >= srs.EASY_MIN_REPS,
+    }])[-grader.ROWS_KEPT:]
     if was_review:
         # Only real reviews spend the daily budget and count toward retention.
         entry["cost"] = card_cost(kind[0], kind[2])
@@ -311,6 +324,8 @@ def _apply_grade(state: dict[str, Any], card_id: str, kind: tuple, outcome: dict
     card = {**srs.review(card, rating), **extras}
     state["cards"][card_id] = card
     state["undo"] = (state["undo"] + [entry])[-UNDO_KEPT:]
+    if forced is not None or len(state["grades"]) % RETUNE_EVERY == 0:
+        state["grader"] = grader.tune(state["grades"])
     _mark_day(state)
     soon = srs.due_at(card) - datetime.now(timezone.utc)
     return {
@@ -333,6 +348,7 @@ def _undo_entry(state: dict[str, Any], entry: dict[str, Any]) -> None:
             state["reviewed"][day] = max(0, state["reviewed"][day] - entry["cost"])
     if entry["log"]:
         state["log"] = [r for r in state["log"] if r.get("seq") != entry["log"]]
+    state["grades"] = [r for r in state["grades"] if r.get("seq") != entry["seq"]]
     if entry["time"]:
         fmt, ms = entry["time"]
         times = state["timing"].get(fmt, [])
@@ -829,6 +845,7 @@ def course_stats(*, path: Path | None = None) -> dict[str, Any]:
         "activity": activity,
         "leeches": leeches,
         "target": round(100 * srs.SCHEDULER.desired_retention),
+        "grading": grader.describe(state["grader"] or grader.tune(state["grades"])),
     }
 
 
