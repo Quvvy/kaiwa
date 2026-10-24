@@ -12,6 +12,7 @@ from typing import Any
 
 from kaiwa import llm
 from kaiwa.config import Settings
+from kaiwa.course.learner_log import MISTAKES_PROMPT, mistakes
 from kaiwa.course.speech_check import matches_any
 
 VERDICTS = ("great", "ok", "retry")
@@ -37,7 +38,8 @@ Verdicts:
 
 Rules: never explain grammar terms longer than a few words. Never pile on several corrections — pick one.
 If the learner answered in English, verdict is retry and the tip tells them how to say it in Japanese.
-"""
+
+""" + MISTAKES_PROMPT
 
 
 def judge(
@@ -61,6 +63,7 @@ def judge(
             "said_en": str(data.get("said_en") or "").strip().strip("\"'“”"),
             "model": str(data.get("model") or task["hint"]).strip(),
             "tip": str(data.get("tip") or "").strip(),
+            "mistakes": mistakes(data.get("mistakes")),
             "heard": heard,
             "coached": True,
         }
@@ -69,6 +72,7 @@ def judge(
         "said_en": "",
         "model": task["hint"],
         "tip": "" if matched else "Try the model answer — tap it to hear it first.",
+        "mistakes": [],
         "heard": heard,
         "coached": False,
     }

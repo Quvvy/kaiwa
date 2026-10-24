@@ -306,7 +306,7 @@
     return shuffle([answer, ...others]);
   }
   /**
-   * One multiple-choice question. Calls onAnswer(right) after showing the result.
+   * One multiple-choice question. Calls onAnswer(right, picked) after showing the result.
    * Number keys pick an option; a right answer moves on by itself.
    */
   function choiceBlock({ options, answer, onAnswer, jp = false, explain = "" }) {
@@ -326,13 +326,18 @@
       if (!right) buttons[options.indexOf(answer)].classList.add("right");
       feedback.className = "verdict " + (right ? "good" : "off");
       feedback.textContent = (right ? "Right." : "Not quite.") + (explain ? " " + explain : "");
-      onAnswer(right);
+      onAnswer(right, options[i]);
     }
     pendingChoice = pick; // frame() hands it to the number keys once the screen is up
     return el("div", { class: "choice-block" }, el("div", { class: "choices" }, buttons), feedback);
   }
   function meaningChoices(word, pool) {
     return { options: choicesFor(word.en, pool.map((w) => w.en)), answer: word.en };
+  }
+
+  /** Learner log: events only the page sees (the server logs answers itself). */
+  function track(kind, data = {}) {
+    postJson("/api/course/log", { kind, data }).catch(() => {});
   }
 
   /** First answers inside lessons count as each new card's first review. */
@@ -500,6 +505,7 @@
     return [...(today.plan || [])];
   }
   function runStep(step) {
+    track("open", { activity: step, unit: today.unit ? today.unit.id : null });
     if (step === "review") return runReview(today.review);
     if (step === "recap") return runReview(today.recap || [], { title: "Recap", planStep: "recap" });
     if (step === "kana") return runKana(today.kana);
@@ -1018,10 +1024,10 @@
         typeof extra === "function" ? extra(() => { helped = true; }) : extra,
         choiceBlock({
           options, answer,
-          onAnswer: (correct) => {
+          onAnswer: (correct, picked) => {
             if (after) result.replaceChildren(after());
             if (audio) play(audio);
-            answered(card, { correct, ms: elapsed(), helped, fmt }, slot, nextBtn);
+            answered(card, { correct, ms: elapsed(), helped, fmt, answer: String(picked) }, slot, nextBtn);
           },
         }),
         result,
@@ -1108,7 +1114,7 @@
             ? kanaKey(kana) === kanaKey(target) || text.toLowerCase().replace(/[^a-z]/g, "") === card.kana.ro.replace(/ \(.*\)/, "")
               || (target === "を" && text.toLowerCase() === "o")
             : kanaKey(kana) === kanaKey(target);
-          settle({ correct, ms }, reveal(correct, ""));
+          settle({ correct, ms, answer: kana || text }, reveal(correct, ""));
         },
         onAudio: async (blob, ext) => {
           const ms = Math.round(startedAt - shownAt);
@@ -1122,7 +1128,7 @@
             }
             const correct = r.band !== "off";
             noteResult({ said: r.heard, band: r.band, tip: r.tip });
-            settle({ correct, ms, band: r.band, spoken: true },
+            settle({ correct, ms, band: r.band, spoken: true, answer: r.heard },
               [...reveal(correct, r.band), heardLine("Sounded like ", r.heard), r.tip ? el("p", { class: "tip", text: r.tip }) : null].filter(Boolean));
           } catch (err) {
             result.replaceChildren(el("p", { class: "verdict off", text: String(err.message || err) }));
@@ -1134,7 +1140,7 @@
       box.hold.holdApi.start = () => { startedAt = performance.now(); return holdStart(); };
       box.hold.addEventListener("pointerdown", () => { startedAt = performance.now(); }, true);
       const dontKnow = el("button", { type: "button", class: "secondary", onclick: () =>
-        settle({ correct: false, ms: elapsed() }, reveal(false, "")) }, "Show me");
+        settle({ correct: false, ms: elapsed(), gave_up: true }, reveal(false, "")) }, "Show me");
       frame({
         title, ...counter(),
         body: el("div", { class: "card-body" },
@@ -1174,7 +1180,7 @@
           const r = await api("/api/course/check", { method: "POST", body: audioForm(blob, ext, { phrase_id: p.id }) });
           result.replaceChildren(verdictLine(r.band), heardLine("Sounded like ", r.heard), r.tip ? el("p", { class: "tip", text: r.tip }) : null);
           noteResult({ said: r.heard, band: r.band, tip: r.tip });
-          settle({ correct: r.band !== "off", ms, band: r.band });
+          settle({ correct: r.band !== "off", ms, band: r.band, answer: r.heard });
           if (r.band !== "good") play(p.jp);
         } catch (err) {
           result.replaceChildren(el("p", { class: "verdict off", text: String(err.message || err) }));
@@ -1184,7 +1190,7 @@
       const holdStart = hold.holdApi.start;
       hold.holdApi.start = () => { startedAt = performance.now(); return holdStart(); };
       const giveUp = el("button", { type: "button", class: "secondary", onclick: () => {
-        settle({ correct: false, ms: elapsed() }); play(p.jp); } }, "Show me");
+        settle({ correct: false, ms: elapsed(), gave_up: true }); play(p.jp); } }, "Show me");
       frame({ title, ...counter(),
         body: el("div", { class: "card-body" },
           repeatTag(card),
@@ -1408,6 +1414,7 @@
    * is typed or spoken. Nothing is changed until the learner presses Apply.
    */
   function runPlacement() {
+    track("open", { activity: "placement" });
     const histories = { words: [], sentences: [], imitate: [] };
     const kanaAnswers = [];
     const unitTitle = (n) => (n >= 1 && UNIT_TITLES[n - 1]) || "";
@@ -1710,6 +1717,7 @@
   }
 
   async function runExtraListening(autoplay = false) {
+    track("open", { activity: "extra_listening", next: autoplay });
     frame({ title: "Extra listening", body: el("p", { class: "pending", text: "Writing something at your level…" }) });
     let story;
     try {
@@ -1752,6 +1760,18 @@
     let peeked = false;
     let revealed = 0; // how many bubbles have arrived in the thread
     const answered = new Map();
+    const linePlays = d.lines.map(() => 0);
+    const peeks = d.lines.map(() => 0); // 0 none, 1 Japanese, 2 English
+    const firstPicks = new Map();
+    const finishListen = () => {
+      track("listen", {
+        scene: d.scene || "", form: d.form || "dialogue", unit: remember ? null : title,
+        full_plays: heard, line_plays: linePlays, by_ear: !peeked,
+        peeks: peeks.map((level, i) => (level ? { line: i, level, jp: d.lines[i].jp } : null)).filter(Boolean),
+        questions: qs.map((q, qi) => ({ q: q.q, right: answered.get(qi), first_pick: firstPicks.get(qi) })),
+      });
+      return onDone();
+    };
 
     const thread = el("div", { class: "thread", "data-empty": "Press play and just listen." });
     const bubbles = d.lines.map((line, idx) => {
@@ -1762,6 +1782,7 @@
           e.stopPropagation();
           level = Math.min(2, level + 1);
           peeked = true;
+          peeks[idx] = level;
           textBox.hidden = false;
           textBox.replaceChildren(...[
             el("span", { class: "bubble-jp", lang: "ja", text: line.jp }),
@@ -1806,6 +1827,7 @@
       if (playing) return;
       const b = bubbles[idx];
       const since = Date.now();
+      linePlays[idx] += 1;
       b.bubble.classList.add("speaking");
       await play(d.lines[idx].jp, voice(d.lines[idx]));
       b.bubble.classList.remove("speaking");
@@ -1852,7 +1874,7 @@
     const playBtn = el("button", { type: "button", onclick: playAll }, d.form === "story" ? "Play the story" : "Play the conversation", kbd("R"));
     const heardNote = el("span", { class: "heard-note" });
 
-    const doneBtn = primaryButton(doneLabel, onDone, { disabled: true });
+    const doneBtn = primaryButton(doneLabel, finishListen, { disabled: true });
     const byEar = el("p", { class: "by-ear", hidden: true, text: "Caught by ear." });
     const questionsBox = el("div", { class: "questions", hidden: true },
       el("h3", { class: "questions-title", text: "Did you catch it?" }),
@@ -1865,6 +1887,7 @@
             onclick: (e) => {
               const right = ci === q.answer;
               answered.set(qi, right);
+              firstPicks.set(qi, choice);
               for (const b of choices.children) b.disabled = true;
               e.currentTarget.classList.add(right ? "right" : "wrong");
               if (!right) choices.children[q.answer].classList.add("right");
@@ -1873,7 +1896,7 @@
               again.hidden = right;
               if (answered.size === qs.length) {
                 doneBtn.disabled = false;
-                keys.primary = onDone;
+                keys.primary = finishListen;
                 byEar.hidden = peeked || [...answered.values()].some((v) => !v);
               }
             },
@@ -1906,6 +1929,7 @@
    * their text is one click (Japanese) or two (English) away, as in listening.
    */
   async function runTalk() {
+    track("open", { activity: "talk" });
     frame({ title: "Talk practice", body: el("p", { class: "pending", text: "Setting the scene…" }) });
     let scene;
     try {
@@ -1925,6 +1949,9 @@
     let suggest = scene.suggest;
     let tries = 0;
     let pending = false;
+    let turnShown = Date.now();
+    let hintUsed = false;
+    let finished = false;
     prefetch([[scene.opener, PARTNER]]);
 
     const thread = el("div", { class: "thread talk-thread" });
@@ -1969,7 +1996,11 @@
     const hintBox = el("div", { class: "hint", hidden: true });
     const hintBtn = el("button", { class: "secondary hint-toggle", type: "button", onclick: () => {
       hintBox.hidden = !hintBox.hidden;
-      if (!hintBox.hidden) play(suggest);
+      if (!hintBox.hidden) {
+        if (!hintUsed) track("talk_hint", { suggest, turn: tries + 1 });
+        hintUsed = true;
+        play(suggest);
+      }
     } }, "Show a hint");
     function setSuggest(text) {
       suggest = text;
@@ -2004,6 +2035,8 @@
       const form = fields instanceof FormData ? fields : new FormData();
       form.append("scene", JSON.stringify(scene));
       form.append("history", JSON.stringify(history.map(({ who, jp }) => ({ who, jp }))));
+      form.append("ms", String(Date.now() - turnShown));
+      form.append("hint_open", hintUsed ? "true" : "false");
       let r;
       try {
         r = await api("/api/course/talk/turn", { method: "POST", body: form });
@@ -2029,6 +2062,8 @@
       }
       thread.lastChild.scrollIntoView({ block: "nearest" });
       setSuggest(r.suggest);
+      turnShown = Date.now();
+      hintUsed = false;
       pending = false;
       hold.disabled = false;
       if (r.done || tries >= MAX_TRIES) finish();
@@ -2047,6 +2082,8 @@
     const nextBtn = primaryButton("Another conversation", runTalk, { disabled: true });
 
     function finish() {
+      finished = true;
+      track("talk_end", { goal: scene.goal, tries, done: true });
       controls.hidden = true;
       thread.after(el("p", { class: "by-ear", text: "Conversation done. Click any line to hear it again." }));
       nextBtn.disabled = false;
@@ -2063,7 +2100,10 @@
         thread,
         feedback,
         controls),
-      actions: [el("button", { type: "button", class: "secondary", onclick: showHome }, "End"), nextBtn],
+      actions: [el("button", { type: "button", class: "secondary", onclick: () => {
+        if (!finished) track("talk_end", { goal: scene.goal, tries, done: false });
+        showHome();
+      } }, "End"), nextBtn],
       hold,
     });
     setSuggest(suggest);

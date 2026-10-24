@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field
 from kaiwa import stt, tts
 from kaiwa.config import get_settings
 from kaiwa.course import ask, coach, hooks, kana_judge, placement, prerender, roleplay, sentences, state, stories
+from kaiwa.course import learner_log
 from kaiwa.course.kana import KANA_ROMAJI
 from kaiwa.course.speech_check import check_phrase, normalize
 from kaiwa.secrets_store import user_data_dir
@@ -48,6 +49,8 @@ class GradeBody(BaseModel):
     band: str = ""         # speech check: good / close / off
     fmt: str = ""          # answer format, for per-format speed baselines
     rating: int | None = Field(default=None, ge=1, le=4)  # set only when the learner chose the grade
+    answer: str = Field(default="", max_length=300)  # what was picked, typed or heard (for the learner log)
+    gave_up: bool = False  # pressed "Show me" / "Don't know"
 
 
 class UndoBody(BaseModel):
@@ -173,6 +176,8 @@ async def check(audio: UploadFile = File(...), phrase_id: str = Form(...)) -> di
         else:
             band, tip = verdict.band, verdict.tip
     _keep_clip(audio, phrase_id, phrase["jp"], heard, band)
+    learner_log.log("say", phrase=phrase_id, target=phrase["jp"], whisper=heard, sounded=shown, band=band,
+                    score=result.score, tip=tip, kana_band=verdict.band if verdict else None)
     return {"heard": shown, "whisper": heard, "score": result.score, "band": band, "tip": tip}
 
 
@@ -228,6 +233,8 @@ async def check_text(
         # Whisper heard exactly this sound: trust it over the kana model, which
         # can mistake a short, quiet vowel for a neighbouring kana.
         band, shown = "good", heard
+    learner_log.log("say", target=target, whisper=heard, sounded=shown, band=band, tip=tip, strict=strict,
+                    score=result.score if result else 0, kana_band=verdict.band if verdict else None)
     if strict:
         # Placement imitation: score how exactly it was repeated, not whether it's close enough to practise on.
         sim = result.score if result else 0
@@ -255,7 +262,11 @@ async def speak_task(
     heard = await _transcribe(audio) if audio is not None else text.strip()
     if not heard:
         raise HTTPException(status_code=400, detail="Say or type an answer first.")
-    return await asyncio.to_thread(coach.judge, get_settings(), task=unit["speak"][task], heard=heard)
+    r = await asyncio.to_thread(coach.judge, get_settings(), task=unit["speak"][task], heard=heard)
+    learner_log.log("speak", unit=unit_id, task=task, prompt=unit["speak"][task]["say"], typed=audio is None,
+                    heard=heard, verdict=r["verdict"], said_en=r["said_en"], model=r["model"], tip=r["tip"],
+                    mistakes=r["mistakes"])
+    return r
 
 
 @router.post("/story")
@@ -269,6 +280,8 @@ async def story() -> dict[str, Any]:
         if not state.learned_phrase_ids(state.load_state()):
             raise HTTPException(status_code=400, detail="Learn your first phrases, then extra listening unlocks.")
         raise HTTPException(status_code=502, detail="Couldn't make a conversation this time — try again.")
+    learner_log.log("story", scene=data["scene"], form=data.get("form"), known_share=data.get("known_share"),
+                    lines=[line["jp"] for line in data["lines"]], glosses=[line["gloss"] for line in data["lines"] if line["gloss"]])
     return data
 
 
@@ -283,6 +296,20 @@ def listened(body: ListenedBody) -> dict[str, Any]:
     return state.record_listening(body.seconds, scene=body.scene[:200])
 
 
+class LogBody(BaseModel):
+    kind: str
+    data: dict[str, Any] = Field(default_factory=dict)
+
+
+@router.post("/log")
+def log_event(body: LogBody) -> dict[str, Any]:
+    """Events only the page sees: listening behaviour, hints, ending early, which activity was opened."""
+    if body.kind not in learner_log.CLIENT_KINDS:
+        raise HTTPException(status_code=400, detail="Unknown event")
+    learner_log.log(body.kind, **{k: v for k, v in body.data.items() if k not in ("t", "s", "kind", "hour", "dow")})
+    return {"ok": True}
+
+
 @router.post("/talk/start")
 async def talk_start() -> dict[str, Any]:
     """A new talk-practice scene."""
@@ -294,6 +321,7 @@ async def talk_start() -> dict[str, Any]:
         if not state.learned_phrase_ids(state.load_state()):
             raise HTTPException(status_code=400, detail="Learn your first phrases, then talk practice unlocks.")
         raise HTTPException(status_code=502, detail="Couldn't set up a conversation this time. Try again.")
+    learner_log.log("talk_start", scene=data["scene"], goal=data["goal"], opener=data["opener"])
     return data
 
 
@@ -303,6 +331,8 @@ async def talk_turn(
     history: str = Form("[]"),
     audio: UploadFile | None = File(default=None),
     text: str = Form(default=""),
+    ms: int = Form(default=0),
+    hint_open: bool = Form(default=False),
 ) -> dict[str, Any]:
     """The learner's turn (voice, or typed): one correction and the partner's answer."""
     try:
@@ -319,6 +349,10 @@ async def talk_turn(
     if data is None:
         raise HTTPException(status_code=502, detail="Couldn't get an answer this time. Try that line again.")
     data["talk_today"] = await asyncio.to_thread(state.record_talk)
+    partner = next((h.get("jp") for h in reversed(turns) if h.get("who") != "me"), "")
+    learner_log.log("talk", goal=scene_data.get("goal"), partner_said=partner, turn=sum(1 for h in turns if h.get("who") == "me") + 1,
+                    typed=audio is None, ms=ms, hint_open=hint_open, heard=heard, verdict=data["verdict"],
+                    said_en=data["said_en"], model=data["model"], tip=data["tip"], mistakes=data["mistakes"], done=data["done"])
     return data
 
 
@@ -328,6 +362,7 @@ def step(body: StepBody) -> dict[str, Any]:
         row = state.complete_step(body.unit_id, body.step)
     except (KeyError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    learner_log.log("lesson_step", unit=body.unit_id, step=body.step)
     prerender.start(get_settings())  # the "next lesson" window may have moved
     return {"unit": row, "stats": state.stats(state.load_state())}
 
@@ -363,6 +398,8 @@ async def ask_question(body: AskBody) -> dict[str, Any]:
     except RuntimeError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     await asyncio.to_thread(state.log_question, result["question"], body.context)
+    learner_log.log("ask", question=result["question"], quick=body.quick, screen=body.context.get("screen"),
+                    context=body.context)
     return result
 
 
@@ -397,6 +434,7 @@ async def placement_judge(body: PlacementJudgeBody) -> dict[str, Any]:
     score = await asyncio.to_thread(
         placement.judge_meaning, get_settings(), jp=body.jp, expected=body.expected, answer=body.answer, kind=body.kind
     )
+    learner_log.log("placement_item", jp=body.jp, expected=body.expected, answer=body.answer, kind=body.kind, score=score)
     return {"score": score}
 
 
@@ -409,6 +447,7 @@ def placement_summary(body: PlacementSummaryBody) -> dict[str, Any]:
 def placement_apply(body: PlacementSummaryBody) -> dict[str, Any]:
     summary = placement.summarize(body.histories, body.kana)
     applied = state.apply_placement(summary)
+    learner_log.log("placement", summary=summary, histories=body.histories)
     prerender.start(get_settings())
     return {"summary": summary, "applied": applied}
 
@@ -472,4 +511,9 @@ def grade(body: GradeBody) -> dict[str, Any]:
         )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    learner_log.log("review", card=body.card_id, fmt=body.fmt, correct=correct, ms=body.ms, helped=body.helped,
+                    guessed=body.guessed, gave_up=body.gave_up, band=body.band, answer=body.answer,
+                    chosen_grade=body.rating, grade=card.get("rating"), auto_grade=card.get("auto_rating"),
+                    reps=card.get("reps"), lapses=card.get("lapses"),
+                    stability=round(float((card.get("fsrs") or {}).get("stability") or 0), 2))
     return {"card": card}

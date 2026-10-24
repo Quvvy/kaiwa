@@ -17,6 +17,7 @@ from typing import Any
 
 from kaiwa import llm
 from kaiwa.config import Settings
+from kaiwa.course.learner_log import MISTAKES_PROMPT, mistakes
 from kaiwa.course.state import learned_phrase_ids, listening_context, load_state, phrase
 from kaiwa.course.stories import NAMES, SETTINGS, coverage
 
@@ -77,7 +78,8 @@ listener would have heard.
 Return JSON only:
 {"verdict": "great"|"ok"|"retry", "said_en": "...", "model": "...", "tip": "...",
  "reply": "...", "reply_en": "exact English translation of reply", "done": false, "suggest": "..."}
-"""
+
+""" + MISTAKES_PROMPT
 
 
 def _known(state: dict[str, Any]) -> tuple[str, list[str]]:
@@ -163,6 +165,7 @@ def turn(settings: Settings, *, scene: dict[str, Any], history: list[dict[str, s
     return {
         "verdict": str(data["verdict"]), "heard": heard,
         "said_en": _s(data, "said_en").strip("\"'“”"), "model": _s(data, "model"), "tip": _s(data, "tip"),
+        "mistakes": mistakes(data.get("mistakes")),
         "reply": _s(data, "reply"), "reply_en": _s(data, "reply_en"),
         "done": done, "suggest": "" if done else _s(data, "suggest"),
     }

@@ -260,6 +260,55 @@ def talk_checks() -> None:
     _check(course_state.record_talk() == 1 and course_state.record_talk() == 2, "spoken lines counted per day")
 
 
+def learner_log_checks() -> None:
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from kaiwa.course import learner_log
+    from kaiwa.course.routes import router
+
+    with tempfile.TemporaryDirectory() as raw:
+        path = Path(raw) / "learner_log.jsonl"
+        learner_log.log("review", path=path, card="w1:mean", correct=False, answer="x" * 1000, empty="")
+        learner_log.log("talk", path=path, mistakes=[{"type": "particle", "detail": "を for が"}])
+        rows = learner_log.read(path=path)
+        _check([r["kind"] for r in rows] == ["review", "talk"], "events are appended in order")
+        _check(len(rows[0]["answer"]) == learner_log.MAX_TEXT and "empty" not in rows[0], "long text cut, empty fields dropped")
+        _check(rows[0]["s"] == rows[1]["s"] == 1 and "hour" in rows[0], "one session, with time of day")
+        learner_log._last[str(path)] = (0.0, rows[-1]["s"])  # as if the last event was long ago
+        learner_log.log("open", path=path, activity="talk")
+        _check(learner_log.read(path=path)[-1]["s"] == 2, "a long pause starts a new session")
+        learner_log._last.pop(str(path))
+        learner_log.log("open", path=path)
+        _check(learner_log.read(path=path)[-1]["s"] == 2, "the session number survives a restart")
+        real_max = learner_log.MAX_BYTES
+        learner_log.MAX_BYTES = 10
+        try:
+            learner_log.log("open", path=path)
+        finally:
+            learner_log.MAX_BYTES = real_max
+        _check(path.with_suffix(".1.jsonl").exists() and len(learner_log.read(path=path)) == 5,
+               "rotation keeps the previous file readable")
+        _check(learner_log.read(path=path, kinds={"talk"})[0]["mistakes"][0]["type"] == "particle", "filter by kind")
+    tags = learner_log.mistakes([{"type": "Verb Form", "detail": "d"}, {"type": "made up"}, "junk"])
+    _check([m["type"] for m in tags] == ["verb_form", "other"], "mistake types are normalized")
+
+    app = FastAPI()
+    app.include_router(router)
+    client = TestClient(app)
+    before = len(learner_log.read())
+    _check(client.post("/api/course/log", json={"kind": "listen", "data": {"line_plays": [2, 0], "kind": "x"}}).status_code == 200,
+           "the page can log listening")
+    _check(client.post("/api/course/log", json={"kind": "anything", "data": {}}).status_code == 400, "unknown page events refused")
+    course_state.apply_placement({"known_units": 1})
+    cid = next(iter(course_state.load_state()["cards"]))
+    client.post("/api/course/grade", json={"card_id": cid, "correct": False, "answer": "ねこ", "gave_up": True, "ms": 1200})
+    rows = learner_log.read()[before:]
+    _check(rows[0]["kind"] == "listen" and rows[0]["line_plays"] == [2, 0], "page event stored without overriding fields")
+    _check(rows[-1]["kind"] == "review" and rows[-1]["answer"] == "ねこ" and rows[-1]["gave_up"]
+           and rows[-1]["grade"] == 1, "a review answer is logged with what was answered and the grade")
+
+
 def sentence_checks() -> None:
     from kaiwa.course.sentences import contains_word, only_known
 
@@ -603,6 +652,7 @@ def main() -> None:
     story_checks()
     listening_checks()
     talk_checks()
+    learner_log_checks()
     sentence_checks()
     coach_fallback()
     print("smoke_course ok")
