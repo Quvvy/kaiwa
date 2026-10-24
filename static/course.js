@@ -176,12 +176,36 @@
   }
   function setAudioProblem(err) {
     audioProblem = err === "starting" ? STARTING_NOTE
-      : err ? "No audio: the voice engine isn't running. Restart Kaiwa or switch engines in Settings → Speech." : "";
+      : err ? "No audio: the voice engine stopped." : "";
     const note = root.querySelector(".lesson-audio-note");
-    if (note) {
+    if (note) fillAudioNote(note);
+  }
+  /** The no-audio note, with a button that starts the voice engine again. */
+  function fillAudioNote(note) {
+    note.hidden = !audioProblem;
+    if (!audioProblem || audioProblem === STARTING_NOTE) {
       note.textContent = audioProblem;
-      note.hidden = !audioProblem;
+      return;
     }
+    const btn = el("button", { type: "button", class: "secondary", onclick: async () => {
+      btn.disabled = true;
+      btn.textContent = "Restarting the voice…";
+      let s = {};
+      try {
+        s = await postJson("/api/tts/engine/restart", {});
+      } catch (err) {
+        s = { error: String(err.message || err) };
+      }
+      if (s.state === "up") {
+        audioCache.clear();
+        setAudioProblem(null);
+      } else {
+        btn.disabled = false;
+        btn.textContent = "Restart voice";
+        note.firstChild.textContent = s.error || "The voice engine didn't come back. Restart Kaiwa, or switch engines in Settings → Speech.";
+      }
+    } }, "Restart voice");
+    note.replaceChildren(el("span", { text: audioProblem + " " }), btn);
   }
   function playRow(text, opts = {}) {
     return el("div", { class: "lesson-play" },
@@ -482,7 +506,8 @@
       ? el("div", { class: "lesson-steps", "aria-hidden": "true" },
           Array.from({ length: total }, (_, i) => el("span", { class: i < index ? "done" : i === index ? "now" : "" })))
       : null;
-    const note = el("p", { class: "lesson-audio-note", hidden: !audioProblem, text: audioProblem });
+    const note = el("p", { class: "lesson-audio-note", hidden: !audioProblem });
+    fillAudioNote(note);
     root.replaceChildren(
       el("div", { class: "lesson" },
         top,

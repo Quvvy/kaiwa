@@ -274,7 +274,7 @@ async def story() -> dict[str, Any]:
     """Extra listening built from learned phrases."""
     settings = get_settings()
     if not settings.deepseek_api_key:
-        raise HTTPException(status_code=400, detail="Extra listening needs your DeepSeek key (Settings → Your data).")
+        raise HTTPException(status_code=400, detail="Extra listening needs your DeepSeek key (Settings → DeepSeek).")
     data = await asyncio.to_thread(stories.take, settings)
     if data is None:
         if not state.learned_phrase_ids(state.load_state()):
@@ -315,7 +315,7 @@ async def talk_start() -> dict[str, Any]:
     """A new talk-practice scene."""
     settings = get_settings()
     if not settings.deepseek_api_key:
-        raise HTTPException(status_code=400, detail="Talk practice needs your DeepSeek key (Settings → Your data).")
+        raise HTTPException(status_code=400, detail="Talk practice needs your DeepSeek key (Settings → DeepSeek).")
     data = await asyncio.to_thread(roleplay.start, settings)
     if data is None:
         if not state.learned_phrase_ids(state.load_state()):
@@ -387,7 +387,7 @@ async def ask_question(body: AskBody) -> dict[str, Any]:
     """Short English explanation of whatever is on the lesson screen."""
     settings = get_settings()
     if not settings.deepseek_api_key:
-        raise HTTPException(status_code=400, detail="Ask needs your DeepSeek key (Settings → General).")
+        raise HTTPException(status_code=400, detail="Ask needs your DeepSeek key (Settings → DeepSeek).")
     known = await asyncio.to_thread(state.known_phrases_for_chat)
     try:
         result = await asyncio.to_thread(

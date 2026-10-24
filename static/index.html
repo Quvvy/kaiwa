@@ -31,14 +31,19 @@
     <div class="api-key-gate-card" role="dialog" aria-modal="true" aria-labelledby="apiKeyGateTitle">
       <h1 id="apiKeyGateTitle">DeepSeek API key</h1>
       <p class="disclaimer">
-        Chat and the lesson coach need a DeepSeek API key. Create one at
-        <a href="https://platform.deepseek.com/api_keys" target="_blank" rel="noopener noreferrer">platform.deepseek.com</a>.
-        It is stored on this PC only.
+        Kaiwa's AI parts run on DeepSeek: talk practice, extra listening, feedback on what you say,
+        the placement test, Ask, and Chat. Lessons, reviews and kana work without it.
+      </p>
+      <p class="disclaimer">
+        Create a key at
+        <a href="https://platform.deepseek.com/api_keys" target="_blank" rel="noopener noreferrer">platform.deepseek.com</a>
+        and add a few dollars of credit; daily practice costs a few cents. The key is stored on this PC only.
       </p>
       <label class="disclaimer" for="apiKeyGateInput">API key</label>
       <input id="apiKeyGateInput" type="password" autocomplete="off" spellcheck="false" placeholder="sk-…" />
       <div class="controls" style="margin-top:0.85rem">
         <button id="apiKeyGateSave" type="button">Save</button>
+        <button id="apiKeyGateSkip" class="secondary" type="button">Skip for now</button>
       </div>
       <p class="api-key-gate-status" id="apiKeyGateStatus"></p>
     </div>
@@ -565,6 +570,19 @@
 
             <div class="settings-section" data-settings-section="data" hidden>
               <h2 class="section-title">Data</h2>
+              <fieldset class="group">
+                <legend>Your progress data</legend>
+                <div class="field settings-searchable" data-settings-search="data privacy log learner progress folder saved">
+                  <label data-tip="Everything stays on this PC. The only thing sent anywhere is the text of AI requests to DeepSeek.">What's saved</label>
+                  <div class="stack">
+                    <span class="value">Your progress, and a learning log of your answers and mistakes (with their type), what you replay or peek at while listening, hints you use, and when you study. It's used to tailor practice to you. No audio is kept. Each profile has its own, stored on this PC only.</span>
+                    <div class="controls">
+                      <button id="openDataFolder" class="secondary" type="button">Open the folder</button>
+                    </div>
+                    <span class="status" id="openDataFolderStatus"></span>
+                  </div>
+                </div>
+              </fieldset>
               <fieldset class="group">
                 <legend data-tip="Settings, level, memory, lesson progress and custom personalities. Kaiwa backs up the current data before an import or reset.">Backup</legend>
                 <div class="field settings-searchable" data-settings-search="data backup export import restore json file">
@@ -3819,7 +3837,9 @@
           maskedEl.textContent = "Not set";
         }
       }
-      setApiKeyGateVisible(!deepseekConfigured);
+      let skipped = false;
+      try { skipped = sessionStorage.getItem("kaiwa_key_skipped") === "1"; } catch (_) {}
+      setApiKeyGateVisible(!deepseekConfigured && !skipped);
     }
 
     async function refreshSecretsStatus() {
@@ -3887,6 +3907,22 @@
     document.getElementById("apiKeyGateInput").addEventListener("keydown", (e) => {
       if (e.key === "Enter") document.getElementById("apiKeyGateSave").click();
     });
+    document.getElementById("apiKeyGateSkip").addEventListener("click", () => {
+      try { sessionStorage.setItem("kaiwa_key_skipped", "1"); } catch (_) {}
+      setApiKeyGateVisible(false);
+    });
+    document.getElementById("openDataFolder").addEventListener("click", async () => {
+      const st = document.getElementById("openDataFolderStatus");
+      try {
+        const res = await fetch("/api/data/open_folder", { method: "POST" });
+        const data = await res.json().catch(() => ({}));
+        st.textContent = res.ok ? "" : (data.detail || "Couldn't open the folder.");
+        if (res.ok && data.path) st.textContent = data.path;
+      } catch (err) {
+        st.textContent = String(err.message || err);
+      }
+    });
+
     document.getElementById("deepseekKeySave").addEventListener("click", () => {
       const input = document.getElementById("deepseekKeyInput");
       const status = document.getElementById("deepseekKeyStatus");

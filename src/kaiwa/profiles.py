@@ -25,6 +25,7 @@ PERSONALITIES_FILE = "user_personalities.json"
 STRUGGLE_CARDS_FILE = "struggle_cards.jsonl"
 PRACTICE_STATE_FILE = "practice_state.json"
 COURSE_STATE_FILE = "course_state.json"
+LEARNER_LOG_FILES = ("learner_log.jsonl", "learner_log.1.jsonl")  # see course/learner_log.py
 
 BUNDLE_FORMAT = "kaiwa-profile"
 BUNDLE_VERSION = 1
@@ -349,6 +350,8 @@ def reset_active() -> tuple[ProfileMeta, Path]:
     with jsonio.STATE_LOCK:
         _write_fresh_profile_files(profiles_dir() / reg.active)
         (profiles_dir() / reg.active / COURSE_STATE_FILE).unlink(missing_ok=True)
+        for name in LEARNER_LOG_FILES:  # a fresh start shouldn't inherit old mistakes
+            (profiles_dir() / reg.active / name).unlink(missing_ok=True)
     _touch_meta(reg, reg.active)
     _save_registry(reg)
     meta = get_meta(reg.active)
@@ -391,7 +394,14 @@ def export_bundle() -> dict[str, Any]:
         "learner_memory": _load_bundle_file(profile_id, MEMORY_FILE),
         "user_personalities": _load_bundle_file(profile_id, PERSONALITIES_FILE),
         "course_state": _load_bundle_file(profile_id, COURSE_STATE_FILE),
+        "learner_log": _load_learner_log(profile_id),
     }
+
+
+def _load_learner_log(profile_id: str) -> list[dict[str, Any]]:
+    from kaiwa.course import learner_log
+
+    return learner_log.read(path=profiles_dir() / profile_id / LEARNER_LOG_FILES[0])
 
 
 def import_bundle(bundle: dict[str, Any]) -> tuple[ProfileMeta, Path]:
@@ -481,6 +491,14 @@ def import_bundle(bundle: dict[str, Any]) -> tuple[ProfileMeta, Path]:
         course = bundle.get("course_state")
         if isinstance(course, dict) and course:
             _write_json(dest / COURSE_STATE_FILE, course)
+        rows = bundle.get("learner_log")
+        if isinstance(rows, list):
+            for name in LEARNER_LOG_FILES:
+                (dest / name).unlink(missing_ok=True)
+            with open(dest / LEARNER_LOG_FILES[0], "w", encoding="utf-8") as fh:
+                for row in rows:
+                    if isinstance(row, dict):
+                        fh.write(json.dumps(row, ensure_ascii=False) + "\n")
     _touch_meta(reg, reg.active)
     _save_registry(reg)
     meta = get_meta(reg.active)

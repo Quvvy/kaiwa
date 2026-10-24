@@ -309,6 +309,52 @@ def learner_log_checks() -> None:
            and rows[-1]["grade"] == 1, "a review answer is logged with what was answered and the grade")
 
 
+def release_checks() -> None:
+    from kaiwa import engine_watchdog, profiles
+    from kaiwa.course import learner_log
+
+    # The learning log travels with a backup, and a reset starts it over.
+    learner_log.log("open", activity="talk")
+    bundle = profiles.export_bundle()
+    _check(bundle["learner_log"] and bundle["learner_log"][-1]["kind"] == "open", "export includes the learning log")
+    profiles.reset_active()
+    _check(not learner_log.read(), "reset clears the learning log")
+    profiles.import_bundle(bundle)
+    _check(learner_log.read()[-1]["activity"] == "talk", "import brings the learning log back")
+
+    # Watchdog: restarts a stopped engine, but not in a tight loop.
+    from kaiwa.desktop import services
+
+    started = []
+    real = (services.engine_already_running, services.find_engine, engine_watchdog.subprocess.Popen,
+            engine_watchdog.READY_TIMEOUT_S, engine_watchdog._rewarm)
+    up = {"v": False}
+    services.engine_already_running = lambda eng: up["v"]
+    services.find_engine = lambda eng: Path("C:/fake/run.exe")
+    engine_watchdog.subprocess.Popen = lambda *a, **k: (started.append(a), up.update(v=True))
+    engine_watchdog._rewarm = lambda: None
+    engine_watchdog.READY_TIMEOUT_S = 2
+    try:
+        engine_watchdog._last_try, engine_watchdog._history[:] = 0.0, []
+        s = engine_watchdog.restart()
+        _check(s["state"] == "up" and len(started) == 1, "a stopped engine is started again")
+        up["v"] = False
+        engine_watchdog.restart()
+        _check(len(started) == 1, "no automatic restart inside the cooldown")
+        engine_watchdog.restart(manual=True)
+        _check(len(started) == 2, "the Restart voice button ignores the cooldown")
+        engine_watchdog._last_try = 0.0
+        engine_watchdog._history[:] = [__import__("time").time()] * engine_watchdog.MAX_PER_HOUR
+        up["v"] = False
+        engine_watchdog.restart()
+        _check(len(started) == 2, "automatic restarts are capped per hour")
+        services.find_engine = lambda eng: None
+        _check(engine_watchdog.restart(manual=True)["state"] == "missing", "a missing engine is reported, not retried")
+    finally:
+        (services.engine_already_running, services.find_engine, engine_watchdog.subprocess.Popen,
+         engine_watchdog.READY_TIMEOUT_S, engine_watchdog._rewarm) = real
+
+
 def sentence_checks() -> None:
     from kaiwa.course.sentences import contains_word, only_known
 
@@ -653,6 +699,7 @@ def main() -> None:
     listening_checks()
     talk_checks()
     learner_log_checks()
+    release_checks()
     sentence_checks()
     coach_fallback()
     print("smoke_course ok")

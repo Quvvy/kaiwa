@@ -106,7 +106,7 @@ def engine_default_speaker(settings: Settings, engine: str) -> int:
 def engine_hint(engine: str) -> str:
     """User-facing next step when the voice engine isn't answering."""
     other = "AivisSpeech" if normalize_engine(engine) == "voicevox" else "VOICEVOX"
-    return f"Restart Kaiwa to start it again, or switch to {other} in Settings → Speech."
+    return f"Kaiwa is starting it again; if it stays silent, restart Kaiwa or switch to {other} in Settings → Speech."
 
 
 LEAD_IN = 0.3  # seconds of silence before the first sound

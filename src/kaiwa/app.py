@@ -4,6 +4,7 @@ import asyncio
 import base64
 import json
 import logging
+import os
 import threading
 import time
 from collections import deque
@@ -61,6 +62,7 @@ from kaiwa import jsonio
 from kaiwa.course import kana_judge as course_kana_judge
 from kaiwa.course import prerender as course_prerender
 from kaiwa.course import routes as course_routes
+from kaiwa import engine_watchdog
 from kaiwa import leftovers
 from kaiwa import session_store
 from kaiwa.stream_util import SentenceBuffer
@@ -99,6 +101,17 @@ def _require_deepseek_key() -> None:
 app = FastAPI(title="Kaiwa", version=__version__)
 static_dir = ROOT / "static"
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+
+
+@app.middleware("http")
+async def _revalidate_pages(request: Request, call_next):
+    """The page and its scripts are always revalidated (a 304 when unchanged), so the
+    window never runs a cached course.js from before an update."""
+    response = await call_next(request)
+    path = request.url.path
+    if path == "/" or path.startswith("/static/"):
+        response.headers["Cache-Control"] = "no-cache"
+    return response
 app.include_router(course_routes.router)
 
 # In-memory chat history keyed by browser session id.
@@ -261,6 +274,8 @@ async def _warm_stt() -> None:
     asyncio.create_task(asyncio.to_thread(_load))
     threading.Thread(target=course_kana_judge.warm, name="kaiwa-kana-warm", daemon=True).start()
     threading.Thread(target=_warm_tts, name="kaiwa-tts-warm", daemon=True).start()
+    if os.environ.get("KAIWA_TTS_WATCHDOG", "1") != "0":
+        engine_watchdog.start()
 
 
 class SpeakRequest(BaseModel):
@@ -376,6 +391,29 @@ def favicon() -> FileResponse:
     if ico.is_file():
         return FileResponse(ico, media_type="image/x-icon")
     return FileResponse(static_dir / "icons" / "kaiwa-text-only.png", media_type="image/png")
+
+
+@app.post("/api/data/open_folder")
+def open_data_folder() -> dict[str, Any]:
+    """Show this profile's folder (progress and learning log) in Explorer."""
+    folder = profiles.active_profile_dir()
+    try:
+        os.startfile(str(folder))  # type: ignore[attr-defined]
+    except (AttributeError, OSError) as exc:
+        raise HTTPException(status_code=500, detail=f"Couldn't open {folder}: {exc}") from exc
+    return {"path": str(folder)}
+
+
+@app.get("/api/tts/engine")
+def tts_engine_status() -> dict[str, Any]:
+    """Is the voice engine answering (up / down / restarting / missing)?"""
+    return engine_watchdog.status()
+
+
+@app.post("/api/tts/engine/restart")
+async def tts_engine_restart() -> dict[str, Any]:
+    """Start the voice engine again now (the "Restart voice" button)."""
+    return await asyncio.to_thread(engine_watchdog.restart, manual=True)
 
 
 @app.get("/api/health")
