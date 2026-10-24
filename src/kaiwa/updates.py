@@ -303,6 +303,24 @@ def download_and_launch_installer(*, force_check: bool = True) -> dict[str, Any]
             "detail": f"You are already on Kaiwa {current_version()}.",
         }
 
+    if os.environ.get("KAIWA_PORTABLE") == "1":
+        # The installer would add a second, installed copy. Portable users
+        # replace the folder instead; their Data folder carries over.
+        page = str(status.get("html_url") or f"https://github.com/{GITHUB_REPO}/releases/latest")
+        try:
+            os.startfile(page)  # noqa: S606 — opens the release page in the browser
+        except OSError as exc:
+            return {"ok": False, "path": None, "launched": False, "detail": f"Open {page}: {exc}"}
+        return {
+            "ok": True,
+            "path": None,
+            "launched": False,
+            "detail": (
+                f"Opened the download page. Get the portable zip for Kaiwa {latest}, close Kaiwa, "
+                "and replace everything in this folder except Data."
+            ),
+        }
+
     dest = updates_dir() / asset_name
     try:
         if not dest.is_file():

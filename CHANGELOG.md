@@ -7,6 +7,31 @@ and this project aims to follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [2.0.0] — 2026-10-24
+
+Kaiwa is now a lesson-first course: a daily plan teaches, checks and reviews real phrases out loud, and the AI parts are built from what you have learned.
+
+### Added
+
+- **Daily lesson** as home: due reviews, a few new words and grammar points, a listening thread, and speak-it-back checks with one concrete fix. Kana track; units 1–20 in the full template; paced plan with two-day units, a new-item cap and catch-up days.
+- **FSRS reviews** with automatic grades you can change or undo, produce-the-answer cards, leech handling, a same-day recap and a stats page.
+- **Placement test** (adaptive, no multiple choice): separate by-ear and in-kana levels, imitation items, graduated hints; checks on placed units reopen lessons, and units can be skipped.
+- **Extra listening**: stories and dialogues built from known words, checked for unknown grammar, the next one ready instantly; listening minutes counted.
+- **Talk practice**: short spoken role-plays with a goal, one fix per turn, at your level.
+- **Learner log**: a per-profile record of answers, typed mistakes, listening, help and sessions (stays on this PC; Settings → Data → Open the folder).
+- **Voice engine watchdog**: restarts the voice engine if it stops, plus a **Restart voice** button.
+- **Portable zip** (`Kaiwa-2.0.0-portable.zip`): no install; all data in `Data\` next to Kaiwa.exe.
+- Kana model judges say-it-back attempts alongside Whisper; microphone picker.
+
+### Changed
+
+- The bundled runtime is the python.org embeddable Python, so Kaiwa runs on PCs without Python installed (1.x needed the build PC's Python).
+- One Kaiwa window at a time: opening it again brings the open window forward, and a pinned Kaiwa no longer gets a second taskbar button.
+- Installer: LZMA2 ultra compression, asks to close a running Kaiwa before updating, cleans out old 1.x files, starts Kaiwa as you rather than as administrator, offers a desktop icon, and on uninstall asks whether to delete your data (default: keep).
+- Window opens about 3 s after launch instead of about 19 s; lesson audio cached on disk and pre-rendered a lesson ahead.
+- Plainer UI and wording, grouped Settings with tooltips, Light/Dark theme setting; the first-run key screen explains what needs DeepSeek and can be skipped.
+- One learner per profile, with backup export / import / reset (the learner log included).
+
 ## [1.0.3] — 2026-08-13
 
 ### Changed

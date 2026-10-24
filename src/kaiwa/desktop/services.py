@@ -116,9 +116,10 @@ def resolve_api_python() -> Path:
         if p.is_file():
             return p
 
-    bundled = _exe_dir() / "runtime" / "Scripts" / "python.exe"
-    if bundled.is_file():
-        return bundled.resolve()
+    # Embeddable Python (2.0+) sits at runtime\python.exe; older builds used a venv.
+    for bundled in (_exe_dir() / "runtime" / "python.exe", _exe_dir() / "runtime" / "Scripts" / "python.exe"):
+        if bundled.is_file():
+            return bundled.resolve()
 
     try:
         root = resolve_app_root()

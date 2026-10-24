@@ -19,6 +19,7 @@ hiddenimports = [
     "kaiwa.desktop.app",
     "kaiwa.desktop.window",
     "kaiwa.desktop.icons",
+    "kaiwa.desktop.instance",
     "kaiwa.desktop.lifecycle",
     "kaiwa.desktop.services",
     "kaiwa.prefs",
@@ -58,6 +59,29 @@ excludes = [
     "notebook",
     "pystray",
     "PIL",
+    # Used only by the API / bootstrap processes (bundled in runtime\), which
+    # kaiwa.bootstrap imports lazily; the shell never loads them.
+    "huggingface_hub",
+    "hf_xet",
+    "tokenizers",
+    "fsspec",
+    "py7zr",
+    "Cryptodome",
+    "inflate64",
+    "bcj",
+    "pyppmd",
+    "pybcj",
+    "multivolumefile",
+    "brotli",
+    "openai",
+    "jiter",
+    "pydantic",
+    "pydantic_core",
+    "fastapi",
+    "starlette",
+    "uvicorn",
+    "pykakasi",
+    "fsrs",
 ]
 
 a = Analysis(

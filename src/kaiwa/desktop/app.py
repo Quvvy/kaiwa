@@ -6,6 +6,7 @@ import time
 from pathlib import Path
 
 from kaiwa.desktop.icons import set_windows_app_id, window_icon_path
+from kaiwa.desktop.instance import apply_portable_mode, claim_single_instance
 from kaiwa.desktop.lifecycle import Lifecycle
 from kaiwa.desktop.ptt import PttController
 from kaiwa.desktop.window import KAIWA_URL, error_html, friendly_boot_message, splash_html
@@ -59,10 +60,15 @@ def main() -> None:
             'Desktop deps missing. Run: .\\.venv\\Scripts\\pip install -e ".[desktop]"'
         ) from exc
 
+    portable = apply_portable_mode()
+    if not claim_single_instance():
+        # Kaiwa is already open (e.g. clicked again on the taskbar): the open
+        # window was brought forward instead of starting a second copy.
+        return
     _bootstrap_frozen_paths()
     set_windows_app_id()
     _log(f"log file: {_log_path()}")
-    _log("main start")
+    _log("main start" + (f" (portable, data in {portable})" if portable else ""))
 
     lifecycle = Lifecycle()
     ptt = PttController(api_base=KAIWA_URL, log=_log)

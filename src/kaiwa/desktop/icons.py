@@ -26,7 +26,15 @@ def asset_path(name: str) -> Path:
 
 
 def set_windows_app_id(app_id: str = _WINDOWS_APP_ID) -> None:
-    """Tell Windows this process is Kaiwa, not python.exe (taskbar grouping)."""
+    """Tell Windows this process is Kaiwa, not python.exe (taskbar grouping).
+
+    Only for source runs. Kaiwa.exe keeps Windows' default identity (its own
+    path), which is what a pinned or Start-menu shortcut to Kaiwa.exe carries.
+    An explicit ID there would not match the pin, and the running window would
+    get a second taskbar button.
+    """
+    if getattr(sys, "frozen", False):
+        return
     try:
         import ctypes
 

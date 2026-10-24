@@ -5,17 +5,18 @@
 **Learn** is home: review what's due, learn a few new phrases, hear them in a conversation, then answer questions out loud and get one concrete fix. **Chat** is where you use it. Anything that doesn't help you understand or speak gets cut.
 
 **Repo:** [github.com/Quvvy/kaiwa](https://github.com/Quvvy/kaiwa)  
-**Version:** **1.0.3**
+**Version:** **2.0.0**
 
 ## For installation (Windows)
 
-1. Download **`KaiwaSetup-1.0.3.exe`** from the [latest GitHub Release](https://github.com/Quvvy/kaiwa/releases/latest).
-2. Run the installer → open **Kaiwa** from the Start Menu.
+1. Download **`KaiwaSetup-2.0.0.exe`** from the [latest GitHub Release](https://github.com/Quvvy/kaiwa/releases/latest).
+2. Run the installer → open **Kaiwa** from the Start Menu or the desktop.
+   - **No install:** download **`Kaiwa-2.0.0-portable.zip`** instead, unzip it anywhere (a USB drive works) and run `Kaiwa\Kaiwa.exe`. Everything is kept in `Kaiwa\Data\` next to it.
 3. First launch may download a speech model (~1.5 GB) and voice engine (~200 MB) into `%LocalAppData%\Kaiwa\` (progress on the splash; relaunch resumes).
 4. When asked, paste a [DeepSeek](https://platform.deepseek.com/) API key (saved under AppData, not in the install folder).
 5. Start today's lesson on the **Learn** tab. **NVIDIA GPU recommended** for faster speech recognition; CPU works.
 
-If Kaiwa fails to start, details are in `%LocalAppData%\Kaiwa\Kaiwa.desktop.log`. When a newer release exists, Kaiwa can notify you and download/run the Windows Setup from Settings → About (or the update banner). Uninstall via Windows Apps keeps your key and models in `%LocalAppData%\Kaiwa\`.
+If Kaiwa fails to start, details are in `%LocalAppData%\Kaiwa\Kaiwa.desktop.log`. When a newer release exists, Kaiwa can notify you and download/run the Windows Setup from Settings → About (or the update banner). Uninstall via Windows Apps asks whether to also delete your progress, key and models in `%LocalAppData%\Kaiwa\` (default: keep them). Windows may show a SmartScreen warning because the app isn't code-signed: **More info → Run anyway**.
 
 ## Stack
 
@@ -91,13 +92,15 @@ Extra AivisSpeech voices (from AivisHub):
 .\scripts\build_desktop.ps1
 # Installer (needs Inno Setup 6 — winget install JRSoftware.InnoSetup):
 .\scripts\build_installer.ps1
-# or portable without Setup:
+# or run the built folder directly:
 .\dist\Kaiwa\Kaiwa.exe
 ```
 
-- Builds a portable folder: thin **`Kaiwa.exe`** + private `runtime\` (CPU Python + deps) + `static\`.
-- `build_installer.ps1` wraps that folder into `dist\KaiwaSetup-1.0.3.exe` (Start Menu + uninstall).
-- Relative `Kaiwa.runtime.json` points at `runtime\Scripts\python.exe`. Shell sets `KAIWA_ROOT` for the API child.
+- Builds a folder: thin **`Kaiwa.exe`** + `runtime\` (python.org embeddable Python, same version as `.venv`, with CPU deps, precompiled) + `static\`. Runs on PCs without Python.
+- `build_installer.ps1` reads the version from `src\kaiwa\__init__.py` (and checks `pyproject.toml` / `file_version_info.txt` agree), then writes `dist\KaiwaSetup-<version>.exe`, `dist\Kaiwa-<version>-portable.zip` and a SHA-256 list.
+- The portable zip has a `Kaiwa.portable` marker: data goes to `Data\` beside `Kaiwa.exe`, and the update banner opens the release page instead of running Setup.
+- Relative `Kaiwa.runtime.json` points at `runtime\python.exe`. Shell sets `KAIWA_ROOT` for the API child.
+- One window at a time: opening Kaiwa again (taskbar, Start Menu) brings the open window forward. Kaiwa.exe keeps Windows' default app identity, so a pinned Kaiwa and the open window share one taskbar button.
 - Dev shell-only rebuild (points at clone `.venv`): `.\scripts\build_desktop.ps1 -DevVenv`
 - **Close the window** — stops Kaiwa + the TTS engine *we* started and exits (no tray).
 
