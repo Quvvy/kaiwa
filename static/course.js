@@ -1418,7 +1418,8 @@
       if (!item) return name === "words" ? skill("sentences") : name === "sentences" ? imitateIntro() : results();
       const info = SKILL_INFO[name];
       const n = histories[name].length;
-      const voice = item.who === "b" ? { voice: "b" } : {};
+      // One voice for every item, the easiest to make out: a word is heard once, with no context.
+      const voice = { voice: "clear" };
       let hint = 0;
       const record = (judged) => {
         histories[name].push({ id: item.id, unit: item.unit, judged, hint, score: judged * HINT_CREDIT[hint] });

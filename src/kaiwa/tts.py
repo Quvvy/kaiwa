@@ -109,6 +109,9 @@ def engine_hint(engine: str) -> str:
     return f"Restart Kaiwa to start it again, or switch to {other} in Settings → Speech."
 
 
+LEAD_IN = 0.3  # seconds of silence before the first sound
+
+
 def synthesize(
     settings: Settings,
     text: str,
@@ -120,6 +123,9 @@ def synthesize(
     """Return WAV bytes from the selected local TTS engine (VOICEVOX-compatible API).
 
     `speed` scales speaking rate (1.0 normal; ~0.75 for a slow learner replay).
+    Every clip starts with LEAD_IN seconds of silence: a freshly started audio
+    output (Bluetooth especially) swallows the first ~0.1–0.2 s, which used to
+    take the first consonant with it (しつもん heard as いつも, だれ as あれ).
     """
     from kaiwa.text_clean import clean_reply_for_speech
 
@@ -152,8 +158,10 @@ def synthesize(
                 f"{engine_hint(eng)}"
             )
         audio_query = query.json()
-        if speed and isinstance(audio_query, dict):
-            audio_query["speedScale"] = float(speed)
+        if isinstance(audio_query, dict):
+            audio_query["prePhonemeLength"] = max(float(audio_query.get("prePhonemeLength") or 0), LEAD_IN)
+            if speed:
+                audio_query["speedScale"] = float(speed)
         try:
             audio = client.post(
                 f"{base}/synthesis",
@@ -245,7 +253,7 @@ def _disk_path(key: tuple):
     from kaiwa.secrets_store import user_data_dir
 
     engine, speaker_id, text, speed = key
-    folder = f"{engine}_{speaker_id}_{speed or 1}"
+    folder = f"{engine}_{speaker_id}_{speed or 1}_lead{LEAD_IN}"
     name = hashlib.sha1(text.encode("utf-8")).hexdigest()[:20] + ".wav"
     return user_data_dir() / "tts_cache" / folder / name
 
@@ -303,6 +311,29 @@ def synthesize_cached(
 DIALOGUE_CAST = {
     "aivisspeech": [1310138980, 1388823424, 376644064, 1325133120, 888753760],
 }
+# The single easiest voice to make out, for the placement test, where a word is
+# heard once with no context. Picked by transcribing the placement words in
+# every installed voice with the acoustic-only kana model (no dictionary to fill
+# in a lost sound) and taking the lowest kana error rate. On 70 words: にせ 0.24
+# (first sound right 87%), 凛音エル 0.27 (83%), 阿井田 茂 0.31 (86%), the rest
+# 0.44-0.81. にせ sounds rough, so it stays out of dialogues, but its consonants
+# are the sharpest, which is what an isolated word needs.
+CLEAREST = {"aivisspeech": 1937616896}
+
+
+def clearest_speaker(settings: Settings, *, engine: str, fallback: int) -> int:
+    """CLEAREST for this engine when it's installed, else `fallback` (your voice)."""
+    eng = normalize_engine(engine, settings.tts_engine)
+    want = CLEAREST.get(eng)
+    if want is None:
+        return fallback
+    try:
+        ids = {int(v["id"]) for v in flatten_speaker_styles(list_speakers(settings, engine=eng))}
+    except Exception:
+        return fallback
+    return want if want in ids else fallback
+
+
 # Styles that are hard to understand for a learner, whatever the engine.
 _UNCLEAR_STYLE = ("ささやき", "囁", "ひそひそ", "ヒソヒソ", "ウィスパー", "whisper", "ねむ", "せつな", "あまあま", "Far")
 

@@ -25,9 +25,12 @@ VOICE_SLOTS = "abcd"
 
 
 def speaker_for(settings: Settings, voice: str) -> tuple[int, str]:
-    """(speaker id, engine) for a dialogue voice: "a" is your chosen voice, "b"–"d" the others."""
+    """(speaker id, engine) for a voice: "a" is your chosen voice, "b"–"d" the others in a
+    dialogue, "clear" the easiest voice to make out (placement test)."""
     prefs = load_prefs()
     speaker = prefs.voicevox_speaker_id
+    if voice == "clear":
+        return tts.clearest_speaker(settings, engine=prefs.tts_engine, fallback=speaker), prefs.tts_engine
     slot = VOICE_SLOTS.find(voice)
     if slot > 0:
         speaker = tts.dialogue_speaker(settings, engine=prefs.tts_engine, primary=speaker, slot=slot)
