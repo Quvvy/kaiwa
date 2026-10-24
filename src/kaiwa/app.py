@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field
 
 from kaiwa.config import ROOT, get_settings, reload_settings
 from kaiwa import __version__, llm, profiles, secrets_store, stt, tts, updates
+from kaiwa import voices as voices_mod
 from kaiwa import prompt_stamp
 from kaiwa.persona import PERSONALITY_PRESETS, infer_learner_state, preset_public_list
 from kaiwa.personalities_store import (
@@ -271,6 +272,10 @@ async def _warm_stt() -> None:
                 time.sleep(2)
         else:
             return
+        try:
+            voices_mod.adopt_new_default(settings)  # まお → 凛音エル, once, when it's installed
+        except Exception:
+            _log.exception("adopting the new default voice failed")
         course_prerender.run(settings)
 
     asyncio.create_task(asyncio.to_thread(_load))
@@ -292,7 +297,7 @@ class PrefsUpdate(BaseModel):
     language_policy: str = "adaptive"
     speech_register: str = "casual"
     tts_engine: str = "aivisspeech"
-    voicevox_speaker_id: int = 888753760
+    voicevox_speaker_id: int = 1388823424  # 凛音エル (kaiwa.voices.DEFAULT_SPEAKER)
     goal_level: str = "pre_n5"
     topic_preferences: list[str] = Field(default_factory=list)
     ui_theme: str = "system"
@@ -520,6 +525,18 @@ def get_voices() -> dict[str, Any]:
             status_code=502,
             detail=str(exc),
         ) from exc
+    if engine == "aivisspeech":
+        # The voices Kaiwa ships (clear, not high-pitched) first, under short names;
+        # the engine's built-in high voices only if someone still has one selected.
+        voices = [v for v in voices if v["name"] not in voices_mod.HIDDEN_NAMES
+                  or int(v["id"]) == prefs.voicevox_speaker_id] or voices
+        for v in voices:
+            short = voices_mod.RECOMMENDED.get(int(v["id"]))
+            v["recommended"] = short is not None
+            if short:
+                v["label"] = f"{short} — {v['style']}"
+        voices.sort(key=lambda v: (not v["recommended"], list(voices_mod.RECOMMENDED).index(int(v["id"]))
+                                   if v["recommended"] else 0, v["name"].lower(), v["id"]))
     selected = prefs.voicevox_speaker_id
     ids = {int(v["id"]) for v in voices}
     if selected not in ids and voices:

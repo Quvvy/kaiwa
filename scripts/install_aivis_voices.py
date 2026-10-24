@@ -16,16 +16,11 @@ import httpx
 ENGINE = "http://127.0.0.1:10101"
 API_DOWNLOAD = "https://api.aivis-project.com/v1/aivm-models/{uuid}/download?model_type=AIVMX"
 
-# Popular public AivisHub models (ACML / free personal use). Already-installed are skipped.
-DEFAULT_VOICES: dict[str, str] = {
-    "らせつん": "9f36ec0d-8dac-42dc-aff4-149c5f99faad",
-    "花音": "a670e6b8-0852-45b2-8704-1bc9862f2fe6",
-    "阿井田 茂": "47e53151-a378-46f3-abee-ce13aa07feb1",
-    "fumifumi": "71e72188-2726-4739-9aa9-39567396fb2a",
-    "凛音エル": "f5017410-fbb5-49e1-97cb-e785f42e15f5",
-    "桜音": "3328da9a-8124-4619-a853-f7fc2f37889f",
-    "にせ": "6d11c6c2-f4a4-4435-887e-23dd60f8b8dd",
-}
+# The voices Kaiwa ships (kaiwa.voices.MODELS, chosen for clarity and pitch).
+# The app downloads these itself on first run; this script is for a dev engine.
+from kaiwa.voices import MODELS
+
+DEFAULT_VOICES: dict[str, str] = {name: uuid for uuid, name in MODELS.items()}
 
 
 def current_speaker_names() -> set[str]:

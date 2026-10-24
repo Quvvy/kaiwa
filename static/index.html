@@ -1609,17 +1609,30 @@
       const label = engineLabel || (ttsEngine === "voicevox" ? "VOICEVOX" : "AivisSpeech");
       if (!voices || !voices.length) {
         const opt = document.createElement("option");
-        opt.value = String(selectedId || (ttsEngine === "voicevox" ? 3 : 888753760));
+        opt.value = String(selectedId || (ttsEngine === "voicevox" ? 3 : 1388823424));
         opt.textContent = label + " not running";
         voiceSelect.appendChild(opt);
         voiceHelp.textContent = label + " isn't running. Start it, then reopen Settings.";
         return;
       }
+      // AivisSpeech: Kaiwa's own voices (clear, not high-pitched) above the rest.
+      const grouped = voices.some((v) => v.recommended);
+      const groups = {};
       voices.forEach((v) => {
         const opt = document.createElement("option");
         opt.value = String(v.id);
         opt.textContent = v.label || (v.name + " — " + v.style);
-        voiceSelect.appendChild(opt);
+        if (!grouped) {
+          voiceSelect.appendChild(opt);
+          return;
+        }
+        const key = v.recommended ? "Recommended" : "Other voices";
+        if (!groups[key]) {
+          groups[key] = document.createElement("optgroup");
+          groups[key].label = key;
+          voiceSelect.appendChild(groups[key]);
+        }
+        groups[key].appendChild(opt);
       });
       const want = String(selectedId != null ? selectedId : voices[0].id);
       const exists = [...voiceSelect.options].some((o) => o.value === want);
@@ -2319,7 +2332,7 @@
         speech_register: speechRegister,
         ui_theme: uiTheme,
         tts_engine: ttsEngine,
-        voicevox_speaker_id: Number(voiceSelect.value || (ttsEngine === "voicevox" ? 3 : 888753760)),
+        voicevox_speaker_id: Number(voiceSelect.value || (ttsEngine === "voicevox" ? 3 : 1388823424)),
         goal_level: goalLevel,
         topic_preferences: topics,
         ptt_enabled: pttEnabled,

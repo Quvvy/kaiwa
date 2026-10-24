@@ -7,6 +7,15 @@ and this project aims to follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [2.0.1] — 2026-10-24
+
+### Changed
+
+- **Calmer default voice.** Kaiwa now uses 凛音エル instead of AivisSpeech's built-in まお (median pitch about 280 Hz instead of 430 Hz), and it's also the clearest female voice measured. Anyone still on the old default is moved over once; a voice you picked yourself is kept.
+- **Voices ship with Kaiwa.** First run downloads 凛音エル, ほのか (the lowest female voice), 阿井田 茂 (male) and にせ (the clearest for single words) from AivisHub, with progress on the splash screen. Existing installs fetch them on the next launch. Before, a fresh install only had まお.
+- Dialogues pair 凛音エル with 阿井田 茂, then ほのか. The high voices (まお, コハク, 桜音, 花音) are no longer cast, and まお and コハク, which the engine can't uninstall, are hidden from Settings → Voice unless selected.
+- Settings → Voice lists Kaiwa's voices under **Recommended**, with short names.
+
 ## [2.0.0] — 2026-10-24
 
 Kaiwa is now a lesson-first course: a daily plan teaches, checks and reviews real phrases out loud, and the AI parts are built from what you have learned.

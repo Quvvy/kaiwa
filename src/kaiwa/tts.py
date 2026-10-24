@@ -304,12 +304,12 @@ def synthesize_cached(
     return wav
 
 
-# Dialogue cast, clearest first. Measured on the bundled AivisSpeech voices
-# (harmonics-to-noise ratio and spectral flatness of the same sentence):
-# 阿井田 茂 is the clearest male voice; 凛音エル and 桜音 the clearest female.
-# fumifumi (breathy), コハク (airy) and にせ (rough) are left out on purpose.
+# Dialogue cast, clearest first, from the voices Kaiwa ships (kaiwa.voices, which
+# has the measurements): 阿井田 茂 (Mid), 凛音エル, ほのか. The high voices (まお,
+# コハク, 桜音, 花音) are left out: no clearer, and grating to listen to. にせ is
+# the clearest of all but rough, so it's kept for single words (CLEAREST).
 DIALOGUE_CAST = {
-    "aivisspeech": [1310138980, 1388823424, 376644064, 1325133120, 888753760],
+    "aivisspeech": [1310138980, 1388823424, 808373280],
 }
 # The single easiest voice to make out, for the placement test, where a word is
 # heard once with no context. Picked by transcribing the placement words in
@@ -357,7 +357,10 @@ def dialogue_speaker(settings: Settings, *, engine: str, primary: int, slot: int
     taken = [name_of.get(primary)]
     picks: list[int] = []
     cast = [i for i in DIALOGUE_CAST.get(eng, []) if i in name_of]
-    others = [int(v["id"]) for v in voices if not any(w in str(v.get("style", "")) for w in _UNCLEAR_STYLE)]
+    from kaiwa.voices import HIDDEN_NAMES
+
+    others = [int(v["id"]) for v in voices if not any(w in str(v.get("style", "")) for w in _UNCLEAR_STYLE)
+              and v["name"] not in HIDDEN_NAMES]
     for candidate in cast + others:
         if name_of.get(candidate) not in taken:
             picks.append(candidate)

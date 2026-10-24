@@ -31,7 +31,7 @@ class UserPrefs:
     language_policy: LanguagePolicy = "adaptive"
     speech_register: SpeechRegister = "casual"
     tts_engine: TtsEngine = "aivisspeech"
-    voicevox_speaker_id: int = 888753760
+    voicevox_speaker_id: int = 1388823424  # 凛音エル (kaiwa.voices.DEFAULT_SPEAKER)
     goal_level: GoalLevel = "pre_n5"
     topic_preferences: list[str] = field(default_factory=list)
     ui_theme: UiTheme = "system"
@@ -116,7 +116,7 @@ def validate_prefs_dict(raw: dict[str, Any]) -> UserPrefs:
         raise ValueError("speech_register must be 'formal' or 'casual'")
 
     try:
-        voicevox_speaker_id = int(raw.get("voicevox_speaker_id", 888753760))
+        voicevox_speaker_id = int(raw.get("voicevox_speaker_id", 1388823424))
     except (TypeError, ValueError) as exc:
         raise ValueError("voicevox_speaker_id must be an integer") from exc
     if voicevox_speaker_id < 0:

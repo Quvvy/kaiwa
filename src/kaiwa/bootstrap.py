@@ -231,7 +231,15 @@ def ensure_whisper(
     return dest
 
 
-def _http_download(url: str, dest: Path, *, on_progress: ProgressFn | None, label: str) -> None:
+def _http_download(
+    url: str,
+    dest: Path,
+    *,
+    on_progress: ProgressFn | None,
+    label: str,
+    step: str = "aivis",
+    what: str = "AivisSpeech Engine",
+) -> None:
     dest.parent.mkdir(parents=True, exist_ok=True)
     partial = dest.with_suffix(dest.suffix + ".partial")
     existing = partial.stat().st_size if partial.is_file() else 0
@@ -287,7 +295,7 @@ def _http_download(url: str, dest: Path, *, on_progress: ProgressFn | None, labe
                     pct = int(min(100, (done * 100) // total)) if total else None
                     _emit(
                         on_progress,
-                        step="aivis",
+                        step=step,
                         label=label,
                         done=done,
                         total=total,
@@ -298,7 +306,7 @@ def _http_download(url: str, dest: Path, *, on_progress: ProgressFn | None, labe
         raise
     except Exception as exc:
         raise RuntimeError(
-            "Could not download AivisSpeech Engine. Check your internet connection "
+            f"Could not download {what}. Check your internet connection "
             "and free disk space, then close Kaiwa and relaunch to resume.\n"
             f"Detail: {exc}"
         ) from exc
@@ -444,6 +452,34 @@ def ensure_aivis(*, on_progress: ProgressFn | None = None) -> Path | None:
     return run
 
 
+def ensure_voices(*, on_progress: ProgressFn | None = None) -> list[str]:
+    """Download Kaiwa's voices from AivisHub into the engine's model folder (soft-fail).
+
+    The engine loads them when it starts. A failed download is left for the next
+    launch (it resumes); until then Kaiwa uses the engine's built-in voice.
+    Returns the names still missing.
+    """
+    from kaiwa import voices
+
+    todo = voices.missing()
+    for n, (uuid, name) in enumerate(todo.items(), start=1):
+        try:
+            _http_download(
+                voices.DOWNLOAD_URL.format(uuid=uuid),
+                voices.models_dir() / f"{uuid}.aivmx",
+                on_progress=on_progress,
+                label=f"Downloading voices ({n} of {len(todo)}: {name})...",
+                step="voices",
+                what=f"the voice {name}",
+            )
+        except RuntimeError as exc:
+            _emit(on_progress, step="voices", label=f"Voice {name} will download next launch", error=str(exc)[:300])
+    left = voices.missing()
+    _emit(on_progress, step="voices", label="Voices ready" if not left else "Some voices still downloading next launch",
+          pct=100, missing=list(left.values()))
+    return list(left.values())
+
+
 def ensure_all(
     *,
     whisper_model: str = DEFAULT_WHISPER_MODEL,
@@ -456,6 +492,7 @@ def ensure_all(
     aivis_path: Path | None = None
     if not skip_aivis:
         aivis_path = ensure_aivis(on_progress=on_progress)
+        ensure_voices(on_progress=on_progress)
     _emit(
         on_progress,
         step="done",

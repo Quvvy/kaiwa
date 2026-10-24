@@ -84,7 +84,7 @@ def _build_settings() -> Settings:
         aivisspeech_base_url=os.getenv(
             "AIVISSPEECH_BASE_URL", "http://127.0.0.1:10101"
         ).rstrip("/"),
-        aivisspeech_speaker_id=int(os.getenv("AIVISSPEECH_SPEAKER_ID", "888753760")),
+        aivisspeech_speaker_id=int(os.getenv("AIVISSPEECH_SPEAKER_ID", "1388823424")),
         whisper_model=os.getenv("WHISPER_MODEL", "large-v3-turbo"),
         whisper_device=os.getenv("WHISPER_DEVICE", "auto").strip().lower() or "auto",
         whisper_compute_type=os.getenv("WHISPER_COMPUTE_TYPE", "float16"),
