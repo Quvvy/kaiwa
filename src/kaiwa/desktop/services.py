@@ -367,12 +367,21 @@ def start_kaiwa(registry: ServiceRegistry, *, tts_booting: bool = False) -> None
     child_env["KAIWA_ROOT"] = str(root)
     if tts_booting:
         child_env["KAIWA_TTS_BOOTING"] = "1"
+    # The server's own errors go to Kaiwa.api.log, so a failed start is diagnosable.
+    from kaiwa.secrets_store import user_data_dir
+
+    api_log_path = user_data_dir() / "Kaiwa.api.log"
+    try:
+        api_log_path.parent.mkdir(parents=True, exist_ok=True)
+        api_log = open(api_log_path, "wb")  # noqa: SIM115 — the child keeps writing to it
+    except OSError:
+        api_log = subprocess.DEVNULL
     proc = subprocess.Popen(
         [str(python), "-m", "kaiwa.app"],
         cwd=str(root),
         env=child_env,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+        stdout=api_log,
+        stderr=api_log,
         creationflags=_creationflags(),
     )
     registry.kaiwa.proc = proc
@@ -384,9 +393,15 @@ def start_kaiwa(registry: ServiceRegistry, *, tts_booting: bool = False) -> None
         if local_ready(KAIWA_PORT, url):
             return
         if proc.poll() is not None:
+            tail = ""
+            try:
+                lines = api_log_path.read_text(encoding="utf-8", errors="replace").strip().splitlines()
+                tail = (" Last error: " + lines[-1]) if lines else ""
+            except OSError:
+                pass
             raise RuntimeError(
                 f"Kaiwa exited early (code {proc.returncode}). "
-                "Close other copies of Kaiwa, then relaunch."
+                f"Close other copies of Kaiwa, then relaunch.{tail} (full output: {api_log_path})"
             )
     raise TimeoutError("Timed out waiting for Kaiwa on port 8787")
 

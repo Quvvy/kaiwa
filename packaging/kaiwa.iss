@@ -77,7 +77,7 @@ Type: filesandordirs; Name: "{app}\_internal"
 Type: filesandordirs; Name: "{app}\static"
 
 [Files]
-Source: "..\dist\Kaiwa\*"; DestDir: "{app}"; Excludes: "Kaiwa.portable,Data\*"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\dist\Kaiwa\*"; DestDir: "{app}"; Excludes: "\Kaiwa.portable,\Data\*"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\NOTICE.md"; DestDir: "{app}"; Flags: ignoreversion
 
