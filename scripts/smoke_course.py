@@ -430,6 +430,56 @@ def placement_hints() -> None:
                "reading-only words become listening reviews straight away")
 
 
+def placement_self_correction() -> None:
+    from kaiwa.course.units import UNITS
+
+    u2, u4 = UNITS[1], UNITS[3]
+    with tempfile.TemporaryDirectory() as raw:
+        path = Path(raw) / "course_state.json"
+        course_state.apply_placement({"known_units": 3}, path=path)
+        st = course_state.load_state(path)
+        _check(course_state.next_unit(st) is u4, "placed at unit 4")
+        checks = course_state.placement_checks(st)
+        _check(len(checks) == 3 and all(c["pending"] for c in checks), "units 1-3 have checks waiting")
+        ids = course_state._unit_card_ids(u2)
+        # Two slips out of six: not enough to reopen.
+        for i, cid in enumerate(ids[:6]):
+            r = course_state.grade(cid, correct=i not in (0, 3), ms=3000, fmt="word:produce", path=path)
+        _check(not r["reopened"] and course_state.next_unit(course_state.load_state(path)) is u4,
+               "a couple of misses don't reopen a unit")
+        r = course_state.grade(ids[6], correct=False, ms=3000, fmt="word:produce", path=path)
+        _check(r["reopened"] and r["reopened"]["number"] == 2, "a third miss in seven reopens the unit")
+        st = course_state.load_state(path)
+        _check(course_state.next_unit(st) is u2, "the reopened unit comes before anything new")
+        plan = course_state.plan_today(st)["plan"]
+        _check("grammar" in plan and "listen" in plan and "learn" not in plan,
+               f"its grammar and listening come back, not the phrase lesson ({plan})")
+        r = course_state.grade(ids[7], correct=False, ms=3000, fmt="word:produce", path=path)
+        _check(not r["reopened"], "a unit is reopened once")
+        course_state.undo(path=path)
+        course_state.undo(path=path)
+        st = course_state.load_state(path)
+        _check(course_state.next_unit(st) is u4 and not st["units"][u2["id"]].get("reopened"),
+               "undoing the answer that reopened it closes it again")
+        _check(st["checks"][u2["id"]]["miss"] == 2, "undo takes the misses back off the count")
+        # Skipping ahead: unit 4 marked known, checked the same way.
+        course_state.skip_unit(u4["id"], path=path)
+        st = course_state.load_state(path)
+        _check(course_state.next_unit(st) is UNITS[4], "a skipped unit is done")
+        _check(any(c["id"] == u4["id"] and c["pending"] for c in course_state.placement_checks(st)),
+               "and its cards are waiting as checks")
+        try:
+            course_state.skip_unit(u4["id"], path=path)
+            _check(False, "a started unit can't be skipped")
+        except ValueError:
+            _check(True, "a started unit can't be skipped")
+        # A unit taught normally is never checked.
+        course_state.complete_step(UNITS[4]["id"], "learn", path=path)
+        pid = UNITS[4]["phrases"][0]["id"]
+        r = course_state.grade(f"{pid}:listen", correct=False, ms=3000, fmt="phrase:listen", path=path)
+        _check(UNITS[4]["id"] not in course_state.load_state(path)["checks"], "taught units aren't placement checks")
+
+
 def pacing() -> None:
     real_today = course_state._today
     day = [real_today()]
@@ -489,6 +539,7 @@ def main() -> None:
     grader_tuning()
     placement_test()
     placement_hints()
+    placement_self_correction()
     pacing()
     story_checks()
     sentence_checks()

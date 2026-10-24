@@ -33,12 +33,14 @@ MAX_DAYS_KEPT = 400
 _PHRASES: dict[str, dict[str, Any]] = {}
 _PHRASE_UNIT: dict[str, str] = {}
 _WORDS: dict[str, dict[str, Any]] = {}
+_WORD_UNIT: dict[str, str] = {}
 for _unit in UNITS:
     for _p in _unit["phrases"]:
         _PHRASES[_p["id"]] = {**_p, "ro": ROMAJI.get(_p["id"], "")}
         _PHRASE_UNIT[_p["id"]] = _unit["id"]
     for _w in _unit.get("words", []):
         _WORDS[_w["id"]] = dict(_w)
+        _WORD_UNIT[_w["id"]] = _unit["id"]
 
 
 def state_path() -> Path:
@@ -80,7 +82,8 @@ def card_cost(kind: str, skill: str) -> int:
 
 def _empty() -> dict[str, Any]:
     return {"version": 2, "units": {}, "cards": {}, "days": [], "kana": {}, "questions": [], "reviewed": {}, "timing": {}, "log": [],
-            "undo": [], "overrides": [], "daily": {}, "seq": 0, "grades": [], "grader": None}
+            "undo": [], "overrides": [], "daily": {}, "seq": 0, "grades": [], "grader": None,
+            "checks": {}}
 
 
 def load_state(path: Path | None = None) -> dict[str, Any]:
@@ -105,6 +108,8 @@ def load_state(path: Path | None = None) -> dict[str, Any]:
         state["grader"] = raw["grader"]
     if isinstance(raw.get("placement"), dict):
         state["placement"] = raw["placement"]
+    if isinstance(raw.get("checks"), dict):
+        state["checks"] = {k: v for k, v in raw["checks"].items() if isinstance(v, dict)}
     if isinstance(raw.get("log"), list):
         state["log"] = [r for r in raw["log"] if isinstance(r, dict)][-LOG_KEPT:]
     if isinstance(raw.get("timing"), dict):
@@ -322,6 +327,9 @@ def _apply_grade(state: dict[str, Any], card_id: str, kind: tuple, outcome: dict
     day["ms"] += min(int(outcome["ms"] or 0), srs.TIMING_IGNORE_MS)
     if len(state["daily"]) > DAILY_KEPT:
         state["daily"] = dict(sorted(state["daily"].items())[-DAILY_KEPT:])
+    if card.get("placed"):
+        # First review of something marked known without being taught: a check on its unit.
+        entry["check"] = _placement_check(state, kind, rating != srs.AGAIN)
     extras = {k: v for k, v in card.items() if k == "hook"}
     card = {**srs.review(card, rating), **extras}
     state["cards"][card_id] = card
@@ -334,6 +342,7 @@ def _apply_grade(state: dict[str, Any], card_id: str, kind: tuple, outcome: dict
         **card, "card_id": card_id, "rating": rating, "auto_rating": auto, "intervals": intervals,
         "learning": srs.is_learning(card), "was_review": was_review,
         "seconds": max(0, int(soon.total_seconds())), "again_soon": soon < timedelta(minutes=30),
+        "reopened": (entry.get("check") or {}).get("reopened_unit"),
     }
 
 
@@ -358,6 +367,15 @@ def _undo_entry(state: dict[str, Any], entry: dict[str, Any]) -> None:
             if times[i] == ms:
                 del times[i]
                 break
+    check = entry.get("check")
+    if check:
+        tally = state["checks"].setdefault(check["unit"], {"ok": 0, "miss": 0})
+        key = "ok" if check["ok"] else "miss"
+        tally[key] = max(0, tally[key] - 1)
+        if check.get("row_before") is not None:
+            # This answer reopened the unit: take that back too.
+            state["units"][check["unit"]] = check["row_before"]
+            tally.pop("reopened", None)
     day = state["daily"].get(entry["day"])
     if day:
         day["answers"] = max(0, day["answers"] - 1)
@@ -751,6 +769,7 @@ def today_payload(*, path: Path | None = None) -> dict[str, Any]:
         "recap": recap_cards(state),
         "retention": retention(state),
         "placement": state.get("placement"),
+        "placement_checks": placement_checks(state),
         "unit_titles": [u["title"] for u in UNITS],
         **plan_today(state),
     }
@@ -853,6 +872,113 @@ def course_stats(*, path: Path | None = None) -> dict[str, Any]:
     }
 
 
+# Self-correcting placement. Units marked known (by the test, or skipped) aren't
+# taken on trust: the first review of each of their cards is a check. When too
+# many checks on one unit are missed, that unit's grammar and listening lessons
+# come back into the plan, before anything new. Missed word and phrase cards are
+# relearned by the scheduler anyway; the lessons bring back what connects them.
+REOPEN_MIN_CHECKS = 6     # checks before a unit can be judged
+REOPEN_SHARE = 0.35       # share of missed checks that reopens it...
+REOPEN_MISSES = 6         # ...or this many misses, however many checks
+REOPEN_STEPS = ("grammar", "listen")
+
+
+def unit_of_card(kind: tuple[str, str, str]) -> str | None:
+    if kind[0] == "phrase":
+        return _PHRASE_UNIT.get(kind[1])
+    if kind[0] == "word":
+        return _WORD_UNIT.get(kind[1])
+    return None
+
+
+def _placement_check(state: dict[str, Any], kind: tuple[str, str, str], ok: bool) -> dict[str, Any] | None:
+    """Count one check on a placed unit and reopen the unit when it fails. Returns the undo record."""
+    uid = unit_of_card(kind)
+    row = state["units"].get(uid or "")
+    if not uid or not row or not row.get("placed"):
+        return None
+    tally = state["checks"].setdefault(uid, {"ok": 0, "miss": 0})
+    tally["ok" if ok else "miss"] += 1
+    record: dict[str, Any] = {"unit": uid, "ok": ok, "row_before": None}
+    checked = tally["ok"] + tally["miss"]
+    failing = tally["miss"] >= REOPEN_MISSES or (checked >= REOPEN_MIN_CHECKS and tally["miss"] / checked >= REOPEN_SHARE)
+    if failing and not tally.get("reopened"):
+        unit = unit_by_id(uid)
+        record["row_before"] = dict(row)
+        for step in REOPEN_STEPS:
+            if step in unit_steps(unit):
+                row[step] = False
+                row.pop(f"{step}_on", None)
+        row.pop("done_at", None)
+        row["reopened"] = _today().isoformat()
+        tally["reopened"] = row["reopened"]
+        record["reopened_unit"] = {"id": uid, "number": UNITS.index(unit) + 1, "title": unit["title"],
+                                   "missed": tally["miss"], "checked": checked}
+    return record
+
+
+def _unit_card_ids(unit: dict[str, Any]) -> list[str]:
+    return [f"{p['id']}:{s}" for p in unit["phrases"] for s in SKILLS] + [f"{w['id']}:mean" for w in unit.get("words", [])]
+
+
+def placement_checks(state: dict[str, Any]) -> list[dict[str, Any]]:
+    """Units marked known without being taught, and how their checks are going."""
+    out = []
+    for i, unit in enumerate(UNITS, start=1):
+        row = state["units"].get(unit["id"], {})
+        if not row.get("placed"):
+            continue
+        tally = state["checks"].get(unit["id"], {})
+        pending = sum(1 for c in _unit_card_ids(unit) if (state["cards"].get(c) or {}).get("placed"))
+        out.append({"id": unit["id"], "number": i, "title": unit["title"], "ok": tally.get("ok", 0),
+                    "miss": tally.get("miss", 0), "reopened": tally.get("reopened"), "pending": pending})
+    return out
+
+
+def _mark_unit_known(state: dict[str, Any], unit: dict[str, Any], place) -> None:
+    """Mark a unit done without teaching it; its cards become placed (checked on first review)."""
+    earlier = (_today() - timedelta(days=1)).isoformat()
+    row = state["units"].setdefault(unit["id"], {})
+    for step in unit_steps(unit):
+        row.setdefault(step, True)
+        row.setdefault(f"{step}_on", earlier)
+    row.setdefault("done_at", datetime.now(timezone.utc).isoformat())
+    row["placed"] = True
+    for cid in _unit_card_ids(unit):
+        place(cid)
+
+
+def skip_unit(unit_id: str, *, path: Path | None = None) -> dict[str, Any]:
+    """"I already know this unit": mark it known, with the same checks as a placement.
+
+    Only for a unit that hasn't been started, so nothing learned is overwritten.
+    If its checks fail, the unit's lessons come back on their own.
+    """
+    unit = unit_by_id(unit_id)
+    if unit is None:
+        raise KeyError(f"unknown unit: {unit_id}")
+    today = _today()
+
+    def apply(state: dict[str, Any]) -> dict[str, Any]:
+        row = state["units"].get(unit_id, {})
+        if any(row.get(s) for s in unit_steps(unit)):
+            raise ValueError("This unit is already started.")
+        n = 0
+
+        def place(cid: str) -> None:
+            nonlocal n
+            if cid not in state["cards"]:
+                state["cards"][cid] = srs.placed_card(PLACED_STABILITY, today + timedelta(days=1 + n % PLACED_SPREAD_DAYS))
+                n += 1
+
+        _mark_unit_known(state, unit, place)
+        state["units"][unit_id]["skipped"] = today.isoformat()
+        _mark_day(state)
+        return {"unit": unit_id, "cards_added": n}
+
+    return _with_state(apply, path)
+
+
 PLACED_STABILITY = 4.0   # days: soon enough that the first review checks the placement
 PLACED_SPREAD_DAYS = 14  # first reviews of placed material spread over two weeks
 
@@ -878,17 +1004,8 @@ def apply_placement(result: dict[str, Any], *, path: Path | None = None) -> dict
                 n += 1
 
         for unit in UNITS[:known_units]:
-            row = state["units"].setdefault(unit["id"], {})
-            for step in unit_steps(unit):
-                row.setdefault(step, True)
-                row.setdefault(f"{step}_on", earlier)
-            row.setdefault("done_at", datetime.now(timezone.utc).isoformat())
-            row["placed"] = True
-            for p in unit["phrases"]:
-                for skill in SKILLS:
-                    place(f"{p['id']}:{skill}")
-            for w in unit.get("words", []):
-                place(f"{w['id']}:mean")
+            if not unit_done(state, unit):
+                _mark_unit_known(state, unit, place)
         # Words understood once the kana was shown but not by ear: known in writing,
         # not yet by sound. They start as near-due reviews so listening catches up.
         listen_soon = []

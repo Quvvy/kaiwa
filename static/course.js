@@ -539,6 +539,10 @@
     }
     const s = today.stats;
     const unit = today.unit;
+    if (unit && (today.unit_steps || {}).reopened) {
+      const c = (today.placement_checks || []).find((x) => x.id === unit.id);
+      unit.reopenedNote = `Second pass: ${c ? `${c.miss} of ${c.ok + c.miss}` : "several"} reviews from this unit were missed after it was marked known, so its grammar and listening are back.`;
+    }
     const done = today.unit_steps || {};
     const steps = planSteps();
     const pct = Math.round((100 * s.phrases_learned) / Math.max(1, s.phrases_total));
@@ -606,6 +610,7 @@
           : el("div", { class: "home-unit" },
               el("h1", { class: "home-title", text: `You've finished all ${s.units_total} units` }),
               el("p", { class: "home-goal", text: "Reviews continue daily. Use Extra listening and Chat for more practice." })),
+        unit && unit.reopenedNote ? el("p", { class: "home-note", text: unit.reopenedNote }) : null,
         el("p", { class: "home-progress", text: progressText }),
         el("div", { class: "home-bar", role: "progressbar", "aria-valuenow": String(pct), "aria-valuemin": "0", "aria-valuemax": "100" },
           el("span", { style: `width:${pct}%` })),
@@ -619,6 +624,10 @@
           ? el("div", { class: "home-placement" },
               el("p", { text: "Already know some Japanese? A short test finds where to start." }),
               el("button", { type: "button", class: "secondary", onclick: runPlacement }, "Take the placement test (about 8 min)"))
+          : null,
+        placementLine(today.placement_checks || []),
+        unit && !unit.reopenedNote && !Object.values(today.unit_steps || {}).some((v) => v === true)
+          ? skipUnitButton(unit)
           : null,
         today.retention ? retentionLine(today.retention) : null,
         today.catching_up
@@ -640,6 +649,42 @@
     );
   }
   /** "You remember 88% of reviews" with a per-kind breakdown in the tooltip. */
+  /** How the checks on placed (or skipped) units are going, while any are still to come. */
+  function placementLine(checks) {
+    const pending = checks.reduce((n, c) => n + c.pending, 0);
+    if (!pending) return null;
+    const done = checks.reduce((n, c) => n + c.ok + c.miss, 0);
+    const missed = checks.reduce((n, c) => n + c.miss, 0);
+    return el("p", { class: "home-note",
+      "data-tip": "Units you skipped or tested out of aren't taken on trust. Their first reviews check them, and a unit with too many misses gets its lessons back." },
+      `Checking your placement: ${done} of ${done + pending} reviews done${done ? `, ${missed} missed` : ""}.`);
+  }
+
+  /** "I already know this unit": two clicks, and the unit's reviews check the claim. */
+  function skipUnitButton(unit) {
+    let armed = false;
+    const btn = el("button", { type: "button", class: "secondary",
+      "data-tip": "Marks it known without the lessons. Its words and phrases come up as reviews; if you miss too many, the lessons come back." },
+      "Already know this unit? Skip it");
+    btn.onclick = async () => {
+      if (!armed) {
+        armed = true;
+        btn.textContent = `Skip unit ${unit.number}: click again to confirm`;
+        return;
+      }
+      btn.disabled = true;
+      try {
+        await postJson("/api/course/skip_unit", { unit_id: unit.id });
+      } catch (err) {
+        btn.disabled = false;
+        btn.textContent = String(err.message || err);
+        return;
+      }
+      showHome();
+    };
+    return el("div", { class: "home-placement" }, btn);
+  }
+
   function retentionLine(r) {
     const parts = Object.entries(r.by_kind).map(([k, v]) => `${k} ${v}%`).join(", ");
     const tip = `Out of ${r.reviews} reviews in the last ${r.days} days. Kaiwa aims for ${r.target}%: `
@@ -916,6 +961,10 @@
       }
       history.push({ card, at: index, requeued, ids: idsOf(card) });
       index += 1;
+      const reopened = responses.map((r) => r.reopened).find(Boolean);
+      if (reopened) {
+        toast(`Unit ${reopened.number} needs another pass: ${reopened.missed} of its ${reopened.checked} checks were missed. Its grammar and listening are back in your lessons.`);
+      }
       if (card.leech && !card.repeat && card.kind !== "sentence") return leechHelp(card);
       next();
     }

@@ -282,6 +282,21 @@ def step(body: StepBody) -> dict[str, Any]:
     return {"unit": row, "stats": state.stats(state.load_state())}
 
 
+class SkipBody(BaseModel):
+    unit_id: str
+
+
+@router.post("/skip_unit")
+def skip_unit(body: SkipBody) -> dict[str, Any]:
+    """Mark the next unit known without its lessons; its reviews check that it really is."""
+    try:
+        out = state.skip_unit(body.unit_id)
+    except (KeyError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    prerender.start(get_settings())
+    return out
+
+
 @router.post("/ask")
 async def ask_question(body: AskBody) -> dict[str, Any]:
     """Short English explanation of whatever is on the lesson screen."""
