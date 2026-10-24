@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 
 from kaiwa import stt, tts
 from kaiwa.config import get_settings
-from kaiwa.course import ask, coach, hooks, kana_judge, placement, prerender, sentences, state, stories
+from kaiwa.course import ask, coach, hooks, kana_judge, placement, prerender, roleplay, sentences, state, stories
 from kaiwa.course.kana import KANA_ROMAJI
 from kaiwa.course.speech_check import check_phrase, normalize
 from kaiwa.secrets_store import user_data_dir
@@ -281,6 +281,45 @@ class ListenedBody(BaseModel):
 def listened(body: ListenedBody) -> dict[str, Any]:
     """Time spent listening (and the scene, once heard through), for the listening total."""
     return state.record_listening(body.seconds, scene=body.scene[:200])
+
+
+@router.post("/talk/start")
+async def talk_start() -> dict[str, Any]:
+    """A new talk-practice scene."""
+    settings = get_settings()
+    if not settings.deepseek_api_key:
+        raise HTTPException(status_code=400, detail="Talk practice needs your DeepSeek key (Settings → Your data).")
+    data = await asyncio.to_thread(roleplay.start, settings)
+    if data is None:
+        if not state.learned_phrase_ids(state.load_state()):
+            raise HTTPException(status_code=400, detail="Learn your first phrases, then talk practice unlocks.")
+        raise HTTPException(status_code=502, detail="Couldn't set up a conversation this time. Try again.")
+    return data
+
+
+@router.post("/talk/turn")
+async def talk_turn(
+    scene: str = Form(...),
+    history: str = Form("[]"),
+    audio: UploadFile | None = File(default=None),
+    text: str = Form(default=""),
+) -> dict[str, Any]:
+    """The learner's turn (voice, or typed): one correction and the partner's answer."""
+    try:
+        scene_data = json.loads(scene)
+        turns = [h for h in json.loads(history) if isinstance(h, dict)][-20:]
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(status_code=400, detail="Bad conversation data") from exc
+    if not isinstance(scene_data, dict):
+        raise HTTPException(status_code=400, detail="Bad conversation data")
+    heard = await _transcribe(audio) if audio is not None else text.strip()[:200]
+    if not heard:
+        raise HTTPException(status_code=400, detail="Say or type an answer first.")
+    data = await asyncio.to_thread(roleplay.turn, get_settings(), scene=scene_data, history=turns, heard=heard)
+    if data is None:
+        raise HTTPException(status_code=502, detail="Couldn't get an answer this time. Try that line again.")
+    data["talk_today"] = await asyncio.to_thread(state.record_talk)
+    return data
 
 
 @router.post("/step")

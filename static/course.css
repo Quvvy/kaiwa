@@ -1545,3 +1545,38 @@ body:not([data-mode="learn"]) .ask-dock {
   font-size: 22px;
   color: var(--ink);
 }
+
+/* Talk practice: your lines as text bubbles, edged by how they landed. */
+.bubble-mine {
+  padding: 9px 12px;
+  border-radius: 14px 14px 4px 14px;
+  background: var(--accent-soft);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  font-family: var(--font-jp);
+  font-size: 17px;
+  line-height: 1.5;
+}
+
+.bubble-mine.mine-close {
+  border-color: var(--warn);
+}
+
+.bubble-mine.mine-off {
+  border-color: var(--bad);
+}
+
+.talk-reask .bubble-mine {
+  border-radius: 14px 14px 14px 4px;
+  background: var(--surface);
+  border-color: var(--line);
+}
+
+.talk-goal {
+  font-weight: 600;
+}
+
+.talk-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}

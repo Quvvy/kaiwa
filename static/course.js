@@ -640,6 +640,9 @@
               el("button", { type: "button", class: "secondary", onclick: () => runExtraListening(),
                 "data-tip": `Endless short conversations and stories built from what you've learned. Understanding grows with hours of listening like this.${s.listening && s.listening.total ? ` ${s.listening.total} min so far.` : ""}` },
                 s.listening && s.listening.today ? `Extra listening (${Math.round(s.listening.today)} min today)` : "Extra listening"),
+              el("button", { type: "button", class: "secondary", onclick: runTalk,
+                "data-tip": "A short spoken role-play with a goal, using what you've learned. One fix per turn." },
+                s.talk_today ? `Talk practice (${s.talk_today} today)` : "Talk practice"),
               el("button", { type: "button", class: "secondary", onclick: goChat,
                 "data-tip": "Free conversation. Kaiwa sticks to the phrases you've learned." }, "Open Chat"))
           : null,
@@ -1310,6 +1313,7 @@
         figure(s.today.answers ? `${Math.round((100 * s.today.right) / s.today.answers)}%` : "–", "not Again"),
         figure(`${s.today.minutes}`, "minutes answering"),
         figure(`${s.today.listening}`, `minutes listening (${s.listening_total} in all)`),
+        figure(String(s.today.talk), "lines spoken in talk practice"),
         figure(String(s.streak), s.streak === 1 ? "day in a row" : "days in a row")));
 
     const retention = section("Remembered in reviews",
@@ -1892,6 +1896,183 @@
     });
     keys.replay = playAll;
     if (autoplay) playAll();
+  }
+
+  // ---------- talk practice ----------
+  /**
+   * A few spoken turns with a partner in a small scene. After each turn: what you
+   * said and meant, one fix and a natural version, then the partner answers.
+   * A suggested reply is always one click away. Partner lines are voice first;
+   * their text is one click (Japanese) or two (English) away, as in listening.
+   */
+  async function runTalk() {
+    frame({ title: "Talk practice", body: el("p", { class: "pending", text: "Setting the scene…" }) });
+    let scene;
+    try {
+      scene = await api("/api/course/talk/start", { method: "POST" });
+    } catch (err) {
+      frame({
+        title: "Talk practice",
+        body: el("p", { class: "verdict off", text: String(err.message || err) }),
+        actions: [primaryButton("Try again", runTalk)],
+        primary: runTalk,
+      });
+      return;
+    }
+    const PARTNER = { voice: "b" };
+    const MAX_TRIES = 10; // retries included; the scene closes on its own long before
+    const history = [];
+    let suggest = scene.suggest;
+    let tries = 0;
+    let pending = false;
+    prefetch([[scene.opener, PARTNER]]);
+
+    const thread = el("div", { class: "thread talk-thread" });
+    function partnerLine(jp, en) {
+      const textBox = el("div", { class: "bubble-text", hidden: true });
+      let level = 0;
+      const peek = el("button", { class: "bubble-peek", type: "button", "aria-label": "Show text", "data-tip": "Show this line",
+        onclick: (e) => {
+          e.stopPropagation();
+          level = Math.min(2, level + 1);
+          textBox.hidden = false;
+          textBox.replaceChildren(el("span", { class: "bubble-jp", lang: "ja", text: jp }),
+            level >= 2 && en ? el("span", { class: "bubble-en", text: en }) : "");
+          peek.hidden = level >= 2 || !en;
+          peek.dataset.tip = "Show the meaning";
+          peek.textContent = "EN";
+        } }, "あ");
+      const bubble = el("div", { class: "bubble-voice", role: "button", tabindex: "0", "aria-label": "Play this line",
+        onclick: () => say(), onkeydown: (e) => { if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); say(); } } },
+        el("span", { class: "bubble-icon", "aria-hidden": "true" }),
+        el("span", { class: "wave" }, [...jp].slice(0, 24).map((c, i) => el("i", { style: `--h:${30 + ((c.charCodeAt(0) * 37 + i * 53) % 70)}%` }))),
+        textBox);
+      async function say() {
+        bubble.classList.add("speaking");
+        await play(jp, PARTNER);
+        bubble.classList.remove("speaking");
+      }
+      history.push({ who: "them", jp, en });
+      thread.append(el("div", { class: "msg msg-left who-b" },
+        el("span", { class: "msg-avatar", text: (scene.partner || "B").charAt(0) }), bubble, peek));
+      keys.replay = say;
+      return say;
+    }
+    function myLine(heard, verdict) {
+      const cls = { great: "good", ok: "close", retry: "off" }[verdict] || "off";
+      thread.append(el("div", { class: "msg msg-right who-a" },
+        el("span", { class: "msg-avatar", text: "You" }),
+        el("div", { class: `bubble-mine mine-${cls}`, lang: "ja", text: heard })));
+    }
+
+    const feedback = el("div", { class: "result" });
+    const hintBox = el("div", { class: "hint", hidden: true });
+    const hintBtn = el("button", { class: "secondary hint-toggle", type: "button", onclick: () => {
+      hintBox.hidden = !hintBox.hidden;
+      if (!hintBox.hidden) play(suggest);
+    } }, "Show a hint");
+    function setSuggest(text) {
+      suggest = text;
+      hintBox.hidden = true;
+      hintBtn.hidden = !text;
+      hintBox.replaceChildren(el("p", { class: "model-label", text: "You could say" }),
+        el("p", { lang: "ja", text: text }),
+        el("button", { class: "secondary", type: "button", onclick: () => play(text) }, "Play"));
+    }
+
+    function renderFeedback(r) {
+      noteResult({ said: r.heard, verdict: r.verdict, model: r.model, tip: r.tip });
+      const label = { great: "Natural.", ok: "Understood. One thing to fix.", retry: "Not understood. Try again." }[r.verdict];
+      const cls = { great: "good", ok: "close", retry: "off" }[r.verdict];
+      const sameAsSaid = normalizeKana(r.model) === normalizeKana(r.heard);
+      feedback.replaceChildren(...[
+        el("p", { class: "verdict " + cls, text: label }),
+        r.said_en ? heardLine("You said ", r.heard, `, which means “${r.said_en}”`) : null,
+        r.model && !sameAsSaid ? el("div", { class: "model" },
+          el("p", { class: "model-label", text: r.verdict === "great" ? "Also natural" : "Try saying" }),
+          el("p", { class: "model-jp", lang: "ja", text: r.model }),
+          el("button", { class: "secondary", type: "button", onclick: () => play(r.model) }, "Play")) : null,
+        r.tip ? el("p", { class: "tip", text: r.tip }) : null,
+      ].filter(Boolean));
+    }
+
+    async function send(fields) {
+      if (pending) return;
+      pending = true;
+      hold.disabled = true;
+      feedback.replaceChildren(el("p", { class: "pending", text: "Listening to your answer…" }));
+      const form = fields instanceof FormData ? fields : new FormData();
+      form.append("scene", JSON.stringify(scene));
+      form.append("history", JSON.stringify(history.map(({ who, jp }) => ({ who, jp }))));
+      let r;
+      try {
+        r = await api("/api/course/talk/turn", { method: "POST", body: form });
+      } catch (err) {
+        feedback.replaceChildren(el("p", { class: "verdict off", text: String(err.message || err) }));
+        pending = false;
+        hold.disabled = false;
+        return;
+      }
+      tries += 1;
+      typed.value = "";
+      myLine(r.heard, r.verdict);
+      renderFeedback(r);
+      if (r.verdict === "retry") {
+        // The partner asks again; the failed exchange stays out of the history.
+        thread.append(el("div", { class: "msg msg-left who-b talk-reask" },
+          el("span", { class: "msg-avatar", text: (scene.partner || "B").charAt(0) }),
+          el("div", { class: "bubble-mine", lang: "ja", text: r.reply })));
+        play(r.reply, PARTNER);
+      } else {
+        history.push({ who: "me", jp: r.heard });
+        partnerLine(r.reply, r.reply_en)();
+      }
+      thread.lastChild.scrollIntoView({ block: "nearest" });
+      setSuggest(r.suggest);
+      pending = false;
+      hold.disabled = false;
+      if (r.done || tries >= MAX_TRIES) finish();
+    }
+
+    const hold = holdControl("Hold and answer", (blob, ext) => send(audioForm(blob, ext, {})), showProblem(feedback));
+    const typed = el("input", { type: "text", maxlength: "120", placeholder: "Or type your answer", lang: "ja" });
+    const typedForm = el("form", { class: "typed", onsubmit: (e) => {
+      e.preventDefault();
+      if (!typed.value.trim()) return;
+      const f = new FormData();
+      f.append("text", typed.value.trim());
+      send(f);
+    } }, typed, el("button", { class: "secondary", type: "submit" }, "Send"));
+    const controls = el("div", { class: "talk-controls" }, hold, micRow(), typedForm, hintBtn, hintBox);
+    const nextBtn = primaryButton("Another conversation", runTalk, { disabled: true });
+
+    function finish() {
+      controls.hidden = true;
+      thread.after(el("p", { class: "by-ear", text: "Conversation done. Click any line to hear it again." }));
+      nextBtn.disabled = false;
+      keys.primary = runTalk;
+      keys.hold = null;
+    }
+
+    frame({
+      title: "Talk practice",
+      ask: { screen: "talk practice", scene: scene.scene, goal: scene.goal, partner: scene.partner },
+      body: el("div", { class: "card-body listen" },
+        el("p", { class: "situation", text: scene.scene }),
+        el("p", { class: "prompt talk-goal", text: `Your goal: ${scene.goal}` }),
+        thread,
+        feedback,
+        controls),
+      actions: [el("button", { type: "button", class: "secondary", onclick: showHome }, "End"), nextBtn],
+      hold,
+    });
+    setSuggest(suggest);
+    partnerLine(scene.opener, scene.opener_en)();
+  }
+
+  /** For "is the natural version the same as what you said": kana and punctuation only. */
+  function normalizeKana(s) {
+    return String(s || "").replace(/[、。！？!?\s「」]/g, "");
   }
 
   // ---------- kana lesson ----------

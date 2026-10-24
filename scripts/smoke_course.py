@@ -234,6 +234,32 @@ def listening_checks() -> None:
         stories._next.clear()
 
 
+def talk_checks() -> None:
+    from kaiwa import llm
+    from kaiwa.course import roleplay
+
+    course_state.apply_placement({"known_units": 2})
+    replies = []
+    real = llm.complete_json
+    llm.complete_json = lambda settings, system, user: replies.pop(0)
+    turn = {"verdict": "ok", "said_en": "x", "model": "ねこがすきです。", "tip": "Use が.", "reply": "そうですか。",
+            "reply_en": "I see.", "done": False, "suggest": "はい。"}
+    try:
+        replies[:] = [{**turn, "reply": "きのうえいがをみました。"}, turn]
+        r = roleplay.turn(None, scene={"goal": "g"}, history=[], heard="ねこをすきです")
+        _check(r["reply"] == "そうですか。" and not replies, "a partner line with unknown verbs is rewritten")
+        _check(not r["done"], "early turns don't end the scene")
+        last = [{"who": "me", "jp": "x"}] * (roleplay.TURNS - 1)
+        replies[:] = [turn]
+        _check(roleplay.turn(None, scene={}, history=last, heard="y")["done"], "the last turn ends the scene")
+        replies[:] = [{**turn, "verdict": "retry"}]
+        r = roleplay.turn(None, scene={}, history=last, heard="hello")
+        _check(not r["done"] and r["suggest"] == "はい。", "a missed last turn gets another try")
+    finally:
+        llm.complete_json = real
+    _check(course_state.record_talk() == 1 and course_state.record_talk() == 2, "spoken lines counted per day")
+
+
 def sentence_checks() -> None:
     from kaiwa.course.sentences import contains_word, only_known
 
@@ -576,6 +602,7 @@ def main() -> None:
     pacing()
     story_checks()
     listening_checks()
+    talk_checks()
     sentence_checks()
     coach_fallback()
     print("smoke_course ok")

@@ -770,6 +770,18 @@ def record_listening(seconds: float, *, scene: str = "", path: Path | None = Non
     return _with_state(apply, path)
 
 
+def record_talk(*, path: Path | None = None) -> int:
+    """One spoken turn in talk practice; returns today's count."""
+
+    def apply(state: dict[str, Any]) -> int:
+        day = state["daily"].setdefault(_today().isoformat(), {"answers": 0, "right": 0, "ms": 0})
+        day["talk"] = int(day.get("talk") or 0) + 1
+        _mark_day(state)
+        return day["talk"]
+
+    return _with_state(apply, path)
+
+
 def stats(state: dict[str, Any]) -> dict[str, Any]:
     learned = learned_phrase_ids(state)
     strong = {
@@ -788,6 +800,7 @@ def stats(state: dict[str, Any]) -> dict[str, Any]:
         "streak": streak(state),
         "studied_today": _today().isoformat() in state["days"],
         "listening": listening_minutes(state),
+        "talk_today": int(state["daily"].get(_today().isoformat(), {}).get("talk") or 0),
     }
 
 
@@ -906,7 +919,7 @@ def course_stats(*, path: Path | None = None) -> dict[str, Any]:
 
     return {
         "today": {"answers": day["answers"], "right": day["right"], "minutes": round(day["ms"] / 60000, 1),
-                  "listening": round(int(day.get("listen_ms") or 0) / 60000, 1)},
+                  "listening": round(int(day.get("listen_ms") or 0) / 60000, 1), "talk": int(day.get("talk") or 0)},
         "listening_total": round(state["listening"]["total_ms"] / 60000),
         "streak": streak(state),
         "forecast": forecast,
