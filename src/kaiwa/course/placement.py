@@ -6,8 +6,10 @@ N = units 1..N are within reach), plus a short kana check:
   words      hear a course word, type its meaning (meaning recall: Laufer &
              Goldstein's productive measure, no guessing from options)
   sentences  hear a dialogue line, type what it means (judged by Flash)
-  imitate    hear a phrase, say it back (elicited imitation: you can't repeat
-             what you can't parse; scored by the speech check)
+  imitate    hear a sentence or two, say it back (elicited imitation: past the
+             span you can parrot as raw sound, you can only repeat what you
+             parse; items grow from ~9 kana at unit 1 to ~20 at unit 20, as in
+             Ortega's 7-19 syllable EI sets, and only a near-exact repeat counts)
 
 Each adaptive skill is a small computerised adaptive test with a Rasch-style
 model: an item from unit u is "at" difficulty u, the chance of getting it right
@@ -58,6 +60,32 @@ KANA_PASS = 0.85
 
 
 # ---------- item banks ----------
+def imitate_length(unit: int) -> int:
+    """Target length (kana) of a unit's imitation item: beyond rote span, more with level."""
+    return round(8 + 0.6 * unit)
+
+
+def _kana_len(text: str) -> int:
+    return len(re.sub(r"[、。！？!?「」\s…ー]", "", text))
+
+
+def _imitate_items(u: int, unit: dict[str, Any]) -> list[dict[str, Any]]:
+    """Sentences from the unit, joined in order until each item is long enough."""
+    pool = [p for p in unit["phrases"] if "「" not in p["jp"]]
+    pool += [line for line in unit["dialogue"]["lines"] if "「" not in line["jp"] and _kana_len(line["jp"]) >= 4]
+    want, out = imitate_length(u), []
+    for i in range(len(pool)):
+        parts = [pool[i]]
+        j = i + 1
+        while sum(_kana_len(p["jp"]) for p in parts) < want and len(parts) < 3:
+            parts.append(pool[j % len(pool)])
+            j += 1
+        jp = "".join(p["jp"] if p["jp"][-1] in "。？！?!" else p["jp"] + "。" for p in parts)
+        out.append({"skill": "imitate", "unit": u, "id": f"{unit['id']}.ei{i}", "jp": jp,
+                    "en": " ".join(p["en"] for p in parts)})
+    return out
+
+
 def _bank() -> dict[str, list[dict[str, Any]]]:
     words, sentences, imitate = [], [], []
     for u, unit in enumerate(UNITS, start=1):
@@ -68,9 +96,7 @@ def _bank() -> dict[str, list[dict[str, Any]]]:
             if 6 <= len(jp) <= 40:
                 sentences.append({"skill": "sentences", "unit": u, "id": f"{unit['id']}.d{i}", "jp": jp, "en": line["en"],
                                   "who": line.get("who", "a")})
-        for p in unit["phrases"]:
-            if "「" not in p["jp"]:  # skip the English-word phrase
-                imitate.append({"skill": "imitate", "unit": u, "id": p["id"], "jp": p["jp"], "en": p["en"]})
+        imitate += _imitate_items(u, unit)
     return {"words": words, "sentences": sentences, "imitate": imitate}
 
 
@@ -196,6 +222,18 @@ def judge_meaning(settings: Settings, *, jp: str, expected: str, answer: str, ki
 
 
 # ---------- result ----------
+def imitation_credit(similarity: int, kana_band: str | None) -> float:
+    """Exact-repetition scoring: near-verbatim 1, most of it 0.5, else 0.
+
+    Whisper turns a similar-sounding attempt into the sentence it expects, so a
+    kana-model verdict that the audio sounded different caps the credit at 0.5.
+    """
+    credit = 1.0 if similarity >= 92 else 0.5 if similarity >= 80 else 0.0
+    if kana_band in ("close", "heard"):
+        credit = min(credit, 0.5)
+    return credit
+
+
 def kana_result(answers: list[dict[str, Any]]) -> dict[str, Any]:
     """Which kana groups are passed (their lessons can be skipped)."""
     out = {}

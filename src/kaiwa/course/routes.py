@@ -195,7 +195,9 @@ def _judge(
 
 
 @router.post("/check_text")
-async def check_text(audio: UploadFile = File(...), target: str = Form(..., max_length=60)) -> dict[str, Any]:
+async def check_text(
+    audio: UploadFile = File(...), target: str = Form(..., max_length=80), strict: bool = Form(default=False)
+) -> dict[str, Any]:
     """Say-it check against any short kana target (known kana and words in review).
 
     Single kana are too short for Whisper to be reliable, so for those the kana
@@ -226,6 +228,11 @@ async def check_text(audio: UploadFile = File(...), target: str = Form(..., max_
         # Whisper heard exactly this sound: trust it over the kana model, which
         # can mistake a short, quiet vowel for a neighbouring kana.
         band, shown = "good", heard
+    if strict:
+        # Placement imitation: score how exactly it was repeated, not whether it's close enough to practise on.
+        sim = result.score if result else 0
+        return {"heard": shown or heard, "band": band, "tip": tip,
+                "credit": placement.imitation_credit(sim, verdict.band if verdict else None)}
     if short and band != "good":
         # One kana is too short to judge reliably by ear (measured on clean TTS:
         # correct あ, し and ん were each rejected in some runs). Speech may confirm

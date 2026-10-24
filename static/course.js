@@ -1450,8 +1450,8 @@
         const hold = holdControl("Hold and say it", async (blob, ext) => {
           result.replaceChildren(el("p", { class: "pending", text: "Checking…" }));
           try {
-            const r = await api("/api/course/check_text", { method: "POST", body: audioForm(blob, ext, { target: item.jp }) });
-            const judged = r.band === "good" ? 1 : r.band === "close" ? 0.5 : 0;
+            const r = await api("/api/course/check_text", { method: "POST", body: audioForm(blob, ext, { target: item.jp, strict: 1 }) });
+            const judged = r.credit ?? (r.band === "good" ? 1 : r.band === "close" ? 0.5 : 0);
             if (judged === 0 && easier()) {
               result.replaceChildren(el("p", { class: "status", text: "Here's some help. Try again." }));
               return;
