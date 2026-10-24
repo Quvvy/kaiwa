@@ -260,6 +260,62 @@ def talk_checks() -> None:
     _check(course_state.record_talk() == 1 and course_state.record_talk() == 2, "spoken lines counted per day")
 
 
+def chat_link_checks() -> None:
+    """Chat builds on the course's known material and logs its turns like talk practice."""
+    from kaiwa import llm
+    from kaiwa.course import chat_link, learner_log
+    from kaiwa.persona import course_phrases_block
+
+    course = chat_link.context()  # talk_checks placed the learner through unit 2
+    _check(course["phrases"] and course["words"] and course["pieces"], "Chat gets phrases, words and patterns")
+    block = course_phrases_block(course)
+    _check("習った単語" in block and "習った文型" in block, "the Chat prompt lists known words and taught patterns")
+    _check("まだ何も習っていない" in course_phrases_block({"phrases": []}), "a brand-new learner gets the greetings-only block")
+
+    word = next(w for w in course["words"] if len(w) >= 2)
+    share, unknown = chat_link.reply_coverage(f"{word}です。アレックスさん、{word}ですか？ (Is it {word}?)", course["pieces"])
+    _check(share >= chat_link.REPLY_OK and not unknown, "known words, katakana names and English glosses pass")
+    share, unknown = chat_link.reply_coverage("きのう、えいがをみました。", course["pieces"])
+    _check(share < chat_link.REPLY_OK and unknown, "an untaught verb form is caught")
+    if "すき" in course["pieces"]:
+        _check(chat_link.reply_coverage("好きです。", course["pieces"])[0] == 1.0, "kanji are read as kana before measuring")
+
+    calls: list[str] = []
+    replies = ["きのう、えいがをみました。", f"{word}です。"]
+    real = llm._completion
+
+    def fake(settings, system, messages, **kw):  # noqa: ANN001
+        calls.append(system)
+        return replies.pop(0)
+
+    llm._completion = fake
+    try:
+        reply, retried = llm._complete_with_retry(None, "sys", [], locked=True, known_pieces=course["pieces"])
+        _check(reply == f"{word}です。" and retried and "[coverage_retry]" in calls[-1],
+               "Easy-mode Chat rewrites a reply with untaught material, naming it")
+        calls.clear()
+        replies[:] = ["きのう、えいがをみました。"]
+        reply, retried = llm._complete_with_retry(None, "sys", [], locked=False, known_pieces=course["pieces"])
+        _check(len(calls) == 1 and not retried, "Free mode isn't held to the course")
+    finally:
+        llm._completion = real
+
+    real_tag = chat_link.tag_mistakes
+    chat_link.tag_mistakes = lambda settings, prompt_line, said: [{"type": "particle", "detail": "を for が"}]
+    with tempfile.TemporaryDirectory() as raw:
+        path = Path(raw) / "learner_log.jsonl"
+        try:
+            history = [{"role": "assistant", "content": "なにがすきですか？"},
+                       {"role": "user", "content": f"{word}をすきです"}, {"role": "assistant", "content": "そうですか。"}]
+            chat_link.log_turn(None, history, log_path=path)
+        finally:
+            chat_link.tag_mistakes = real_tag
+        row = learner_log.read(path=path)[-1]
+        _check(row["kind"] == "chat" and row["prompt"] == "なにがすきですか？" and row["mistakes"][0]["type"] == "particle",
+               "a Chat turn is logged with what it answered and its mistake tags")
+        _check(word in row["used_known"], "course words the learner said in Chat are recorded")
+
+
 def learner_log_checks() -> None:
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
@@ -698,6 +754,7 @@ def main() -> None:
     story_checks()
     listening_checks()
     talk_checks()
+    chat_link_checks()
     learner_log_checks()
     release_checks()
     sentence_checks()

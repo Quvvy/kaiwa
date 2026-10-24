@@ -767,6 +767,16 @@ def shape_lock_active(
     return p in {"unknown", "pre_n5"} or mode in {"simplified", "heavy"}
 
 
+def coverage_retry_block(unknown: list[str]) -> str:
+    """Easy-mode retry: the reply used course material the learner hasn't been taught."""
+    bits = "、".join(unknown[:8])
+    return f"""[coverage_retry]
+直前の返事に、学習者がまだ習っていない語や形があった: {bits}
+同じ内容を、コースで習った表現・単語・文型だけで言い直す。どうしても必要な新しい語は1つまでにして、短い英語を添える。
+（coverage_retry は内部指示。学習者に見せない。）
+"""
+
+
 SHAPE_RETRY_BLOCK = """\
 [shape_retry]
 直前の返事は考えが多すぎた。新しい考えは最大1つ。
@@ -942,16 +952,29 @@ def difficulty_governor_block(
 """
 
 
-def course_phrases_block(known: list[dict[str, str]]) -> str:
-    """What the learner has been taught in the Learn tab — Chat builds on exactly this."""
-    if not known:
+def course_phrases_block(course: dict[str, Any]) -> str:
+    """What the learner has been taught in the Learn tab — Chat builds on exactly this.
+
+    `course` is kaiwa.course.chat_link.context(): phrases, words (shaky ones to bring
+    back), and example sentences of the grammar taught so far.
+    """
+    phrases = course.get("phrases") or []
+    if not phrases:
         return """コースの進み具合: まだ何も習っていない（まったくの初心者）。
 - あいさつと「はい／いいえ」で答えられる質問だけにする。日本語の下に短い英訳を添えてよい。
 """
-    lines = "\n".join(f"- {row['jp']} ({row['en']})" for row in known)
-    return f"""コースで習った表現（学習者はこれを聞いて分かり、自分でも言える）:
+    lines = "\n".join(f"- {row['jp']} ({row['en']})" for row in phrases)
+    words = ", ".join(f"{w['jp']} ({w['en']})" for w in course.get("solid") or []) or "（表現の中の単語だけ）"
+    shaky = ", ".join(f"{w['jp']} ({w['en']})" for w in course.get("shaky") or [])
+    patterns = " / ".join(course.get("patterns") or []) or "（表現の形だけ）"
+    out = f"""コースで習った表現（学習者はこれを聞いて分かり、自分でも言える）:
 {lines}
-- 会話はできるだけこの表現と、その中の単語の組み合わせで作る。
+習った単語: {words}
+習った文型（例文）: {patterns}
+"""
+    if shaky:
+        out += f"まだ定着していない単語（自然に使えるときに会話へ戻す。1ターンに1つまで）: {shaky}\n"
+    return out + """- 会話はできるだけこの表現・単語・文型の組み合わせで作る。習っていない動詞の形は使わない。
 - 学習者がこの表現を使って答えられる質問をする（例: 「すきです」を習ったなら「〜がすきですか」）。
 - 習っていない語は1ターンに最大1つ。使ったら同じ返事の中でやさしく言い換えるか、短い英語を添える。
 """
@@ -968,7 +991,7 @@ def build_tutor_system_prompt(
     help_type: str | None = None,
     replay_questions: list[str] | None = None,
     elicit_line: str | None = None,
-    known_phrases: list[dict[str, str]] | None = None,
+    course: dict[str, Any] | None = None,
 ) -> str:
     from kaiwa.learner_memory import LearnerMemory, memory_prompt_block
     from kaiwa.learner_profile import LearnerProfile, effective_speech_level
@@ -1046,8 +1069,8 @@ def build_tutor_system_prompt(
         "",
         memory_prompt_block(memory, prefs).strip(),
     ]
-    if known_phrases is not None:
-        parts.extend(["", course_phrases_block(known_phrases).strip()])
+    if course is not None:
+        parts.extend(["", course_phrases_block(course).strip()])
     thread_line = thread_stickiness_block(
         last_assistant_text, last_user_text, state
     ).strip()

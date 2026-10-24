@@ -15,6 +15,7 @@ from kaiwa.learner_profile import (
 from kaiwa.persona import (
     RECAST_RETRY_BLOCK,
     SHAPE_RETRY_BLOCK,
+    coverage_retry_block,
     build_practice_sitting_system_prompt,
     build_tutor_system_prompt,
     compute_support_mode,
@@ -118,8 +119,9 @@ def _prepare_chat(
     learner_state: str | None = None,
     help_type: str | None = None,
     replay_questions: list[str] | None = None,
-) -> tuple[UserPrefs, LearnerProfile, LearnerMemory, str, str, str, bool, str, str]:
-    """Return prefs, profile, memory, learner_state, system, model, shape_lock, last_user, last_assistant."""
+) -> tuple[UserPrefs, LearnerProfile, LearnerMemory, str, str, str, bool, str, str, list[str]]:
+    """Return prefs, profile, memory, learner_state, system, model, shape_lock, last_user,
+    last_assistant, and the learner's known pieces (for the Easy-mode coverage check)."""
     prefs = prefs or load_prefs()
     profile = profile or load_profile()
     memory = memory or load_memory()
@@ -148,13 +150,13 @@ def _prepare_chat(
         support,
         chat_pace=prefs.chat_pace,
     )
-    from kaiwa.course.state import known_phrases_for_chat
+    from kaiwa.course import chat_link
     from kaiwa.practice.sitting import peek_pending_elicit
 
     try:
-        known = known_phrases_for_chat()
+        course = chat_link.context()
     except Exception:
-        known = None
+        course = None
     system = build_tutor_system_prompt(
         prefs,
         last_user_text=last_user,
@@ -165,11 +167,12 @@ def _prepare_chat(
         help_type=ht,
         replay_questions=replay_questions,
         elicit_line=peek_pending_elicit(),
-        known_phrases=known,
+        course=course,
     )
     use_pro = needs_pro_routing(settings.model_routing, profile, state, help_type=ht)
     model = settings.deepseek_model_pro if use_pro else settings.deepseek_model
-    return prefs, profile, memory, state, system, model, locked, last_user, last_assistant
+    pieces = (course or {}).get("pieces") or []
+    return prefs, profile, memory, state, system, model, locked, last_user, last_assistant, pieces
 
 
 def _complete_with_retry(
@@ -183,19 +186,30 @@ def _complete_with_retry(
     allow_recast: bool = True,
     client: OpenAI | None = None,
     model: str | None = None,
+    known_pieces: list[str] | None = None,
 ) -> tuple[str, bool]:
     reply = _completion(settings, system, messages, client=client, model=model)
     need_shape = locked and reply_too_dense(reply)
     need_recast = bool(
         allow_recast and last_user and needs_any_recast(last_user, reply, last_assistant)
     )
-    if not need_shape and not need_recast:
+    # Easy mode: a reply leaning on words or forms the course hasn't taught is
+    # rewritten once, measured like talk practice and extra listening.
+    share, unknown = (1.0, [])
+    if locked and known_pieces:
+        from kaiwa.course.chat_link import REPLY_OK, reply_coverage
+
+        share, unknown = reply_coverage(reply, known_pieces)
+    need_cover = bool(unknown) and share < REPLY_OK
+    if not need_shape and not need_recast and not need_cover:
         return reply, False
     extra: list[str] = []
     if need_recast:
         extra.append(RECAST_RETRY_BLOCK.strip())
     if need_shape:
         extra.append(SHAPE_RETRY_BLOCK.strip())
+    if need_cover:
+        extra.append(coverage_retry_block(unknown).strip())
     retry_system = system.rstrip() + "\n\n" + "\n\n".join(extra)
     try:
         retry_reply = _completion(
@@ -219,6 +233,12 @@ def _complete_with_retry(
             last_user, retry_reply, last_assistant
         ) and not needs_any_recast(last_user, reply, last_assistant):
             return reply, True
+    if need_cover and not need_shape:
+        # Coverage-only retry: keep whichever reply the learner can follow better.
+        from kaiwa.course.chat_link import reply_coverage
+
+        if reply_coverage(retry_reply, known_pieces or [])[0] < share:
+            return reply, True
     return retry_reply, True
 
 
@@ -235,7 +255,7 @@ def chat(
     client: OpenAI | None = None,
 ) -> ChatGeneration:
     """Return reply text, model id, and shape-lock retry flags."""
-    _prefs, _profile, _memory, _state, system, model, locked, last_user, last_assistant = _prepare_chat(
+    _prefs, _profile, _memory, _state, system, model, locked, last_user, last_assistant, pieces = _prepare_chat(
         settings,
         messages,
         prefs=prefs,
@@ -254,6 +274,7 @@ def chat(
         last_assistant=last_assistant,
         client=client,
         model=model,
+        known_pieces=pieces,
     )
     return ChatGeneration(reply=reply, model=model, retry=retry, locked=locked)
 
@@ -362,7 +383,7 @@ def chat_stream(
     client: OpenAI | None = None,
 ) -> ChatStreamStart:
     """Stream deltas. Buffer when shape-locked or a recast is expected."""
-    _prefs, _profile, _memory, _state, system, model, locked, last_user, last_assistant = (
+    _prefs, _profile, _memory, _state, system, model, locked, last_user, last_assistant, pieces = (
         _prepare_chat(
             settings,
             messages,
@@ -387,6 +408,7 @@ def chat_stream(
             last_assistant=last_assistant,
             client=client,
             model=model,
+            known_pieces=pieces,
         )
 
         def _one() -> Iterator[str]:

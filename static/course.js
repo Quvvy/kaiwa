@@ -666,22 +666,31 @@
           : null,
         s.phrases_learned || (today.kana_progress && today.kana_progress.lessons_done)
           ? el("div", { class: "home-more" },
-              el("button", { type: "button", class: "secondary", onclick: runStats,
-                "data-tip": "Retention, what's coming up, your cards, and how scheduling works" }, "Stats"),
-              el("button", { type: "button", class: "secondary", onclick: () => runExtraListening(),
-                "data-tip": `Endless short conversations and stories built from what you've learned. Understanding grows with hours of listening like this.${s.listening && s.listening.total ? ` ${s.listening.total} min so far.` : ""}` },
-                s.listening && s.listening.today ? `Extra listening (${Math.round(s.listening.today)} min today)` : "Extra listening"),
-              el("button", { type: "button", class: "secondary", onclick: runTalk,
-                "data-tip": "A short spoken role-play with a goal, using what you've learned. One fix per turn." },
-                s.talk_today ? `Talk practice (${s.talk_today} today)` : "Talk practice"),
-              el("button", { type: "button", class: "secondary", onclick: goChat,
-                "data-tip": "Free conversation. Kaiwa sticks to the phrases you've learned." }, "Open Chat"))
+              el("h2", { class: "home-more-title", text: "More practice" }),
+              practiceRow(
+                s.listening && s.listening.today ? `Extra listening (${Math.round(s.listening.today)} min today)` : "Extra listening",
+                () => runExtraListening(),
+                `Short conversations and stories from what you've learned, to understand by ear.${s.listening && s.listening.total ? ` ${s.listening.total} min so far.` : ""}`),
+              practiceRow(
+                s.talk_today ? `Talk practice (${s.talk_today} today)` : "Talk practice",
+                runTalk,
+                "A short scene with a goal and a hint when you're stuck. The best place to start speaking."),
+              practiceRow("Chat", goChat,
+                "Talk about anything, for as long as you like. Easy keeps it to what you've learned."),
+              el("button", { type: "button", class: "secondary home-stats", onclick: runStats,
+                "data-tip": "Retention, what's coming up, your cards, and how scheduling works" }, "Stats"))
           : null,
         el("label", { class: "home-romaji" },
           el("input", { type: "checkbox", checked: showRomaji, onchange: (e) => { showRomaji = e.target.checked; writePref("kaiwa_course_romaji", showRomaji ? "1" : "0"); } }),
           " Show romaji for kana you haven't learned"),
       ),
     );
+  }
+  /** One extra-practice mode on the home screen: its button and what it's for. */
+  function practiceRow(label, onclick, what) {
+    return el("div", { class: "practice-row" },
+      el("button", { type: "button", class: "secondary", onclick }, label),
+      el("p", { class: "practice-what", text: what }));
   }
   /** "You remember 88% of reviews" with a per-kind breakdown in the tooltip. */
   /** How the checks on placed (or skipped) units are going, while any are still to come. */

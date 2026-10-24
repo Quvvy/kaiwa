@@ -59,7 +59,9 @@ from kaiwa.learner_memory import (
     should_extract,
 )
 from kaiwa import jsonio
+from kaiwa.course import chat_link as course_chat_link
 from kaiwa.course import kana_judge as course_kana_judge
+from kaiwa.course import learner_log as course_learner_log
 from kaiwa.course import prerender as course_prerender
 from kaiwa.course import routes as course_routes
 from kaiwa import engine_watchdog
@@ -1553,6 +1555,12 @@ def _chat_sidework(
     """
     profile_file = profiles.learner_profile_path()
     memory_file = profiles.memory_path()
+    log_file = course_learner_log.log_path()
+    try:
+        # Same mistake types as lessons and talk practice, into the same learner log.
+        course_chat_link.log_turn(settings, history_snapshot, log_path=log_file)
+    except Exception:
+        _log.exception("chat sidework: learner log failed")
     try:
         prefs = load_prefs()
         profile = load_profile(profile_file)
