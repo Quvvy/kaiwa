@@ -83,7 +83,7 @@ def card_cost(kind: str, skill: str) -> int:
 def _empty() -> dict[str, Any]:
     return {"version": 2, "units": {}, "cards": {}, "days": [], "kana": {}, "questions": [], "reviewed": {}, "timing": {}, "log": [],
             "undo": [], "overrides": [], "daily": {}, "seq": 0, "grades": [], "grader": None,
-            "checks": {}}
+            "checks": {}, "listening": {"recent": [], "total_ms": 0}}
 
 
 def load_state(path: Path | None = None) -> dict[str, Any]:
@@ -108,6 +108,10 @@ def load_state(path: Path | None = None) -> dict[str, Any]:
         state["grader"] = raw["grader"]
     if isinstance(raw.get("placement"), dict):
         state["placement"] = raw["placement"]
+    if isinstance(raw.get("listening"), dict):
+        lst = raw["listening"]
+        state["listening"] = {"recent": [str(s) for s in lst.get("recent") or []][-LISTEN_RECENT_KEPT:],
+                              "total_ms": int(lst.get("total_ms") or 0)}
     if isinstance(raw.get("checks"), dict):
         state["checks"] = {k: v for k, v in raw["checks"].items() if isinstance(v, dict)}
     if isinstance(raw.get("log"), list):
@@ -724,6 +728,48 @@ def learned_phrase_ids(state: dict[str, Any]) -> list[str]:
     return [pid for pid in _PHRASES if pid in seen]
 
 
+# Extra listening. Time spent listening is the number that tracks comprehension
+# growth, so it's counted; recent scenes are kept so new stories don't repeat them.
+LISTEN_RECENT_KEPT = 12
+LISTEN_REPORT_MAX_S = 600   # one report can't add more than this
+
+
+def listening_context(state: dict[str, Any]) -> dict[str, Any]:
+    """Learned words split by how well they're held, and the recent story scenes."""
+    shaky, solid = [], []
+    for wid, w in _WORDS.items():
+        card = state["cards"].get(f"{wid}:mean")
+        if card is not None:
+            (solid if srs.stability(card) >= 7 else shaky).append(w)
+    # Example sentences of grammar already taught: their patterns are fair game.
+    patterns = [ex["jp"] for u in UNITS if state["units"].get(u["id"], {}).get("grammar")
+                for point in u.get("grammar", []) for ex in point["examples"]]
+    return {"shaky": shaky, "solid": solid, "patterns": patterns, "recent": list(state["listening"]["recent"])}
+
+
+def listening_minutes(state: dict[str, Any]) -> dict[str, float]:
+    day = state["daily"].get(_today().isoformat(), {})
+    return {"today": round(int(day.get("listen_ms") or 0) / 60000, 1),
+            "total": round(state["listening"]["total_ms"] / 60000)}
+
+
+def record_listening(seconds: float, *, scene: str = "", path: Path | None = None) -> dict[str, float]:
+    ms = int(max(0.0, min(float(seconds), LISTEN_REPORT_MAX_S)) * 1000)
+
+    def apply(state: dict[str, Any]) -> dict[str, float]:
+        day = state["daily"].setdefault(_today().isoformat(), {"answers": 0, "right": 0, "ms": 0})
+        day["listen_ms"] = int(day.get("listen_ms") or 0) + ms
+        state["listening"]["total_ms"] += ms
+        if scene:
+            recent = [s for s in state["listening"]["recent"] if s != scene] + [scene]
+            state["listening"]["recent"] = recent[-LISTEN_RECENT_KEPT:]
+        if ms:
+            _mark_day(state)
+        return listening_minutes(state)
+
+    return _with_state(apply, path)
+
+
 def stats(state: dict[str, Any]) -> dict[str, Any]:
     learned = learned_phrase_ids(state)
     strong = {
@@ -741,6 +787,7 @@ def stats(state: dict[str, Any]) -> dict[str, Any]:
         "units_total": len(UNITS),
         "streak": streak(state),
         "studied_today": _today().isoformat() in state["days"],
+        "listening": listening_minutes(state),
     }
 
 
@@ -858,7 +905,9 @@ def course_stats(*, path: Path | None = None) -> dict[str, Any]:
     leeches.sort(key=lambda r: -r["lapses"])
 
     return {
-        "today": {"answers": day["answers"], "right": day["right"], "minutes": round(day["ms"] / 60000, 1)},
+        "today": {"answers": day["answers"], "right": day["right"], "minutes": round(day["ms"] / 60000, 1),
+                  "listening": round(int(day.get("listen_ms") or 0) / 60000, 1)},
+        "listening_total": round(state["listening"]["total_ms"] / 60000),
         "streak": streak(state),
         "forecast": forecast,
         "stages": {kinds[k]: v for k, v in stages.items()},

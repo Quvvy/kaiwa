@@ -264,12 +264,23 @@ async def story() -> dict[str, Any]:
     settings = get_settings()
     if not settings.deepseek_api_key:
         raise HTTPException(status_code=400, detail="Extra listening needs your DeepSeek key (Settings → Your data).")
-    data = await asyncio.to_thread(stories.generate, settings)
+    data = await asyncio.to_thread(stories.take, settings)
     if data is None:
         if not state.learned_phrase_ids(state.load_state()):
             raise HTTPException(status_code=400, detail="Learn your first phrases, then extra listening unlocks.")
         raise HTTPException(status_code=502, detail="Couldn't make a conversation this time — try again.")
     return data
+
+
+class ListenedBody(BaseModel):
+    seconds: float
+    scene: str = ""
+
+
+@router.post("/listened")
+def listened(body: ListenedBody) -> dict[str, Any]:
+    """Time spent listening (and the scene, once heard through), for the listening total."""
+    return state.record_listening(body.seconds, scene=body.scene[:200])
 
 
 @router.post("/step")

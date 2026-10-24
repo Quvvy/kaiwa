@@ -637,8 +637,9 @@
           ? el("div", { class: "home-more" },
               el("button", { type: "button", class: "secondary", onclick: runStats,
                 "data-tip": "Retention, what's coming up, your cards, and how scheduling works" }, "Stats"),
-              el("button", { type: "button", class: "secondary", onclick: runExtraListening,
-                "data-tip": "A new short conversation using only phrases you've learned" }, "Extra listening"),
+              el("button", { type: "button", class: "secondary", onclick: () => runExtraListening(),
+                "data-tip": `Endless short conversations and stories built from what you've learned. Understanding grows with hours of listening like this.${s.listening && s.listening.total ? ` ${s.listening.total} min so far.` : ""}` },
+                s.listening && s.listening.today ? `Extra listening (${Math.round(s.listening.today)} min today)` : "Extra listening"),
               el("button", { type: "button", class: "secondary", onclick: goChat,
                 "data-tip": "Free conversation. Kaiwa sticks to the phrases you've learned." }, "Open Chat"))
           : null,
@@ -1308,6 +1309,7 @@
         figure(String(s.today.answers), "answers"),
         figure(s.today.answers ? `${Math.round((100 * s.today.right) / s.today.answers)}%` : "–", "not Again"),
         figure(`${s.today.minutes}`, "minutes answering"),
+        figure(`${s.today.listening}`, `minutes listening (${s.listening_total} in all)`),
         figure(String(s.streak), s.streak === 1 ? "day in a row" : "days in a row")));
 
     const retention = section("Remembered in reviews",
@@ -1703,8 +1705,8 @@
     });
   }
 
-  async function runExtraListening() {
-    frame({ title: "Extra listening", body: el("p", { class: "pending", text: "Generating a conversation…" }) });
+  async function runExtraListening(autoplay = false) {
+    frame({ title: "Extra listening", body: el("p", { class: "pending", text: "Writing something at your level…" }) });
     let story;
     try {
       story = await api("/api/course/story", { method: "POST" });
@@ -1712,17 +1714,19 @@
       frame({
         title: "Extra listening",
         body: el("p", { class: "verdict off", text: String(err.message || err) }),
-        actions: [primaryButton("Try again", runExtraListening)],
-        primary: runExtraListening,
+        actions: [primaryButton("Try again", () => runExtraListening())],
+        primary: () => runExtraListening(),
       });
       return;
     }
     listenView({
       title: "Extra listening",
-      dialogue: { scene: story.scene, lines: story.lines },
+      dialogue: { scene: story.scene, lines: story.lines, form: story.form },
       questions: story.questions,
-      doneLabel: "Another conversation",
-      onDone: runExtraListening,
+      doneLabel: "Next one",
+      onDone: () => runExtraListening(true),
+      autoplay,
+      remember: true,
     });
   }
 
@@ -1732,7 +1736,7 @@
    * after one full listen (Japanese first, English on a second click); questions
    * appear after that first listen too, and a miss offers another listen, not text.
    */
-  function listenView({ title, dialogue: d, questions: qs, doneLabel, onDone }) {
+  function listenView({ title, dialogue: d, questions: qs, doneLabel, onDone, autoplay = false, remember = false }) {
     // Up to four speakers: A and C on the left, B and D on the right, each its own voice.
     const who = (line) => ("abcd".includes(line.who) && line.who ? line.who : "a");
     const side = (line) => ("bd".includes(who(line)) ? "right" : "left");
@@ -1789,18 +1793,26 @@
       return el("span", { class: "wave" }, bars);
     }
 
+    function listened(since, scene = "") {
+      const seconds = (Date.now() - since) / 1000;
+      postJson("/api/course/listened", { seconds, scene }).catch(() => {});
+    }
+
     async function playLine(idx) {
       if (playing) return;
       const b = bubbles[idx];
+      const since = Date.now();
       b.bubble.classList.add("speaking");
       await play(d.lines[idx].jp, voice(d.lines[idx]));
       b.bubble.classList.remove("speaking");
+      listened(since);
     }
 
     async function playAll() {
       if (playing) return;
       playing = true;
       playBtn.disabled = true;
+      const since = Date.now();
       for (let idx = 0; idx < d.lines.length; idx++) {
         if (!here()) return;
         const b = bubbles[idx];
@@ -1823,6 +1835,7 @@
       playing = false;
       playBtn.disabled = false;
       heard += 1;
+      listened(since, remember && heard === 1 ? d.scene || "" : "");
       playBtn.firstChild.textContent = "Play again";
       heardNote.textContent = heard === 1 ? "Heard once" : `Heard ${heard} times`;
       if (heard === 1) {
@@ -1832,7 +1845,7 @@
       }
     }
 
-    const playBtn = el("button", { type: "button", onclick: playAll }, "Play the conversation", kbd("R"));
+    const playBtn = el("button", { type: "button", onclick: playAll }, d.form === "story" ? "Play the story" : "Play the conversation", kbd("R"));
     const heardNote = el("span", { class: "heard-note" });
 
     const doneBtn = primaryButton(doneLabel, onDone, { disabled: true });
@@ -1878,6 +1891,7 @@
       actions: [doneBtn],
     });
     keys.replay = playAll;
+    if (autoplay) playAll();
   }
 
   // ---------- kana lesson ----------

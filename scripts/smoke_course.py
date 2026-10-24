@@ -201,6 +201,39 @@ def story_checks() -> None:
     _check(True, "shuffle keeps the right answer")
 
 
+def listening_checks() -> None:
+    from kaiwa.course import stories
+
+    with tempfile.TemporaryDirectory() as raw:
+        path = Path(raw) / "course_state.json"
+        course_state.apply_placement({"known_units": 2}, path=path)
+        st = course_state.load_state(path)
+        ctx = course_state.listening_context(st)
+        _check(ctx["shaky"] and not ctx["recent"], "placed words count as still learning")
+        course_state.record_listening(90, scene="At a café", path=path)
+        out = course_state.record_listening(30, scene="On the train", path=path)
+        _check(out == {"today": 2.0, "total": 2}, "listening minutes add up")
+        course_state.record_listening(10_000, scene="At a café", path=path)
+        st = course_state.load_state(path)
+        _check(st["listening"]["total_ms"] == 720_000, "one report is capped at ten minutes")
+        _check(st["listening"]["recent"] == ["On the train", "At a café"], "recent scenes kept once, newest last")
+        _check(course_state.stats(st)["listening"]["today"] == 12.0, "stats show today's listening")
+
+    # The next story is prepared while this one plays, and avoids this one's scene.
+    made, asked = iter(["one", "two", "three"]), []
+    real_generate, real_prepare = stories.generate, stories._prepare
+    stories.generate = lambda settings, **kw: {"scene": next(made)}
+    stories._prepare = lambda settings, avoid: (asked.append(avoid), stories.generate(settings))[1]
+    try:
+        first = stories.take(None)
+        second = stories.take(None)
+        _check(first["scene"] == "one" and second["scene"] == "two", "second story comes from the prepared one")
+        _check(asked[0] == ["one"], "prepared story avoids the scene just played")
+    finally:
+        stories.generate, stories._prepare = real_generate, real_prepare
+        stories._next.clear()
+
+
 def sentence_checks() -> None:
     from kaiwa.course.sentences import contains_word, only_known
 
@@ -542,6 +575,7 @@ def main() -> None:
     placement_self_correction()
     pacing()
     story_checks()
+    listening_checks()
     sentence_checks()
     coach_fallback()
     print("smoke_course ok")
