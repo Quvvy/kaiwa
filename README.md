@@ -5,13 +5,13 @@
 **Learn** is home: review what's due, learn a few new phrases, hear them in a conversation, then answer questions out loud and get one concrete fix. **Chat** is where you use it. Anything that doesn't help you understand or speak gets cut.
 
 **Repo:** [github.com/Quvvy/kaiwa](https://github.com/Quvvy/kaiwa)  
-**Version:** **2.0.2**
+**Version:** **2.0.3**
 
 ## For installation (Windows)
 
-1. Download **`KaiwaSetup-2.0.2.exe`** from the [latest GitHub Release](https://github.com/Quvvy/kaiwa/releases/latest).
+1. Download **`KaiwaSetup-2.0.3.exe`** from the [latest GitHub Release](https://github.com/Quvvy/kaiwa/releases/latest).
 2. Run the installer → open **Kaiwa** from the Start Menu or the desktop.
-   - **No install:** download **`Kaiwa-2.0.2-portable.zip`** instead, unzip it anywhere (a USB drive works) and run `Kaiwa\Kaiwa.exe`. Everything is kept in `Kaiwa\Data\` next to it.
+   - **No install:** download **`Kaiwa-2.0.3-portable.zip`** instead, unzip it anywhere (a USB drive works) and run `Kaiwa\Kaiwa.exe`. Everything is kept in `Kaiwa\Data\` next to it.
 3. First launch downloads a speech model (~1.5 GB), the voice engine (~200 MB) into `%LocalAppData%\Kaiwa\`, plus four voices (~1 GB) into AivisSpeech's own `%AppData%\AivisSpeech-Engine\Models\` (progress on the splash; relaunch resumes).
 4. When asked, paste a [DeepSeek](https://platform.deepseek.com/) API key (saved under AppData, not in the install folder).
 5. Start today's lesson on the **Learn** tab. **NVIDIA GPU recommended** for faster speech recognition; CPU works.

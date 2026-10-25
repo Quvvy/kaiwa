@@ -80,8 +80,17 @@ $utf8NoBom = New-Object System.Text.UTF8Encoding $false
 [System.IO.File]::WriteAllText($Pth, "$PyTag.zip`r`n.`r`nLib\site-packages`r`nimport site`r`n", $utf8NoBom)
 
 Write-Host "Installing Kaiwa and its dependencies into the runtime..."
+# Pin every dependency to the version in the build venv - the one we tested.
+# Without this pip pulls the newest of everything, and the shipped app runs
+# libraries nobody has tried (PyAV 19 broke faster-whisper's audio decoding).
+$Constraints = Join-Path $CacheDir "runtime-constraints.txt"
+$Frozen = & $HostPython -m pip freeze --exclude-editable --disable-pip-version-check
+if ($LASTEXITCODE -ne 0) {
+    throw "pip freeze of the build venv failed"
+}
+[System.IO.File]::WriteAllLines($Constraints, [string[]]$Frozen, $utf8NoBom)
 # Base package only - nvidia CUDA wheels are optional [cuda].
-& $HostPython -m pip install --target $SitePackages --no-compile --disable-pip-version-check -q "$Root"
+& $HostPython -m pip install --target $SitePackages --no-compile --disable-pip-version-check -q -c $Constraints "$Root"
 if ($LASTEXITCODE -ne 0) {
     throw "pip install kaiwa into runtime failed"
 }
@@ -116,6 +125,11 @@ try {
     & $RuntimePython -c "import kaiwa.app, kaiwa.bootstrap, faster_whisper, onnxruntime, fsrs; print('runtime ok')"
     if ($LASTEXITCODE -ne 0) {
         throw "The bundled runtime cannot import Kaiwa."
+    }
+    # Every voice route decodes uploads through faster-whisper + PyAV.
+    & $RuntimePython -c "import io, numpy, soundfile; from faster_whisper.audio import decode_audio; b = io.BytesIO(); soundfile.write(b, numpy.zeros(16000, 'float32'), 16000, format='WAV'); b.seek(0); assert len(decode_audio(b)) == 16000; print('audio decode ok')"
+    if ($LASTEXITCODE -ne 0) {
+        throw "The bundled runtime cannot decode audio - speech recognition would fail."
     }
 } finally {
     $env:KAIWA_ROOT, $env:KAIWA_DATA_DIR = $saved

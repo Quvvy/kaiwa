@@ -7,6 +7,13 @@ and this project aims to follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [2.0.3] — 2026-10-25
+
+### Fixed
+
+- **Speech recognition** failed on every recording ("open() got an unexpected keyword argument 'metadata_errors'") in 2.0.2, breaking repeat-after-me in the placement test, say-it-back in lessons, chat and practice. The bundled runtime had picked up PyAV 19, which faster-whisper doesn't support yet.
+- Builds now pin every library to the tested versions, and fail if the bundled runtime can't decode audio.
+
 ## [2.0.2] — 2026-10-25
 
 ### Fixed
