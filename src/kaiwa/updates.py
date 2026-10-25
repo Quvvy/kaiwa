@@ -161,7 +161,12 @@ def fetch_latest_release(*, timeout: float = 20.0) -> dict[str, Any]:
         ) from exc
 
     if res.status_code == 404:
-        raise RuntimeError("No GitHub release found for Kaiwa yet.")
+        # GitHub answers 404 both when there is no release and when the repository
+        # isn't public (anonymous requests can't see it); say so rather than guess.
+        raise RuntimeError(
+            f"Kaiwa can't see its releases on GitHub ({GITHUB_REPO}). "
+            "Check for a new version on the download page instead."
+        )
     if res.status_code == 403:
         raise RuntimeError("GitHub rate-limited the update check. Try again later.")
     if res.status_code >= 400:

@@ -434,7 +434,7 @@ async def placement_judge(body: PlacementJudgeBody) -> dict[str, Any]:
     score = await asyncio.to_thread(
         placement.judge_meaning, get_settings(), jp=body.jp, expected=body.expected, answer=body.answer, kind=body.kind
     )
-    learner_log.log("placement_item", jp=body.jp, expected=body.expected, answer=body.answer, kind=body.kind, score=score)
+    learner_log.log("placement_item", jp=body.jp, expected=body.expected, answer=body.answer, skill=body.kind, score=score)
     return {"score": score}
 
 

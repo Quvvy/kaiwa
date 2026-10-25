@@ -82,8 +82,14 @@ def _last_session_on_disk(path: Path) -> tuple[float, int]:
         return 0.0, 0
 
 
-def log(kind: str, *, path: Path | None = None, **data: Any) -> None:
-    """Append one event. Never raises."""
+def log(kind: str, /, *, path: Path | None = None, **data: Any) -> None:
+    """Append one event. Never raises.
+
+    `kind` is positional-only, so a data field that happens to be called "kind"
+    can't collide with it (it's kept as "kind_" instead of failing the call).
+    """
+    if "kind" in data:
+        data["kind_"] = data.pop("kind")
     try:
         path = path or log_path()
         now = datetime.now().astimezone()

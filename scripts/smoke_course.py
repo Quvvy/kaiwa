@@ -364,6 +364,23 @@ def learner_log_checks() -> None:
     _check(rows[-1]["kind"] == "review" and rows[-1]["answer"] == "ねこ" and rows[-1]["gave_up"]
            and rows[-1]["grade"] == 1, "a review answer is logged with what was answered and the grade")
 
+    # 2.0.0 bug: a data field named "kind" crashed the call (placement answers → HTTP 500).
+    learner_log.log("placement_item", kind="words")
+    _check(learner_log.read()[-1] == {**learner_log.read()[-1], "kind": "placement_item", "kind_": "words"},
+           "a data field called kind can't break logging")
+    from kaiwa.course import placement
+
+    real_judge = placement.judge_meaning
+    placement.judge_meaning = lambda settings, **kw: 2
+    try:
+        r = client.post("/api/course/placement/judge", json={"jp": "ねこ", "expected": "cat", "answer": "cat", "kind": "words"})
+    finally:
+        placement.judge_meaning = real_judge
+    row = learner_log.read()[-1]
+    _check(r.status_code == 200 and r.json()["score"] == 2, "a typed placement answer is graded")
+    _check(row["kind"] == "placement_item" and row["skill"] == "words" and row["answer"] == "cat",
+           "…and logged with its skill")
+
 
 def release_checks() -> None:
     from kaiwa import engine_watchdog, profiles

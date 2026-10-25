@@ -7,6 +7,13 @@ and this project aims to follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [2.0.2] — 2026-10-25
+
+### Fixed
+
+- **Placement test:** grading a typed answer failed with a server error (since 2.0.0), so the test couldn't be finished. The learning log no longer lets a field name break a call.
+- **Check for updates** no longer says "No GitHub release found" when it simply can't see the releases; it says so and points to the download page.
+
 ## [2.0.1] — 2026-10-24
 
 ### Changed
