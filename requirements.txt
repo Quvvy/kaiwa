@@ -9,5 +9,5 @@ soundfile>=0.12.0
 httpx>=0.27.0
 python-multipart>=0.0.9
 pykakasi>=2.2.0
-nvidia-cublas-cu12; platform_system=="Windows"
-nvidia-cudnn-cu12; platform_system=="Windows"
+nvidia-cublas-cu12; platform_system!="Darwin"
+nvidia-cudnn-cu12; platform_system!="Darwin"

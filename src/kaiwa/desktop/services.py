@@ -123,14 +123,15 @@ def resolve_api_python() -> Path:
 
     try:
         root = resolve_app_root()
-        venv_py = root / ".venv" / "Scripts" / "python.exe"
-        if venv_py.is_file():
-            return venv_py.resolve()
+        for venv_py in (root / ".venv" / "Scripts" / "python.exe", root / ".venv" / "bin" / "python"):
+            if venv_py.is_file():
+                # No resolve(): a venv's bin/python is a symlink to the system one.
+                return venv_py.absolute()
     except FileNotFoundError:
         pass
 
     if not _is_frozen():
-        return Path(sys.executable).resolve()
+        return Path(sys.executable).absolute()
 
     raise FileNotFoundError(
         "No API Python found. Rebuild with scripts/build_desktop.ps1 "
@@ -177,6 +178,10 @@ def _creationflags() -> int:
     return 0
 
 
+# POSIX: new session = new process group, which _terminate_pid kills as a whole.
+_NEW_GROUP = sys.platform != "win32"
+
+
 def port_open(host: str, port: int, timeout: float = 0.5) -> bool:
     try:
         with socket.create_connection((host, port), timeout=timeout):
@@ -206,7 +211,14 @@ def local_ready(port: int, url: str) -> bool:
 def _aivis_candidates() -> list[Path]:
     from kaiwa.bootstrap import aivis_run_candidates_under_install
 
+    from kaiwa.bootstrap import AIVIS_PLATFORM, AIVIS_RUN
+
     root = _root()
+    if sys.platform != "win32":
+        return [
+            *aivis_run_candidates_under_install(),
+            root / "tools/aivisspeech/engine" / AIVIS_PLATFORM / AIVIS_RUN,
+        ]
     return [
         *aivis_run_candidates_under_install(),
         root / "tools/aivisspeech/engine/Windows-x64/run.exe",
@@ -322,6 +334,7 @@ def start_tts_engine(
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             creationflags=_creationflags(),
+            start_new_session=_NEW_GROUP,
         )
     except OSError as exc:
         label = "AivisSpeech" if engine == "aivisspeech" else "VOICEVOX"
@@ -383,6 +396,7 @@ def start_kaiwa(registry: ServiceRegistry, *, tts_booting: bool = False) -> None
         stdout=api_log,
         stderr=api_log,
         creationflags=_creationflags(),
+        start_new_session=_NEW_GROUP,
     )
     registry.kaiwa.proc = proc
     registry.kaiwa.started_by_us = True
@@ -417,12 +431,31 @@ def _terminate_pid(pid: int) -> None:
             check=False,
         )
     else:
-        try:
-            import signal
+        import signal
 
-            os.kill(pid, signal.SIGTERM)
-        except OSError:
-            pass
+        # Like taskkill /F: ask nicely, then force (uvicorn can wait forever on
+        # background tasks after SIGTERM).
+        def _signal(sig: int) -> bool:
+            try:
+                os.killpg(pid, sig)
+                return True
+            except OSError:
+                try:
+                    os.kill(pid, sig)
+                    return True
+                except OSError:
+                    return False
+
+        if not _signal(signal.SIGTERM):
+            return
+        for _ in range(30):
+            time.sleep(0.1)
+            try:
+                os.waitpid(pid, os.WNOHANG)
+                os.killpg(pid, 0)
+            except OSError:
+                return
+        _signal(signal.SIGKILL)
 
 
 def stop_managed(mp: ManagedProcess) -> None:
@@ -470,6 +503,7 @@ def run_bootstrap(
         encoding="utf-8",
         errors="replace",
         creationflags=_creationflags(),
+        start_new_session=_NEW_GROUP,
     )
     assert proc.stdout is not None
     err_chunks: list[str] = []

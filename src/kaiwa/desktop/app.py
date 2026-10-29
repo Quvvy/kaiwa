@@ -52,12 +52,42 @@ def _log(msg: str) -> None:
         pass
 
 
+def _stop_on_signals(on_closed) -> None:  # noqa: ANN001
+    """Linux: shut the API and voice engine down on SIGTERM/SIGHUP/SIGINT (logout, kill).
+
+    The GUI loop doesn't run Python signal handlers promptly, so the C-level handler
+    writes to a wakeup socket and a watcher thread does the cleanup.
+    """
+    if sys.platform == "win32":
+        return
+    import os
+    import signal
+    import socket
+
+    reader, writer = socket.socketpair()
+    writer.setblocking(False)
+    signal.set_wakeup_fd(writer.fileno())
+    for sig in (signal.SIGTERM, signal.SIGHUP, signal.SIGINT):
+        signal.signal(sig, lambda *_: None)
+
+    def watch() -> None:
+        sig = reader.recv(1)
+        _log(f"signal {sig[0] if sig else '?'} → shutting down")
+        on_closed()
+        os._exit(0)
+
+    threading.Thread(target=watch, name="kaiwa-signals", daemon=True).start()
+    _stop_on_signals.keep = (reader, writer)  # type: ignore[attr-defined]
+
+
 def main() -> None:
     try:
         import webview
     except ImportError as exc:
         raise SystemExit(
             'Desktop deps missing. Run: .\\.venv\\Scripts\\pip install -e ".[desktop]"'
+            if sys.platform == "win32"
+            else 'Desktop deps missing. Run: .venv/bin/pip install -e ".[desktop]"'
         ) from exc
 
     portable = apply_portable_mode()
@@ -186,6 +216,7 @@ def main() -> None:
     )
     window_holder["win"] = window
     window.events.closed += on_closed
+    _stop_on_signals(on_closed)
     window.events.shown += start_boot
     window.events.loaded += start_boot
 

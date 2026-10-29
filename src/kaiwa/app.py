@@ -5,6 +5,8 @@ import base64
 import json
 import logging
 import os
+import subprocess
+import sys
 import threading
 import time
 from collections import deque
@@ -405,7 +407,10 @@ def open_data_folder() -> dict[str, Any]:
     """Show this profile's folder (progress and learning log) in Explorer."""
     folder = profiles.active_profile_dir()
     try:
-        os.startfile(str(folder))  # type: ignore[attr-defined]
+        if sys.platform == "win32":
+            os.startfile(str(folder))  # type: ignore[attr-defined]
+        else:
+            subprocess.Popen(["xdg-open", str(folder)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except (AttributeError, OSError) as exc:
         raise HTTPException(status_code=500, detail=f"Couldn't open {folder}: {exc}") from exc
     return {"path": str(folder)}

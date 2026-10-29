@@ -18,6 +18,23 @@
 
 If Kaiwa fails to start, details are in `%LocalAppData%\Kaiwa\Kaiwa.desktop.log`. When a newer release exists, Kaiwa can notify you and download/run the Windows Setup from Settings → About (or the update banner). Uninstall via Windows Apps asks whether to also delete your progress, key and models in `%LocalAppData%\Kaiwa\` (default: keep them). Windows may show a SmartScreen warning because the app isn't code-signed: **More info → Run anyway**.
 
+## Linux (from source)
+
+Runs from a checkout; there is no Linux installer yet.
+
+```bash
+sudo apt install libportaudio2 python3-dev     # mic input; headers for pynput's evdev
+python3 -m venv .venv
+.venv/bin/pip install -e ".[desktop,cuda]" "pywebview[qt]"
+.venv/bin/python -m kaiwa.desktop
+```
+
+- **Data** lives in `~/.local/share/kaiwa/` (`KAIWA_DATA_DIR` still overrides); voices in `~/.local/share/AivisSpeech-Engine/Models/`. First launch downloads the Linux AivisSpeech Engine there, same as on Windows. To move from Windows, copy `%LocalAppData%\Kaiwa\` (minus `tts/`, `downloads/`, `bootstrap.json`) and `%AppData%\AivisSpeech-Engine\Models\`.
+- **GPU:** the `cuda` extra installs cuBLAS/cuDNN wheels; Kaiwa loads them itself, no system CUDA toolkit needed.
+- **Window:** pywebview's Qt backend (fits KDE). Only one Kaiwa runs at a time; a second launch just exits (Wayland won't let it raise the first window).
+- **Global push-to-talk** (pynput) only sees X11/XWayland input; on a Wayland session use the in-app button.
+- **Updates:** no in-app installer; `git pull`.
+
 ## Stack
 
 ```

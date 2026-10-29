@@ -27,8 +27,8 @@ dependencies = [
 
 [project.optional-dependencies]
 cuda = [
-  "nvidia-cublas-cu12; platform_system=='Windows'",
-  "nvidia-cudnn-cu12; platform_system=='Windows'",
+  "nvidia-cublas-cu12; platform_system!='Darwin'",
+  "nvidia-cudnn-cu12; platform_system!='Darwin'",
 ]
 desktop = [
   "pywebview>=5.0",

@@ -21,7 +21,10 @@ DEFAULT_WHISPER_MODEL = "large-v3-turbo"
 WHISPER_REPO = "mobiuslabsgmbh/faster-whisper-large-v3-turbo"
 
 AIVIS_ENGINE_VERSION = "1.2.0"
-AIVIS_ASSET = f"AivisSpeech-Engine-Windows-x64-{AIVIS_ENGINE_VERSION}.7z.001"
+# The engine ships one build per OS; the folder name inside the archive matches.
+AIVIS_PLATFORM = "Windows-x64" if sys.platform == "win32" else "Linux-x64"
+AIVIS_RUN = "run.exe" if sys.platform == "win32" else "run"
+AIVIS_ASSET = f"AivisSpeech-Engine-{AIVIS_PLATFORM}-{AIVIS_ENGINE_VERSION}.7z.001"
 AIVIS_URL = (
     "https://github.com/Aivis-Project/AivisSpeech-Engine/releases/download/"
     f"{AIVIS_ENGINE_VERSION}/{AIVIS_ASSET}"
@@ -50,10 +53,10 @@ def aivis_install_root() -> Path:
 def aivis_run_candidates_under_install() -> list[Path]:
     root = aivis_install_root()
     return [
-        root / "engine" / "Windows-x64" / "run.exe",
-        root / "Windows-x64" / "run.exe",
-        root / "AivisSpeech-Engine" / "run.exe",
-        root / "run.exe",
+        root / "engine" / AIVIS_PLATFORM / AIVIS_RUN,
+        root / AIVIS_PLATFORM / AIVIS_RUN,
+        root / "AivisSpeech-Engine" / AIVIS_RUN,
+        root / AIVIS_RUN,
     ]
 
 
@@ -112,7 +115,7 @@ def _find_existing_aivis_elsewhere() -> Path | None:
     try:
         from kaiwa.config import ROOT
 
-        tool = ROOT / "tools" / "aivisspeech" / "engine" / "Windows-x64" / "run.exe"
+        tool = ROOT / "tools" / "aivisspeech" / "engine" / AIVIS_PLATFORM / AIVIS_RUN
         if tool.is_file():
             return tool
     except Exception:
@@ -125,6 +128,8 @@ def _find_existing_aivis_elsewhere() -> Path | None:
             return found
     except Exception:
         pass
+    if sys.platform != "win32":
+        return None
     home = Path.home()
     for path in (
         home / "AppData/Local/Programs/AivisSpeech/AivisSpeech-Engine/run.exe",
@@ -353,11 +358,15 @@ def _extract_aivis_archive(archive: Path, dest_root: Path) -> Path:
             except OSError:
                 pass
 
-    # Find run.exe in the extract tree.
-    runs = list(staging.rglob("run.exe"))
+    # Find the engine's run binary in the extract tree ("run" is a common name on
+    # Linux, so prefer the one inside the platform folder).
+    runs = sorted(
+        (p for p in staging.rglob(AIVIS_RUN) if p.is_file()),
+        key=lambda p: (p.parent.name.lower() != AIVIS_PLATFORM.lower(), len(p.parts)),
+    )
     if not runs:
         raise RuntimeError(
-            "AivisSpeech archive extracted but run.exe was not found. "
+            f"AivisSpeech archive extracted but {AIVIS_RUN} was not found. "
             "Close Kaiwa and relaunch to retry."
         )
     run = runs[0]
@@ -366,16 +375,16 @@ def _extract_aivis_archive(archive: Path, dest_root: Path) -> Path:
         shutil.rmtree(dest_root, ignore_errors=True)
     dest_root.mkdir(parents=True, exist_ok=True)
 
-    # Prefer layout: engine/Windows-x64/run.exe matching tools/ and candidates.
+    # Prefer layout: engine/<platform>/run[.exe] matching tools/ and candidates.
     win64 = run.parent
-    if win64.name.lower() == "windows-x64":
-        target = dest_root / "engine" / "Windows-x64"
+    if win64.name.lower() == AIVIS_PLATFORM.lower():
+        target = dest_root / "engine" / AIVIS_PLATFORM
         target.parent.mkdir(parents=True, exist_ok=True)
         if target.exists():
             shutil.rmtree(target, ignore_errors=True)
         shutil.move(str(win64), str(target))
     else:
-        target = dest_root / "engine" / "Windows-x64"
+        target = dest_root / "engine" / AIVIS_PLATFORM
         target.mkdir(parents=True, exist_ok=True)
         for item in win64.iterdir():
             shutil.move(str(item), str(target / item.name))
@@ -383,7 +392,10 @@ def _extract_aivis_archive(archive: Path, dest_root: Path) -> Path:
     shutil.rmtree(staging, ignore_errors=True)
     found = aivis_appdata_run_exe()
     if found is None:
-        raise RuntimeError("AivisSpeech install finished but run.exe is missing.")
+        raise RuntimeError(f"AivisSpeech install finished but {AIVIS_RUN} is missing.")
+    if sys.platform != "win32":
+        # 7z doesn't always keep the executable bit.
+        found.chmod(found.stat().st_mode | 0o755)
     return found
 
 
@@ -402,8 +414,8 @@ def ensure_aivis(*, on_progress: ProgressFn | None = None) -> Path | None:
         )
         return existing
 
-    if sys.platform != "win32":
-        raise RuntimeError("Automatic AivisSpeech install is only supported on Windows.")
+    if sys.platform not in {"win32", "linux"}:
+        raise RuntimeError("Automatic AivisSpeech install is only supported on Windows and Linux.")
 
     downloads_dir().mkdir(parents=True, exist_ok=True)
     archive = downloads_dir() / AIVIS_ASSET

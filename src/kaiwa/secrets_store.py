@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +20,9 @@ SESSIONS_SUBDIR = "sessions"
 
 
 def appdata_kaiwa_dir() -> Path:
+    if sys.platform != "win32":
+        xdg = (os.environ.get("XDG_DATA_HOME") or "").strip()
+        return (Path(xdg) if xdg else Path.home() / ".local" / "share") / "kaiwa"
     local = (os.environ.get("LOCALAPPDATA") or "").strip()
     if local:
         return Path(local) / "Kaiwa"

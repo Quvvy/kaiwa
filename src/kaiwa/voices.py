@@ -21,6 +21,7 @@ fill in a lost sound, so it tracks how clearly a voice articulates).
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 
 # AivisHub model UUID → voice name, in order of use.
@@ -50,7 +51,11 @@ HIDDEN_NAMES = {"まお", "コハク"}
 
 
 def models_dir() -> Path:
-    """Where AivisSpeech Engine loads voice models from (%APPDATA%\\AivisSpeech-Engine\\Models)."""
+    """Where AivisSpeech Engine loads voice models from (%APPDATA%\\AivisSpeech-Engine\\Models,
+    ~/.local/share/AivisSpeech-Engine/Models on Linux)."""
+    if sys.platform != "win32":
+        base = os.environ.get("XDG_DATA_HOME") or str(Path.home() / ".local" / "share")
+        return Path(base) / "AivisSpeech-Engine" / "Models"
     base = os.environ.get("APPDATA") or str(Path.home() / "AppData" / "Roaming")
     return Path(base) / "AivisSpeech-Engine" / "Models"
 

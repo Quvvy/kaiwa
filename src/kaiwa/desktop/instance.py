@@ -43,10 +43,31 @@ def apply_portable_mode() -> Path | None:
     return data
 
 
+def _claim_lock_file() -> bool:
+    """Linux/macOS: hold an flock on a file in the data dir for the life of the process."""
+    global _mutex
+    try:
+        import fcntl
+
+        from kaiwa.secrets_store import user_data_dir
+
+        path = user_data_dir() / "kaiwa-desktop.lock"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        handle = open(path, "w")  # noqa: SIM115 — kept open while Kaiwa runs
+        fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        return False
+    except Exception:
+        return True
+    _mutex = handle
+    return True
+
+
 def claim_single_instance() -> bool:
     """True if this is the only Kaiwa window; otherwise bring the open one forward."""
     if sys.platform != "win32":
-        return True
+        # Wayland doesn't let one app raise another's window, so a second launch just exits.
+        return _claim_lock_file()
     global _mutex
     try:
         import ctypes

@@ -29,8 +29,40 @@ _runtime_info: dict[str, Any] = {
 }
 
 
+_linux_cuda_loaded = False
+
+
+def _preload_nvidia_libs_linux() -> None:
+    """Load pip-installed cuBLAS/cuDNN so CTranslate2 finds them by soname.
+
+    LD_LIBRARY_PATH is read once at process start, so setting it here would be
+    too late; loading the libraries globally up front works instead.
+    """
+    global _linux_cuda_loaded
+    if _linux_cuda_loaded:
+        return
+    _linux_cuda_loaded = True
+    import ctypes
+
+    for entry in sys.path:
+        root = Path(entry) / "nvidia"
+        if not root.is_dir():
+            continue
+        # Dependencies first: cublasLt before cublas, libcudnn before its parts.
+        for pattern in ("cublas/lib/libcublasLt.so.*", "cublas/lib/libcublas.so.*", "cudnn/lib/libcudnn.so.*",
+                        "cudnn/lib/libcudnn_*.so.*"):
+            for lib in sorted(root.glob(pattern)):
+                try:
+                    ctypes.CDLL(str(lib), mode=ctypes.RTLD_GLOBAL)
+                except OSError:
+                    pass
+
+
 def _ensure_nvidia_dll_path() -> None:
-    """Make pip-installed CUDA DLLs (cublas, etc.) visible on Windows."""
+    """Make pip-installed CUDA DLLs (cublas, etc.) visible on Windows (and Linux)."""
+    if sys.platform == "linux":
+        _preload_nvidia_libs_linux()
+        return
     if sys.platform != "win32":
         return
     candidates: list[Path] = []
