@@ -635,7 +635,7 @@
     grammar: ["Grammar", "Just enough to see the pattern, then you use it. You'll put real sentences together yourself, and they come back later."],
     listen: ["Listen", "Listen first, no text. You won't catch everything, and you don't need to. Getting the gist from sound alone is the skill."],
     speak: ["Speak", "Answer in your own words if you can. Getting it out imperfectly teaches more than getting it perfect silently."],
-    kana: ["Kana", "Use the picture for each one, even if it seems silly. Pictures are how these get learned quickly, and you'll drop them once it's automatic."],
+    kana: ["Kana", "Each one comes with a picture, in case it helps you hold the shape at first. What really makes them stick is the practice that follows. You'll drop the pictures once reading is automatic."],
   };
   function withWhy(step, go) {
     const why = STEP_WHY[step];

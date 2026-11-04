@@ -22,13 +22,24 @@ Newest entries go at the bottom of each section's list; the numbers are stable I
 
 ---
 
+## How far to trust the citations
+
+I checked a few by web search and left the rest from memory. Treat them as pointers, not proof.
+- **Checked, and it changed something:** Matsunaga 2003 is weaker than I first claimed. H01's wording, the in-app note and the code comment are all corrected.
+- **Checked, supports the claim in general terms:** Nakata & Suzuki 2019 (paper and title), Hamada 2016 (via a review, lower-proficiency listening).
+- **Searched, not found:** Krashen 2004 on narrow input. It's from memory only, so H41 rests mostly on reasoning.
+- **From memory, not checked:** everything else (Roediger & Karpicke, Karpicke & Blunt, Cepeda, Logan, Barcroft & Sommers, Lyster & Saito, Swain, Ellis, Long, Nation, Gollwitzer, Dai et al., Kahneman, Deci & Ryan, Bjork, Rogers).
+- **Not evidence at all:** nothing here has been tested on real learners. The simulator only models FSRS's assumptions.
+
+---
+
 ## Changes
 
 ### Kana
 
 **H01. Every basic kana has a picture.** ✅ `[H01,H02]`
 あ, ね, ツ and the other 90 basic kana now show a one-line shape-and-sound hook when introduced and after a miss ("A NEko curling its tail around a post").
-*Why:* mnemonic-taught kana is learned much faster than rote (Quackenbush et al. 1989, Matsunaga 2003). All hooks are newly written; please read a few and tell me which are bad.
+*Why:* it gives a beginner something to hang a shape on. **The evidence is mixed, so this is a 🧪:** Quackenbush et al. (1989) report fast learning, but Matsunaga (2003) found a benefit only on a self-test, only for Roman-script readers, and none on delayed recall. It's cheap and easy to ignore, so I kept it, as support for the drills and not a replacement. All hooks are newly written; please read a few and tell me which are bad.
 
 **H02. Kana drills offer the look-alikes.** ✅ `[H01,H02]`
 Wrong options now favour what a kana really gets mistaken for (ね/れ/わ, シ/ツ, ソ/ン), once those are learned. A miss also says "Don't mix it up with れ (re)".
@@ -83,7 +94,7 @@ Grammar you already finished joins the schedule automatically, spread over two w
 *Tradeoff:* adds about 40 cards. I raised the review budget slightly so the simulated catch-up load stayed about the same.
 
 **H13. Grammar lessons mix in older questions and end by building.** ✅ `[H12,H13]`
-The drill now includes up to 3 questions from the previous 3 units, then finishes with a short build-it round. *Why:* mixed practice beat blocked practice for L2 grammar a week later (Nakata & Suzuki 2019).
+The drill now includes up to 3 questions from the previous 3 units, then finishes with a short build-it round. *Why:* mixed grammar exercises are reported to help long-term retention (Nakata & Suzuki 2019; I confirmed the paper and its title, not its numbers).
 
 ### Seeing your progress
 

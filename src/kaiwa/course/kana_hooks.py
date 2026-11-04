@@ -1,7 +1,10 @@
 """A picture for every basic kana, and which kana get mistaken for which.
 
-Learners given a shape-and-sound picture learn kana much faster than by rote
-(Quackenbush et al. 1989, Matsunaga 2003). The capitals in each hook mark the sound.
+A shape-and-sound picture gives a beginner something to hang each kana on. The evidence
+is promising but mixed: Quackenbush et al. (1989) report fast learning, while Matsunaga
+(2003) found a benefit only on a self-test, only for Roman-script readers, and none on
+delayed recall. So hooks support the drills and reviews, and never replace them.
+The capitals in each hook mark the sound.
 Voiced kana (が, ぱ…) and blends (きゃ…) have no hook of their own: their lesson note
 teaches the rule that turns the base kana into them.
 
