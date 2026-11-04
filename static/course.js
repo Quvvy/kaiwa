@@ -596,7 +596,7 @@
     );
     root.replaceChildren(lessonNode);
     // A new screen is new content for a screen reader, and keys shouldn't stay on a removed button.
-    if (!lessonNode.querySelector("input:focus")) lessonNode.focus({ preventScroll: true });
+    lessonNode.focus({ preventScroll: true });
     root.scrollTop = 0;
     askPanel.refresh();
   }
@@ -770,6 +770,10 @@
               el("button", { type: "button", class: "lesson-primary", onclick: runNext },
                 `${s.studied_today ? "Continue" : "Start today's lesson"} · about ${today.minutes} min`, kbd("Enter")))
           : el("p", { class: "home-done", text: doneLine() }),
+        steps.length && !s.studied_today && today.review.length >= 4
+          ? el("button", { type: "button", class: "home-tiny", onclick: () => runReview(today.review.slice(0, TINY_CARDS), { title: "Just two minutes", planStep: "tiny" }),
+              "data-tip": "A few reviews. It keeps the habit going and the streak alive on a busy day." }, "Busy day? Just two minutes")
+          : null,
         today.catching_up
           ? el("p", { class: "home-note", text: "Reviews only today: there's a backlog to clear first. New lessons are still one click away below." })
           : null,
@@ -797,13 +801,7 @@
                 "A short scene with a goal and a hint when you're stuck. The best place to start speaking."),
               practiceRow("Chat", goChat,
                 "Talk about anything, for as long as you like. Easy keeps it to what you've learned."),
-              (today.words_pool || []).length + (today.phrases_pool || []).length >= SPEED_MIN
-                ? practiceRow(today.bests && today.bests.speed ? `Speed round (best ${today.bests.speed})` : "Speed round", runSpeed,
-                    "One minute, known words only: hear it, tap the meaning. Builds the speed real conversation needs.") : null,
-              today.drills && (today.drills.time || today.drills.price)
-                ? practiceRow("Numbers by ear", runNumbers, "Prices and times, at full speed. The thing everyone loses in real life.") : null,
-              (today.phrases_pool || []).length >= 6
-                ? practiceRow("Hands-free", runHandsFree, "Walking or doing dishes? It says the English, you say the Japanese out loud, it says it back.") : null)
+              drillRows())
           : null,
         el("div", { class: "home-links" },
           el("button", { type: "button", class: "secondary", onclick: runMap, "data-tip": "All 20 units, what each lets you do, and how far you are" }, "Course map"),
@@ -816,6 +814,7 @@
           el("label", { class: "home-romaji" },
             el("input", { type: "checkbox", checked: showRomaji, onchange: (e) => { showRomaji = e.target.checked; writePref("kaiwa_course_romaji", showRomaji ? "1" : "0"); } }),
             " Show romaji for kana you haven't learned"),
+          reminderRow(),
           unit && !unit.reopenedNote && !Object.values(today.unit_steps || {}).some((v) => v === true)
             ? skipUnitButton(unit)
             : null),
@@ -823,6 +822,20 @@
     );
     markMilestonesSeen();
   }
+  /** Short fluency drills, tucked away so the main choices stay few. */
+  function drillRows() {
+    const rows = [
+      (today.words_pool || []).length + (today.phrases_pool || []).length >= SPEED_MIN
+        ? practiceRow(today.bests && today.bests.speed ? `Speed round (best ${today.bests.speed})` : "Speed round", runSpeed,
+            "One minute, known words only: hear it, tap the meaning. Builds the speed real conversation needs.") : null,
+      today.drills && (today.drills.time || today.drills.price)
+        ? practiceRow("Numbers by ear", runNumbers, "Prices and times, at full speed. The thing everyone loses in real life.") : null,
+      (today.phrases_pool || []).length >= 6
+        ? practiceRow("Hands-free", runHandsFree, "Walking or doing dishes? It says the English, you say the Japanese out loud, it says it back.") : null,
+    ].filter(Boolean);
+    return rows.length ? el("details", { class: "home-drills" }, el("summary", {}, "Quick drills"), rows) : null;
+  }
+  const TINY_CARDS = 8;
   function doneLine() {
     const d = today.day || {};
     return d.answers ? `Done for today: ${d.answers} answer${d.answers === 1 ? "" : "s"}${d.new ? `, ${d.new} new` : ""}. More tomorrow.` : "Done for today. More tomorrow.";
@@ -880,6 +893,23 @@
     askPanel.refresh();
   }
 
+  /**
+   * "When will you do it?": people who name a time and place follow through far more
+   * (implementation intentions, Gollwitzer 1999). A calendar file works on every device
+   * Kaiwa runs on and needs no notification service.
+   */
+  function reminderRow() {
+    const time = el("input", { type: "time", value: readPref("kaiwa_reminder_time", "19:00"), "aria-label": "Study time" });
+    const link = el("a", { class: "secondary reminder-link", role: "button" }, "Add to my calendar");
+    const update = () => {
+      writePref("kaiwa_reminder_time", time.value);
+      link.setAttribute("href", `/api/course/reminder.ics?time=${encodeURIComponent(time.value)}`);
+    };
+    time.addEventListener("change", update);
+    update();
+    return el("div", { class: "reminder-row" },
+      el("span", { class: "pace-label", text: "Study at" }), time, link);
+  }
   /** How much a day holds. Takes effect straight away, on today's plan too. */
   function paceRow() {
     return el("div", { class: "pace-row", role: "group", "aria-label": "Daily pace" },
@@ -1129,6 +1159,8 @@
     function check() {
       if (finished || !picked.length) return;
       finished = true;
+      keys.choice = null;
+      keys.back = null;
       const answer = picked.map((t) => t.text).join("");
       const right = accepted.includes(answer);
       draw();
@@ -1665,10 +1697,12 @@
 
     function finish() {
       current = null;
+      const onPlan = planStep === "review" || planStep === "recap";
       const go = async () => {
+        if (!onPlan) return showHome();
         await refresh();
         today.plan = (today.plan || []).filter((s) => s !== planStep);
-        runNext();
+        return runNext();
       };
       const firsts = firstTry.size;
       const right = [...firstTry.values()].filter(Boolean).length;
@@ -1742,7 +1776,7 @@
     const today = section("Today",
       el("div", { class: "stats-figures" },
         figure(String(s.today.answers), "answers"),
-        figure(s.today.answers ? `${Math.round((100 * s.today.right) / s.today.answers)}%` : "–", "not Again"),
+        figure(s.today.answers ? `${Math.round((100 * s.today.right) / s.today.answers)}%` : "–", "remembered"),
         figure(`${s.today.minutes}`, "minutes answering"),
         figure(`${s.today.listening}`, `minutes listening (${s.listening_total} in all)`),
         figure(String(s.today.talk), "lines spoken in talk practice"),
@@ -1767,13 +1801,13 @@
         title: (i, v) => `${i === 0 ? "Today" : i === 1 ? "Tomorrow" : `In ${i} days`}: ${v} review${v === 1 ? "" : "s"}`,
       }));
 
-    const stageNames = { new: "New", learning: "Learning", young: "Young", mature: "Mature" };
+    const stageNames = { new: "New", learning: "Learning", young: "Growing", mature: "Strong" };
     const cardsTable = section("Your cards",
       el("table", { class: "stats-table" },
         el("thead", {}, el("tr", {}, el("th"), Object.values(stageNames).map((n) => el("th", { text: n })))),
         el("tbody", {}, Object.entries(s.stages).map(([kind, row]) => el("tr", {},
           el("th", { text: kind }), Object.keys(stageNames).map((k) => el("td", { text: String(row[k]) })))))),
-      el("p", { class: "stats-caption", text: "Learning: in its first short steps. Young: remembered for under 3 weeks. Mature: 3 weeks or more." }));
+      el("p", { class: "stats-caption", text: "Learning: in its first short steps. Growing: remembered for under 3 weeks. Strong: 3 weeks or more." }));
 
     const intervals = section("How long your cards last",
       el("div", { class: "hbars" }, s.intervals.map((b) => {
@@ -1811,6 +1845,15 @@
       el("ul", { class: "stats-rules" }, s.grading.lines.map((line) => el("li", { text: line }))),
       el("p", { class: "stats-caption", text: s.grading.basis + (s.grading.tuned ? "" : " Changing a grade with 1–4 teaches it.") }));
 
+    const slips = (s.slips || []).length ? section("What trips you up lately",
+      el("ul", { class: "slip-list" }, s.slips.map((slip) => el("li", {},
+        el("span", { class: "slip-name", text: slip.label }),
+        el("span", { class: "slip-count", text: `${slip.count} times` }),
+        slip.example ? el("span", { class: "slip-example", lang: "ja", text: slip.example }) : null,
+        slip.cards.length ? el("button", { type: "button", class: "secondary", onclick: () =>
+          runReview(slip.cards, { title: "Practice", planStep: "practice" }) }, "Practise this") : null))),
+      el("p", { class: "stats-caption", text: "Noticed across your speaking, talk practice and Chat over the last 30 days. Mistakes like these are normal, and knowing which is yours is half of fixing it." })) : null;
+
     const can = section("What you can do now",
       s.can_do.length
         ? el("ul", { class: "stats-rules" }, s.can_do.map((line) => el("li", { text: line })))
@@ -1826,7 +1869,7 @@
       el("div", { class: "lesson-top" },
         el("button", { class: "secondary lesson-exit", type: "button", onclick: () => showHome() }, "Back"),
         el("h2", { class: "lesson-title", text: "Stats" })),
-      can, today, forecast, calendar, tricky, retention,
+      can, slips, today, forecast, calendar, tricky, retention,
       el("details", { class: "stats-more" }, el("summary", {}, "More detail"), cardsTable, intervals, grading, how)));
     keys.primary = showHome;
   }
@@ -3214,7 +3257,7 @@
     const unit = data.unit;
     const row = data.unit_steps;
     const open = (step) => () => { afterLesson = () => unitPage(id); runUnitStep(unit, step, row); };
-    const startMission = () => runTalk(unit.id);
+    const startMission = () => { afterLesson = () => unitPage(id); runTalk(unit.id); };
     root.replaceChildren(el("div", { class: "home" },
       el("div", { class: "lesson-top" },
         el("button", { class: "secondary lesson-exit", type: "button", onclick: runMap }, "Back"),

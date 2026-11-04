@@ -201,7 +201,7 @@ def habit_and_map() -> None:
         book = cs.phrasebook(path=path)
         _check(len(book["phrases"]) == 6 and not book["words"] and book["phrases"][0]["strength"] == "new", "phrasebook lists only what's been taught")
         st = cs.load_state(path)
-        _check(cs.day_summary(st)["new"] == 12, "today's summary counts what was taught")
+        _check(cs.day_summary(st)["new"] == 6, "today's summary counts things taught, not card sides")
         _check(cs.milestones({**cs._empty()}) == [], "no milestones on day one")
         st4 = cs.load_state(path)
         for p in [p["id"] for u in UNITS[:2] for p in u["phrases"]]:
@@ -256,7 +256,55 @@ def chat_focus_and_offline() -> None:
     _check(any(v == "b" for _, v, _s in lines) and any(t == "がくせいですか" for t, _v, _s in lines), "other voices and build sentences get prerendered")
 
 
+def fixes() -> None:
+    with tempfile.TemporaryDirectory() as d:
+        path = Path(d) / "s.json"
+        cs.complete_step("u1", "learn", path=path)
+        st = cs.load_state(path)
+        st["units"]["u1"]["learn_on"] = "2020-01-01"
+        cs.save_state(st, path)
+        cs.complete_step("u1", "learn", path=path)
+        _check(cs.load_state(path)["units"]["u1"]["learn_on"] == "2020-01-01", "redoing a step doesn't make it new again")
+    st = cs._empty()
+    st["days"] = [(cs._today() - timedelta(days=9)).isoformat()]
+    for i in range(30):
+        due = srs.placed_card(5.0, (cs._today() - timedelta(days=2)))
+        st["cards"][f"u{1 + i // 18}w.x{i}"] = due
+    for p in [p["id"] for u in cs.UNITS[:8] for p in u["phrases"]]:
+        st["cards"][f"{p}:listen"] = srs.placed_card(5.0, cs._today() - timedelta(days=2))
+    budget = cs.PACES["regular"]["reviews"]
+    _check(sum(cs.card_cost(c["kind"], c["skill"]) for c in cs.todays_reviews(st)) <= budget, "a comeback day isn't doubled")
+    cs._mark_day(st)
+    _check(st.get("comeback") == cs._today().isoformat(), "coming back is remembered for the day")
+    _check(sum(cs.card_cost(c["kind"], c["skill"]) for c in cs.todays_reviews(st)) <= budget, "and it stays normal-sized after the first answer")
+
+
+def slips_and_counts() -> None:
+    from datetime import datetime
+    now = datetime.now(timezone.utc).isoformat()
+    with tempfile.TemporaryDirectory() as d:
+        path = Path(d) / "s.json"
+        cs.complete_step("u4", "grammar", path=path)
+        rows = [{"t": now, "mistakes": [{"type": "particle", "detail": "を instead of が with すき"}]} for _ in range(4)]
+        rows += [{"t": "2001-01-01T00:00:00+00:00", "mistakes": [{"type": "verb_form", "detail": "old"}] * 9}]
+        rows += [{"t": now, "mistakes": [{"type": "politeness", "detail": ""}]}]
+        slips = cs.slip_summary(rows, path=path)
+        _check(len(slips) == 1 and slips[0]["type"] == "particle" and slips[0]["count"] == 4, "recent repeated slips are summarised, old and one-off ones aren't")
+        _check(slips[0]["cards"] and slips[0]["cards"][0]["card_id"] == "u4g.ga:build", "a slip comes with sentences to practise, if taught")
+        _check("が" in slips[0]["example"], "with a real example")
+        cs.grade("u1w.asa:mean", correct=True, path=path)
+        today = cs._today().isoformat()
+        _check(cs.load_state(path)["daily"][today]["new"] == 1, "a word first answered in a lesson counts as taught once")
+        cs.complete_step("u1", "learn", path=path)
+        cs.grade("u1.ohayou:listen", correct=True, path=path)
+        _check(cs.load_state(path)["daily"][today]["new"] == 7, "a phrase's two sides count as one thing")
+        cs.undo(card_id="u1w.asa:mean", path=path)
+        _check(cs.load_state(path)["daily"][today]["new"] == 6, "undoing the first answer takes it back")
+
+
 def main() -> None:
+    fixes()
+    slips_and_counts()
     chat_focus_and_offline()
     fluency_and_mine()
     habit_and_map()

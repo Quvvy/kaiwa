@@ -122,6 +122,8 @@ def load_state(path: Path | None = None) -> dict[str, Any]:
         state["placement"] = raw["placement"]
     if raw.get("pace") in PACES:
         state["pace"] = raw["pace"]
+    if isinstance(raw.get("comeback"), str):
+        state["comeback"] = raw["comeback"]
     if isinstance(raw.get("bests"), dict):
         state["bests"] = {str(k): int(v) for k, v in raw["bests"].items() if str(v).isdigit()}
     state["mine"] = my_phrases.clean_kept(raw.get("mine"))
@@ -228,6 +230,8 @@ def public_unit(unit: dict[str, Any]) -> dict[str, Any]:
 def _mark_day(state: dict[str, Any]) -> None:
     today = _today().isoformat()
     if today not in state["days"]:
+        if days_away(state) >= COMEBACK_DAYS:
+            state["comeback"] = today  # the whole day stays gentle, not just its first answer
         state["days"] = (state["days"] + [today])[-MAX_DAYS_KEPT:]
 
 
@@ -261,23 +265,23 @@ def complete_step(unit_id: str, step: str, *, count: int | None = None, path: Pa
         raise ValueError(f"unknown step: {step}")
 
     def apply(state: dict[str, Any]) -> dict[str, Any]:
-        before = len(state["cards"])
         row = state["units"].setdefault(unit_id, {})
         fresh = not row.get(step)  # redoing a finished step isn't new work for today's budget
         seen_before = int(row.get("words_seen") or 0)
-        row[f"{step}_on"] = _today().isoformat()  # day-two steps wait until after this day
+        if fresh:
+            row[f"{step}_on"] = _today().isoformat()  # day-two steps wait until after this day
         if step != "words":
             row[step] = True
         if step == "learn":
             for p in unit["phrases"]:
                 for skill in SKILLS:
-                    state["cards"].setdefault(f"{p['id']}:{skill}", _new_card())
+                    _add_card(state, f"{p['id']}:{skill}")
         if step == "words":
             words = unit.get("words", [])
             seen = int(row.get("words_seen") or 0)
             upto = len(words) if count is None else min(len(words), seen + max(0, count))
             for w in words[seen:upto]:
-                state["cards"].setdefault(f"{w['id']}:mean", _new_card())
+                _add_card(state, f"{w['id']}:mean")
             row["words_seen"] = upto
             row["words"] = upto >= len(words)
         if step == "grammar":
@@ -290,7 +294,6 @@ def complete_step(unit_id: str, step: str, *, count: int | None = None, path: Pa
         if unit_done(state, unit):
             row.setdefault("done_at", datetime.now(timezone.utc).isoformat())
         _mark_day(state)
-        _count_new(state, before)
         return row
 
     return _with_state(apply, path)
@@ -302,12 +305,18 @@ def _spend_minutes(state: dict[str, Any], minutes: float) -> None:
     day["lesson_min"] = round(float(day.get("lesson_min") or 0) + minutes, 2)
 
 
-def _count_new(state: dict[str, Any], before: int) -> None:
-    """How many items were taught today, for the end-of-day summary."""
-    added = len(state["cards"]) - before
-    if added > 0:
-        day = state["daily"].setdefault(_today().isoformat(), {"answers": 0, "right": 0, "ms": 0})
-        day["new"] = int(day.get("new") or 0) + added
+def _note_new(state: dict[str, Any], card_id: str, change: int = 1) -> None:
+    """Count one thing taught today. A phrase's two sides and a grammar card aren't extra things."""
+    if card_id.endswith((":speak", ":build")):
+        return
+    day = state["daily"].setdefault(_today().isoformat(), {"answers": 0, "right": 0, "ms": 0})
+    day["new"] = max(0, int(day.get("new") or 0) + change)
+
+
+def _add_card(state: dict[str, Any], card_id: str) -> None:
+    if card_id not in state["cards"]:
+        state["cards"][card_id] = _new_card()
+        _note_new(state, card_id)
 
 
 def complete_kana(lesson_id: str, *, path: Path | None = None) -> dict[str, Any]:
@@ -320,11 +329,9 @@ def complete_kana(lesson_id: str, *, path: Path | None = None) -> dict[str, Any]
         if lesson_id not in state["kana"]:
             _spend_minutes(state, _kana_minutes(lesson))
         state["kana"].setdefault(lesson_id, _today().isoformat())
-        before = len(state["cards"])
         for ch, _ in lesson["kana"]:
-            state["cards"].setdefault(f"kana.{ch}:read", _new_card())
+            _add_card(state, f"kana.{ch}:read")
         _mark_day(state)
-        _count_new(state, before)
         return kana_progress(state)
 
     return _with_state(apply, path)
@@ -377,6 +384,8 @@ def grade(
 def _apply_grade(state: dict[str, Any], card_id: str, kind: tuple, outcome: dict[str, Any], forced: int | None) -> dict[str, Any]:
     existed = card_id in state["cards"]
     card = state["cards"].get(card_id) or _new_card()  # lessons may grade before the step finishes
+    if not existed:
+        _note_new(state, card_id)
     before = dict(card) if existed else None
     today = _today().isoformat()
     was_review = not srs.is_learning(card)
@@ -439,6 +448,7 @@ def _undo_entry(state: dict[str, Any], entry: dict[str, Any]) -> None:
     cid = entry["card_id"]
     if entry["before"] is None:
         state["cards"].pop(cid, None)
+        _note_new(state, cid, -1)
     else:
         state["cards"][cid] = entry["before"]
     if entry["cost"]:
@@ -713,7 +723,7 @@ SLOW_DOWN_MIN_REVIEWS = 30
 MIN_WORD_BATCH = 5
 # Rough minutes a lesson step takes, including its share of the same-day recap.
 WORD_MINUTES = 0.3
-STEP_MINUTES = {"grammar": 4.0, "listen": 3.5, "speak": 3.5}
+STEP_MINUTES = {"grammar": 5.5, "listen": 3.5, "speak": 3.5}
 REVIEW_SECONDS = {"kana": 4, "word": 5, "listen": 8, "speak": 12, "grammar": 15}
 
 
@@ -744,7 +754,7 @@ def todays_reviews(state: dict[str, Any]) -> list[dict[str, Any]]:
     """Today's share of due cards: what fits in the budget left after today's reviews."""
     spent = state["reviewed"].get(_today().isoformat(), 0)
     # Coming back from a break gets a normal day: a doubled pile is how a break becomes quitting.
-    returning = days_away(state) >= COMEBACK_DAYS
+    returning = days_away(state) >= COMEBACK_DAYS or state.get("comeback") == _today().isoformat()
     budget = pace_of(state)["reviews"] * (2 if catching_up(state) and not returning else 1)
     return due_cards(state, limit=80, budget=max(0, budget - spent))
 
@@ -1108,6 +1118,7 @@ def day_summary(state: dict[str, Any]) -> dict[str, Any]:
                 and not state["units"][u["id"]].get("placed")]
     tomorrow = (_today() + timedelta(days=1)).isoformat()
     due_tomorrow = sum(1 for c in state["cards"].values() if not srs.is_learning(c) and str(c.get("due") or "") <= tomorrow)
+    due_tomorrow = min(due_tomorrow, pace_of(state)["reviews"])  # no more than a day's share ever comes up
     return {
         "answers": answers,
         "right": int(day.get("right") or 0),
@@ -1564,11 +1575,9 @@ def keep_my_phrase(jp: str, en: str, note: str = "", *, path: Path | None = None
         if not any(r["id"] == row["id"] for r in state["mine"]):
             state["mine"].append(row)
             _PHRASES[row["id"]] = row
-            before = len(state["cards"])
             for skill in SKILLS:
-                state["cards"].setdefault(f"{row['id']}:{skill}", _new_card())
+                _add_card(state, f"{row['id']}:{skill}")
             _mark_day(state)
-            _count_new(state, before)
         return row
 
     return _with_state(apply, path)
@@ -1597,6 +1606,55 @@ def record_best(key: str, value: int, *, path: Path | None = None) -> dict[str, 
         return {"best": state["bests"][key], "previous": old}
 
     return _with_state(apply, path)
+
+
+SLIP_LABELS = {
+    "particle": "Particles (は, が, を, に, で)", "verb_form": "Verb endings", "word_order": "Word order",
+    "missing_word": "Leaving words out", "word_choice": "Choosing the word", "politeness": "Polite and casual",
+    "pronunciation": "Pronunciation", "english": "Falling back to English",
+}
+# Grammar points that practise each kind of slip, as sentences to build.
+SLIP_POINTS = {
+    "particle": ("u2g.wa", "u4g.ga", "u6g.wo", "u7g.ni", "u12g.no", "u16g.ni", "u17g.ni", "u18g.de"),
+    "verb_form": ("u6g.masu", "u10g.mashita", "u13g.tai", "u14g.te", "u14g.naide", "u15g.masenka", "u20g.mashouka"),
+    "word_order": ("u6g.wo", "u8g.time", "u17g.karamade", "u20g.kara"),
+}
+SLIP_DAYS = 30
+SLIP_MIN = 3
+
+
+def slip_summary(rows: list[dict[str, Any]], *, path: Path | None = None) -> list[dict[str, Any]]:
+    """What trips this learner up lately: mistakes tagged across speaking, talk and Chat.
+
+    Knowing your own most common slip is more use than a score, and the point of
+    collecting mistakes at all. Where sentences exist to practise it, they come along.
+    """
+    state = load_state(path)
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=SLIP_DAYS)).timestamp()
+    counts: dict[str, list[str]] = {}
+    for row in rows:
+        when = row.get("t")
+        try:
+            stamp = float(when) if isinstance(when, (int, float)) else datetime.fromisoformat(str(when)).timestamp()
+        except (TypeError, ValueError):
+            continue
+        if stamp < cutoff:
+            continue
+        for m in row.get("mistakes") or []:
+            if isinstance(m, dict) and m.get("type") in SLIP_LABELS:
+                counts.setdefault(m["type"], []).append(str(m.get("detail") or ""))
+    out = []
+    for kind, details in sorted(counts.items(), key=lambda kv: -len(kv[1]))[:3]:
+        if len(details) < SLIP_MIN:
+            continue
+        cards = []
+        for pid in SLIP_POINTS.get(kind, ()):
+            cid = f"{pid}:build"
+            if cid in state["cards"]:
+                cards.append(_card_row(cid, _card_kind(cid), state["cards"][cid]))
+        example = next((d for d in reversed(details) if d), "")
+        out.append({"type": kind, "label": SLIP_LABELS[kind], "count": len(details), "example": example, "cards": cards})
+    return out
 
 
 def complete_mission(unit_id: str, *, path: Path | None = None) -> str:

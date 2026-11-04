@@ -1844,13 +1844,15 @@ body:not([data-mode="learn"]) .ask-dock {
   gap: 8px;
 }
 
-.home-options > summary {
+.home-options > summary,
+.home-drills > summary {
   color: var(--ink-2);
   cursor: pointer;
   font-size: 14px;
 }
 
-.home-options[open] {
+.home-options[open],
+.home-drills[open] {
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -2101,4 +2103,64 @@ button.secondary.pressed {
   .lesson-play button {
     min-height: 44px;
   }
+}
+
+.home-tiny {
+  align-self: flex-start;
+  background: transparent;
+  border: 0;
+  color: var(--ink-2);
+  cursor: pointer;
+  font: inherit;
+  font-size: 14px;
+  margin-top: -6px;
+  padding: 0;
+  text-decoration: underline;
+}
+
+.reminder-row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.reminder-link {
+  font-size: 14px;
+}
+
+.slip-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.slip-list li {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.slip-name {
+  font-weight: 600;
+}
+
+.slip-count,
+.slip-example {
+  color: var(--ink-2);
+  font-size: 14px;
+}
+
+/* A little life on a right answer. */
+@keyframes answer-pop {
+  50% { transform: scale(1.02); }
+}
+
+.choices button.right,
+.tile.pop {
+  animation: answer-pop 180ms ease-out;
 }

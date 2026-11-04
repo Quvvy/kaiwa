@@ -11,7 +11,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Response, UploadFile
 from pydantic import BaseModel, Field
 
 from kaiwa import stt, tts
@@ -496,6 +496,27 @@ def mine_remove(phrase_id: str) -> dict[str, Any]:
     return {"ok": True}
 
 
+@router.get("/reminder.ics")
+def reminder(time: str = "19:00") -> Response:
+    """A daily calendar event for study time: works on any device, no notification service."""
+    try:
+        hour, minute = [int(x) for x in time.split(":")[:2]]
+        if not (0 <= hour < 24 and 0 <= minute < 60):
+            raise ValueError
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Time should look like 19:30") from exc
+    today = state._today().strftime("%Y%m%d")
+    body = "\r\n".join([
+        "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Kaiwa//Study time//EN", "BEGIN:VEVENT",
+        f"UID:kaiwa-study-{today}@kaiwa", f"DTSTAMP:{today}T000000Z", f"DTSTART:{today}T{hour:02d}{minute:02d}00",
+        "DURATION:PT15M", "RRULE:FREQ=DAILY", "SUMMARY:Japanese with Kaiwa",
+        "DESCRIPTION:Fifteen minutes. If you're busy\\, just two.", "BEGIN:VALARM", "TRIGGER:PT0M", "ACTION:DISPLAY",
+        "DESCRIPTION:Japanese with Kaiwa", "END:VALARM", "END:VEVENT", "END:VCALENDAR", "",
+    ])
+    return Response(content=body, media_type="text/calendar",
+                    headers={"Content-Disposition": 'attachment; filename="kaiwa-study-time.ics"'})
+
+
 @router.post("/pace")
 def set_pace(body: PaceBody) -> dict[str, Any]:
     try:
@@ -625,7 +646,8 @@ def regrade_answer(body: RegradeBody) -> dict[str, Any]:
 
 @router.get("/stats")
 def stats_page() -> dict[str, Any]:
-    return state.course_stats()
+    slips = state.slip_summary(learner_log.read(kinds={"speak", "talk", "chat_turn", "chat"}))
+    return {**state.course_stats(), "slips": slips}
 
 
 @router.post("/kana")

@@ -28,7 +28,7 @@ from kaiwa.course import state as cs  # noqa: E402
 
 # Seconds a real learner spends, roughly: answering plus reading the result.
 SECONDS = {"kana": 6, "word": 7, "listen": 11, "speak": 18, "grammar": 25}
-STEP_SECONDS = {"grammar": 240, "listen": 200, "speak": 200}
+STEP_SECONDS = {"grammar": 330, "listen": 200, "speak": 200}
 PHRASE_INTRO = 25
 WORD_INTRO = 9
 KANA_CHAR = 22

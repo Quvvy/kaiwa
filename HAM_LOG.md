@@ -169,3 +169,22 @@ So a replay in a new voice doesn't wait on the engine.
 **H35. Bug fix in my own H03: the day's budget now remembers what's already done.** ✅ `[H35]`
 The plan is worked out again after each step, so without this the lesson budget refilled every time and a day never ended. Found by reasoning, with a test added. Redoing an old step costs nothing.
 
+**H36. "What trips you up lately."** ✅ `[H36-H39]`
+The stats page now names your most common kinds of mistake across Speak, talk and Chat over 30 days, with a real example, and offers "Practise this", which builds sentences for that kind of slip. *Why:* Kaiwa has been carefully tagging every mistake into the learner log, and nothing ever showed it to the learner.
+
+**H37. Busy day? Just two minutes.** ✅ 🧪 `[H36-H39]`
+Under the Start button: eight reviews and done. It counts for the streak. *Why:* the habit dies on busy days, not on normal days, and a tiny version keeps it alive.
+
+**H38. Study time in your calendar.** ✅ `[H36-H39]`
+Options → "Study at 7:00 PM · Add to my calendar" downloads a daily repeating event. Works on the phone and needs no notification service. *Why:* naming when you'll do something makes follow-through much more likely (Gollwitzer 1999). Untested on Kaiwa's desktop webview; the link may need to open externally there.
+
+**H39. Small fixes and copy.** ✅ `[H36-H39]`
+- Stats says "remembered" not "not Again", and "Growing/Strong" not "Young/Mature".
+- A right answer gets a tiny pop.
+- "New things learned" counts things, not card sides.
+- Redoing an old step no longer resets its date (it used to delay day two).
+- Number keys change the grade after a build card.
+- "Tricky cards" and "two minutes" go home when done, rather than running on into today's lesson.
+- Tomorrow's count on the day-end screen never shows more than a day's share.
+- Quick drills are tucked under a fold so the home screen stays at three main choices.
+
