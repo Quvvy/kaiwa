@@ -48,6 +48,10 @@
   function postJson(path, body) {
     return api(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
   }
+  /** A screen that isn't a card: nothing left over from the last lesson may answer a key. */
+  function clearKeys() {
+    for (const k of Object.keys(keys)) keys[k] = null;
+  }
   function learnVisible() {
     return document.body.dataset.mode === "learn";
   }
@@ -322,9 +326,22 @@
     return out;
   }
   /** `answer` plus up to n-1 different values from `pool`, shuffled. */
-  function choicesFor(answer, pool, n = 4) {
-    const others = shuffle([...new Set(pool)].filter((v) => v !== answer)).slice(0, n - 1);
-    return shuffle([answer, ...others]);
+  function choicesFor(answer, pool, n = 4, near = []) {
+    const nearby = shuffle([...new Set(near)].filter((v) => v !== answer));
+    const others = shuffle([...new Set(pool)].filter((v) => v !== answer && !nearby.includes(v)));
+    return shuffle([answer, ...[...nearby, ...others].slice(0, n - 1)]);
+  }
+  /** Known kana this one gets mistaken for, so drills offer the look-alikes first. */
+  function alikeIn(k, pool) {
+    return pool.filter((x) => (k.alike || []).includes(x.char));
+  }
+  /** After a miss: the picture for this kana, and how to tell it from what it looks like. */
+  function kanaHelp(k, pool) {
+    const twins = alikeIn(k, pool);
+    return el("div", { class: "kana-help" },
+      k.hook ? el("p", { class: "kana-hook", text: k.hook }) : null,
+      twins.length ? el("p", { class: "kana-twins" }, "Don't mix it up with ",
+        twins.map((x, i) => [i ? ", " : "", el("span", { lang: "ja", text: x.char }), ` (${x.ro})`]), ".") : null);
   }
   /**
    * One multiple-choice question. Calls onAnswer(right, picked) after showing the result.
@@ -558,7 +575,7 @@
     screenId += 1;
     askContext = null;
     askPanel.refresh();
-    keys.primary = keys.hold = keys.replay = keys.choice = null;
+    clearKeys();
     try {
       await refresh();
     } catch (err) {
@@ -1056,7 +1073,7 @@
         choiceBlock({
           options, answer,
           onAnswer: (correct, picked) => {
-            if (after) result.replaceChildren(after());
+            if (after) result.replaceChildren(after(correct));
             if (audio) play(audio);
             answered(card, { correct, ms: elapsed(), helped, fmt, answer: String(picked) }, slot, nextBtn);
           },
@@ -1070,9 +1087,11 @@
     }
     function kanaChoice(card) {
       const k = card.kana;
-      const pool = (today.kana_pool || []).filter((x) => x.ro !== k.ro).map((x) => x.ro);
-      choiceCard(card, { big: k.char, bigJp: true, answer: k.ro, options: choicesFor(k.ro, pool), audio: k.char,
-        fmt: "kana:choice", askJp: k.char });
+      const known = today.kana_pool || [];
+      const pool = known.filter((x) => x.ro !== k.ro).map((x) => x.ro);
+      choiceCard(card, { big: k.char, bigJp: true, answer: k.ro, audio: k.char, fmt: "kana:choice", askJp: k.char,
+        options: choicesFor(k.ro, pool, 4, alikeIn(k, known).map((x) => x.ro)),
+        after: (right) => (right ? el("span") : kanaHelp(k, known)) });
     }
     function wordChoice(card) {
       const w = card.word;
@@ -1133,7 +1152,8 @@
             text: correct ? (band === "close" ? "Close." : "Right.") : "Not quite." }),
           el("p", { class: "produce-answer" }, el("span", { lang: "ja", text: target }),
             el("span", { class: "produce-answer-ro", text: isKana ? card.kana.ro : `${card.word.ro} · ${card.word.en}` })),
-        ];
+          isKana && !correct ? kanaHelp(card.kana, today.kana_pool || []) : null,
+        ].filter(Boolean);
       }
       const box = produceBox({
         placeholder: isKana ? "Type its sound (romaji)" : "Type it (romaji becomes kana)",
@@ -1332,7 +1352,7 @@
     screenId += 1;
     askContext = null;
     askPanel.refresh();
-    keys.primary = keys.hold = keys.replay = keys.choice = null;
+    clearKeys();
     root.replaceChildren(el("div", { class: "home" }, el("p", { class: "pending", text: "Loading…" })));
     let s;
     try {
@@ -2167,6 +2187,7 @@
         body: el("div", { class: "card-body kana-intro" },
           el("p", { class: "kana-big", lang: "ja", text: k.char }),
           el("p", { class: "kana-ro", text: k.ro }),
+          k.hook ? el("p", { class: "kana-hook", text: k.hook }) : null,
           playRow(k.char),
           i === 0 ? el("p", { class: "phrase-note", text: lesson.note }) : null),
         actions, primary: go,
@@ -2201,15 +2222,16 @@
         const shown = performance.now();
         const nextBtn = primaryButton("Next", advance);
         nextBtn.hidden = true;
+        const help = el("div", { class: "result" });
         function advance() { n += 1; ask(); }
         const block = mode === "read"
           ? choiceBlock({
-              options: choicesFor(k.ro, pool.filter((x) => x.ro !== k.ro).map((x) => x.ro)),
+              options: choicesFor(k.ro, pool.filter((x) => x.ro !== k.ro).map((x) => x.ro), 4, alikeIn(k, pool).map((x) => x.ro)),
               answer: k.ro,
               onAnswer: onAnswer,
             })
           : choiceBlock({
-              options: choicesFor(k.char, pool.filter((x) => x.ro !== k.ro).map((x) => x.char)),
+              options: choicesFor(k.char, pool.filter((x) => x.ro !== k.ro).map((x) => x.char), 4, alikeIn(k, pool).map((x) => x.char)),
               answer: k.char, jp: true,
               onAnswer: onAnswer,
             });
@@ -2219,7 +2241,7 @@
             graded.add(k.char);
             lessonGrade(`kana.${k.char}:read`, { correct: right, ms: Math.round(performance.now() - shown), fmt: "kana:choice" });
           }
-          if (!right) queue.push(queue[n]);
+          if (!right) { queue.push(queue[n]); help.replaceChildren(kanaHelp(k, pool)); }
           if (right) { const here = onThisScreen(); await wait(600); if (here()) advance(); }
           else { nextBtn.hidden = false; keys.primary = advance; }
         }
@@ -2232,7 +2254,7 @@
               ? el("p", { class: "kana-big", lang: "ja", text: k.char })
               : el("div", { class: "lesson-play" },
                   el("button", { class: "secondary", type: "button", onclick: () => play(k.char) }, "Play again", kbd("R"))),
-            block),
+            block, help),
           actions: [nextBtn],
         });
         keys.primary = null;

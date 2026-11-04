@@ -23,6 +23,7 @@ from typing import Any
 from kaiwa import jsonio
 from kaiwa.course import grader, srs
 from kaiwa.course.kana import KANA_LESSONS, KANA_ROMAJI, LESSON_BY_ID, lesson_chars
+from kaiwa.course.kana_hooks import alike, hook_for
 from kaiwa.course.units import ROMAJI, UNITS
 
 STATE_FILE = "course_state.json"
@@ -427,12 +428,16 @@ def regrade(card_id: str, rating: int, *, path: Path | None = None) -> dict[str,
     return _with_state(apply, path)
 
 
+def _kana_item(char: str, ro: str) -> dict[str, Any]:
+    return {"char": char, "ro": ro, "hook": hook_for(char), "alike": alike(char)}
+
+
 def _card_payload(kind: str, item: str) -> dict[str, Any]:
     if kind == "phrase":
         return {"phrase": phrase(item)}
     if kind == "word":
         return {"word": dict(_WORDS[item])}
-    return {"kana": {"char": item, "ro": KANA_ROMAJI[item]}}
+    return {"kana": _kana_item(item, KANA_ROMAJI[item])}
 
 
 def answer_format(kind: str, skill: str, card: dict[str, Any]) -> str:
@@ -702,10 +707,10 @@ def public_kana_lesson(lesson: dict[str, Any], state: dict[str, Any]) -> dict[st
         "script": lesson["script"],
         "title": lesson["title"],
         "note": lesson["note"],
-        "kana": [{"char": ch, "ro": ro} for ch, ro in lesson["kana"]],
+        "kana": [_kana_item(ch, ro) for ch, ro in lesson["kana"]],
         "words": lesson["words"],
         # Earlier characters, so drills can mix new ones with ones you know.
-        "known": [{"char": ch, "ro": ro} for l in KANA_LESSONS[:index] for ch, ro in l["kana"]
+        "known": [_kana_item(ch, ro) for l in KANA_LESSONS[:index] for ch, ro in l["kana"]
                   if l["script"] == lesson["script"]],
     }
 
@@ -822,7 +827,7 @@ def today_payload(*, path: Path | None = None) -> dict[str, Any]:
         "kana_done_today": today in state["kana"].values(),
         "kana_progress": kana_progress(state),
         "kana_known": "".join(sorted(known_chars(state))),
-        "kana_pool": [{"char": ch, "ro": KANA_ROMAJI[ch]} for l in KANA_LESSONS if l["id"] in state["kana"]
+        "kana_pool": [_kana_item(ch, KANA_ROMAJI[ch]) for l in KANA_LESSONS if l["id"] in state["kana"]
                       for ch, _ in l["kana"]],
         "words_pool": [{"jp": w["jp"], "en": w["en"]} for wid, w in _WORDS.items() if f"{wid}:mean" in state["cards"]],
         "phrases_pool": [{"jp": _PHRASES[i]["jp"], "en": _PHRASES[i]["en"]} for i in learned_phrase_ids(state)],

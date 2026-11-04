@@ -1620,3 +1620,20 @@ body:not([data-mode="learn"]) .ask-dock {
     bottom: calc(84px + env(safe-area-inset-bottom));
   }
 }
+
+/* ---------- kana pictures ---------- */
+.kana-hook {
+  color: var(--ink);
+  font-size: 15.5px;
+  margin-top: 4px;
+}
+
+.kana-help {
+  margin-top: 8px;
+}
+
+.kana-twins {
+  color: var(--ink-2);
+  font-size: 14px;
+  margin-top: 2px;
+}
