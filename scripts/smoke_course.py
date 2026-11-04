@@ -678,7 +678,7 @@ def placement_self_correction() -> None:
         _check(r["reopened"] and r["reopened"]["number"] == 2, "a third miss in seven reopens the unit")
         st = course_state.load_state(path)
         _check(course_state.next_unit(st) is u2, "the reopened unit comes before anything new")
-        plan = course_state.plan_today(st)["plan"]
+        plan = course_state.plan_today({**st, "pace": "intensive"})["plan"]
         _check("grammar" in plan and "learn" not in plan and not st["units"]["u2"].get("listen"),
                f"its grammar and listening come back, not the phrase lesson ({plan})")
         r = course_state.grade(ids[7], correct=False, ms=3000, fmt="word:produce", path=path)
@@ -718,7 +718,7 @@ def pacing() -> None:
     try:
         with tempfile.TemporaryDirectory() as raw:
             path = Path(raw) / "course_state.json"
-            _check(plan(path)["plan"] == ["kana", "learn", "words", "recap"], "day 1: a short kana lesson fits beside the unit's day one")
+            _check(plan(path)["plan"][:2] == ["kana", "learn"] and plan(path)["plan"][-1] == "recap", "day 1: a short kana lesson fits beside the first phrases")
             course_state.complete_kana("h1", path=path)
             for s in ("learn", "words"):
                 course_state.complete_step("u1", s, path=path)
@@ -727,7 +727,7 @@ def pacing() -> None:
 
             day[0] = real_today() + timedelta(days=1)
             p2 = plan(path)["plan"]
-            _check(p2 == ["grammar", "listen", "recap"], "day 2: kana rested yesterday's turn, day two's lessons fill the time")
+            _check(p2 == ["grammar", "recap"], "day 2: kana rested yesterday's turn, day two's lessons fill the time")
             for s in ("grammar", "listen", "speak"):
                 course_state.complete_step("u1", s, path=path)
             for lid in ("h2", "h3", "h4", "h5", "h6", "h7", "h8", "h9", "h10"):

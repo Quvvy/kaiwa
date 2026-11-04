@@ -50,9 +50,9 @@ Wrong options now favour what a kana really gets mistaken for (ね/れ/わ, シ/
 ### Pacing
 
 **H03. Choose a daily pace; lessons fit a time budget.** ✅ 🧪 `[H03,H04,H05]`
-Relaxed (~12 min), Regular (~17 min, default), Intensive (~25 min) on the home screen. The Start button says how long today takes ("about 10 min").
+Relaxed (~15 min a day, course in ~8 months), Regular (~19 min, ~6 months, default), Intensive (~23 min, ~2 months) under Options. See H49 for how these numbers were corrected. The Start button says how long today takes ("about 10 min").
 *Why:* I built `scripts/sim_pacing.py`, which runs a virtual learner through the real planner and FSRS. It showed "about 15 minutes" was really 19-27 for weeks 2-8 and that the day-two plan stacked kana on top of three lessons. A promise that's wrong by half is a reason to quit.
-*Tradeoff:* the course takes longer at Regular. Simulated with 15% of days skipped: all 20 units are still done inside 200 days.
+*Tradeoff:* the course takes much longer at Regular. See the open question in H49.
 
 **H04. A unit's words can split across days.** ✅ `[H03,H04,H05]`
 If 20 words don't fit today, you get 5 or 10 now and the rest tomorrow. Existing progress isn't affected.
@@ -232,4 +232,8 @@ The unit-done screen includes one "Did you know?" tied to the unit, such as why 
 
 **H48. A better finish line.** ✅ `[H45-H48]`
 Finishing all 20 units now tells you what you can really do and what keeps it alive, not just "reviews continue".
+
+**H49. Honest pace numbers, measured while lessons last.** ✅ 🧪 `[H49]`
+My first labels (~12/~17/~25) came from averages that included quiet weeks after the course ended. Measured only while lessons are still coming, Regular was really 20-26 minutes, so I cut its lesson budget and relabelled every pace with minutes and months. The very first day gets a little extra so it includes real phrases and not only five vowels.
+**Open question for you:** the simulator says Intensive costs only about 4 more minutes a day than Regular and finishes in about a quarter of the time (47 vs 171 days). That looks too good, and the likely reason is that the simulator doesn't model overload: 100+ new items a week is assumed to stick as well as 40 do. I left Regular as the default for that reason, but it is a judgment call, and it's the setting real use could settle fastest. The old fixed plan was close to Intensive.
 

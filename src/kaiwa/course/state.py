@@ -717,12 +717,13 @@ def recap_cards(state: dict[str, Any]) -> list[dict[str, Any]]:
 # ---------- pacing ----------
 # How much a day holds, set by the learner. Reviews come first and get their own
 # budget (rough "seconds/3" units, see CARD_COST); lessons then fill `lesson_minutes`.
-# `minutes` is what scripts/sim_pacing.py measures an average day at, so it's what
-# the pace promises. The old fixed plan said 15 and ran 19-27 for most of the course.
+# `minutes` and `months` are what scripts/sim_pacing.py measures while lessons last
+# (with 15% of days skipped), so they're what the pace promises. The old fixed plan
+# said 15 minutes and ran 19-27 for most of the course.
 PACES: dict[str, dict[str, Any]] = {
-    "relaxed": {"label": "Relaxed", "minutes": 14, "lesson_minutes": 6, "reviews": 22, "new_items": 14},
-    "regular": {"label": "Regular", "minutes": 18, "lesson_minutes": 11, "reviews": 34, "new_items": 24},
-    "intensive": {"label": "Intensive", "minutes": 25, "lesson_minutes": 24, "reviews": 50, "new_items": 50},
+    "relaxed": {"label": "Relaxed", "minutes": 15, "months": 8, "lesson_minutes": 6, "reviews": 26, "new_items": 14},
+    "regular": {"label": "Regular", "minutes": 19, "months": 6, "lesson_minutes": 8, "reviews": 30, "new_items": 18},
+    "intensive": {"label": "Intensive", "minutes": 23, "months": 2, "lesson_minutes": 24, "reviews": 50, "new_items": 50},
 }
 DEFAULT_PACE = "regular"
 # When the due backlog is worth more than two days of reviews, that day is a
@@ -736,6 +737,7 @@ SLOW_DOWN_BELOW = 80
 SLOW_DOWN_DAYS = 14
 SLOW_DOWN_MIN_REVIEWS = 30
 MIN_WORD_BATCH = 5
+FIRST_DAY_EXTRA = 4.0
 # Rough minutes a lesson step takes, including its share of the same-day recap.
 WORD_MINUTES = 0.3
 STEP_MINUTES = {"grammar": 5.5, "listen": 3.5, "speak": 3.5}
@@ -836,6 +838,8 @@ def plan_today(state: dict[str, Any]) -> dict[str, Any]:
     minutes_left = pace["lesson_minutes"] * share - spent
     new_left = pace["new_items"] * share - int(day.get("new") or 0)
     started = spent > 0
+    if not state["days"]:
+        minutes_left += FIRST_DAY_EXTRA  # the very first day gets a real phrase, not only five vowels
     row = state["units"].get(unit["id"], {}) if unit else {}
     steps = unit_steps(unit) if unit else []
     day_one = [s for s in steps if s in DAY_ONE_STEPS and not row.get(s)]
@@ -1209,7 +1213,7 @@ def today_payload(*, path: Path | None = None) -> dict[str, Any]:
         "bests": state["bests"],
         "day": day_summary(state),
         "milestones": milestones(state),
-        "paces": {k: {"label": v["label"], "minutes": v["minutes"]} for k, v in PACES.items()},
+        "paces": {k: {"label": v["label"], "minutes": v["minutes"], "months": v["months"]} for k, v in PACES.items()},
         **plan_today(state),
     }
 

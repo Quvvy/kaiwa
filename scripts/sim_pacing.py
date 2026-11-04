@@ -125,6 +125,9 @@ def run(days: int, skip: float, seed: int, pace: str = cs.DEFAULT_PACE) -> dict:
         log.append(entry)
 
     studied = [e for e in log if e["studied"]]
+    # While lessons are still coming: the number a pace's label has to be honest about.
+    last_new = max((i for i, e in enumerate(log) if e["new"]), default=0)
+    active = [e["minutes"] for e in log[:last_new + 1] if e["studied"]] or [0.0]
     ok = [r for r in state["log"]]
     return {
         "log": log,
@@ -133,6 +136,8 @@ def run(days: int, skip: float, seed: int, pace: str = cs.DEFAULT_PACE) -> dict:
         "cards": len(state["cards"]),
         "retention": round(100 * sum(1 for r in ok if r["ok"]) / max(1, len(ok))),
         "avg_min": round(mean(e["minutes"] for e in studied), 1),
+        "active_min": round(mean(active), 1),
+        "active_days": last_new + 1,
         "p90_min": round(sorted(e["minutes"] for e in studied)[int(len(studied) * 0.9)], 1),
         "catch_up_days": sum(1 for e in log if e["catch_up"]),
         "studied": len(studied),
@@ -151,6 +156,7 @@ def main() -> None:
     r = run(args.days, args.skip, args.seed, args.pace)
     print(f"{args.pace}, {args.days} days, {args.skip:.0%} skipped: units {r['units']}/20, kana lessons {r['kana']}, cards {r['cards']}, "
           f"recall in reviews {r['retention']}%")
+    print(f"while lessons last ({r['active_days']} days): {r['active_min']} min a day")
     print(f"studied {r['studied']} days: avg {r['avg_min']} min, 90th pct {r['p90_min']} min, "
           f"catch-up days {r['catch_up_days']}, due at the end {r['due_end']}")
     if args.weekly:

@@ -903,6 +903,7 @@
             el("button", { class: "secondary line-play", type: "button", "aria-label": "Play", onclick: () => play(p.jp) }, "▶"),
             el("span", { lang: "ja", text: p.jp }), el("span", { class: "ask-example-en", text: p.en })))) : "");
       box.hidden = true;
+      keys.hold = null;
     };
     const send = async (form) => {
       result.replaceChildren(el("p", { class: "pending", text: "Listening back…" }));
@@ -983,7 +984,7 @@
           await postJson("/api/course/pace", { pace: key }).catch(() => {});
           showHome();
         },
-      }, p.label, el("span", { class: "pace-minutes", text: ` ~${p.minutes} min` }))));
+      }, p.label, el("span", { class: "pace-minutes", text: ` ~${p.minutes} min a day, course in ~${p.months} months` }))));
   }
   /** One extra-practice mode on the home screen: its button and what it's for. */
   function practiceRow(label, onclick, what) {
