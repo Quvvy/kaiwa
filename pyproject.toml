@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "kaiwa"
-version = "2.0.3"
+version = "2.1.0"
 description = "Personal Japanese AI conversation partner"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -35,6 +35,8 @@ desktop = [
   "pywebview>=5.0",
   "pynput>=1.7.0",
   "sounddevice>=0.4.0",
+  "pystray>=0.19; platform_system=='Windows'",
+  "Pillow>=10; platform_system=='Windows'",
 ]
 desktop-build = [
   "pyinstaller>=6.0",

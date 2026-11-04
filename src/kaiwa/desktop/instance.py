@@ -108,6 +108,10 @@ def _focus_existing_window() -> None:
 
         user32.EnumWindows(visit, 0)
         if not found:
+            # Closed to the tray: its window isn't visible, so ask that process to show it.
+            from kaiwa import phone_access
+
+            phone_access.request_signal("show")
             return
         hwnd = found[0]
         if user32.IsIconic(hwnd):

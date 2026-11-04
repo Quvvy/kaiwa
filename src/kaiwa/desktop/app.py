@@ -6,9 +6,11 @@ import time
 from pathlib import Path
 
 from kaiwa.desktop.icons import set_windows_app_id, window_icon_path
+from kaiwa.desktop.keeper import Keeper
 from kaiwa.desktop.instance import apply_portable_mode, claim_single_instance
 from kaiwa.desktop.lifecycle import Lifecycle
 from kaiwa.desktop.ptt import PttController
+from kaiwa.desktop.tray import Tray
 from kaiwa.desktop.window import KAIWA_URL, error_html, friendly_boot_message, splash_html
 from kaiwa import phone_access
 
@@ -53,6 +55,15 @@ def _log(msg: str) -> None:
         print(f"Kaiwa: {msg}", flush=True)
     except Exception:
         pass
+
+
+def _windows_is_shutting_down() -> bool:
+    try:
+        import ctypes
+
+        return bool(ctypes.windll.user32.GetSystemMetrics(0x2000))  # SM_SHUTTINGDOWN
+    except Exception:
+        return False
 
 
 def _stop_on_signals(on_closed) -> None:  # noqa: ANN001
@@ -105,6 +116,12 @@ def main() -> None:
 
     lifecycle = Lifecycle()
     ptt = PttController(api_base=KAIWA_URL, log=_log)
+    windows = sys.platform == "win32"
+    # Started with Windows for phone access: run without showing anything.
+    hidden = {"yes": windows and "--background" in sys.argv}
+    quitting = {"yes": False}
+    for name in ("show", "quit"):
+        phone_access.take_signal(name)  # left over from a crash
     closed = {"done": False}
     boot_started = {"yes": False}
     window_holder: dict = {"win": None}
@@ -115,6 +132,8 @@ def main() -> None:
             return
         closed["done"] = True
         _log("window closed → stop ptt + session")
+        keeper.stop()
+        tray.stop()
         try:
             ptt.stop()
         except Exception as exc:
@@ -127,6 +146,61 @@ def main() -> None:
             phone_access.after_window_closed()
         except Exception as exc:
             _log(f"phone service hand-over error: {exc}")
+
+    def start_ptt() -> None:
+        """Only with the window showing: a key held with Kaiwa "closed" mustn't record."""
+        if hidden["yes"]:
+            return
+        try:
+            ptt.start()
+        except Exception as exc:
+            _log(f"ptt start error: {exc}")
+
+    def show_window() -> None:
+        win = window_holder.get("win")
+        if win is None or closed["done"]:
+            return
+        hidden["yes"] = False
+        try:
+            win.show()
+        except Exception as exc:
+            _log(f"show window error: {exc}")
+        start_ptt()
+
+    def quit_app() -> None:
+        quitting["yes"] = True
+        win = window_holder.get("win")
+        if win is None:
+            return
+        threading.Thread(target=win.destroy, name="kaiwa-quit", daemon=True).start()
+
+    def on_closing():  # noqa: ANN202
+        """Windows, phone access on: closing the window leaves Kaiwa running in the tray."""
+        if not windows or quitting["yes"] or _windows_is_shutting_down() or not phone_access.is_enabled():
+            return None
+        _log("window closed → still running for the phone")
+        hidden["yes"] = True
+        tray.start()
+        ptt.stop()
+        win = window_holder["win"]
+        # Not from inside this event: pywebview's window thread is busy running it.
+        threading.Thread(target=win.hide, name="kaiwa-hide", daemon=True).start()
+        return False
+
+    def restart_server() -> None:
+        lifecycle.start_session(on_status=_log)
+        win = window_holder.get("win")
+        if win is not None:
+            win.load_url(KAIWA_URL)
+
+    tray = Tray(on_open=show_window, on_quit=quit_app, log=_log)
+    keeper = Keeper(
+        healthy=lifecycle.session_healthy,
+        restart=restart_server,
+        show_window=show_window,
+        quit_app=quit_app,
+        log=_log,
+    )
 
     def set_status(msg: str, pct: int | None = None) -> None:
         """Update splash text without evaluate_js (avoids Edge thread deadlocks)."""
@@ -201,10 +275,8 @@ def main() -> None:
                 assert win is not None
                 win.load_url(KAIWA_URL)
                 _log("load_url done (existing API)")
-                try:
-                    ptt.start()
-                except Exception as exc:
-                    _log(f"ptt start error: {exc}")
+                keeper.server_expected = True
+                start_ptt()
                 return
 
             lifecycle.start_session(on_status=set_status, on_progress=on_boot_progress)
@@ -215,10 +287,8 @@ def main() -> None:
             assert win is not None
             win.load_url(KAIWA_URL)
             _log("load_url done")
-            try:
-                ptt.start()
-            except Exception as exc:
-                _log(f"ptt start error: {exc}")
+            keeper.server_expected = True
+            start_ptt()
         except Exception as exc:
             _log(f"boot failed: {exc!r}")
             try:
@@ -242,9 +312,15 @@ def main() -> None:
         min_size=(640, 480),
         text_select=True,
         background_color="#12141a",
+        hidden=hidden["yes"],
     )
     window_holder["win"] = window
     window.events.closed += on_closed
+    if windows:
+        window.events.closing += on_closing
+        keeper.start()
+        if hidden["yes"]:
+            tray.start()
     _stop_on_signals(on_closed)
     window.events.shown += start_boot
     window.events.loaded += start_boot

@@ -88,6 +88,10 @@ Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{a
 Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Tasks: desktopicon
 
+[Registry]
+; Phone access adds this itself to start Kaiwa with Windows; don't leave it behind.
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueName: "Kaiwa"; Flags: dontcreatekey uninsdeletevalue
+
 [Run]
 ; runasoriginaluser: Setup runs elevated, but Kaiwa must start as the learner,
 ; or its settings and progress would land in the wrong place.

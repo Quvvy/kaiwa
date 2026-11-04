@@ -1,0 +1,45 @@
+# Build the Windows release on GitHub's Windows machines when a v* tag is pushed.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-2022
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+      - name: Create the build venv
+        shell: pwsh
+        run: |
+          python -m venv .venv
+          .\.venv\Scripts\python.exe -m pip install --disable-pip-version-check -q -c packaging\build-constraints.txt -e ".[desktop,desktop-build,cuda]"
+          if ($LASTEXITCODE -ne 0) { throw "pip install failed" }
+      - name: Build the installer and portable zip
+        shell: pwsh
+        run: .\scripts\build_installer.ps1
+      - name: Check what only exists on Windows
+        shell: pwsh
+        run: |
+          .\.venv\Scripts\python.exe scripts\smoke_windows.py dist\Kaiwa
+          if ($LASTEXITCODE -ne 0) { throw "smoke_windows failed" }
+      - name: Publish the release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "${{ github.ref_name }}"
+          .\.venv\Scripts\python.exe scripts\release_notes.py $tag.TrimStart("v") > build\release-notes.md
+          if ($LASTEXITCODE -ne 0) { throw "release_notes failed" }
+          gh release create $tag dist\KaiwaSetup-*.exe dist\Kaiwa-*-portable.zip dist\Kaiwa-*-SHA256.txt --title "Kaiwa $($tag.TrimStart('v'))" --notes-file build\release-notes.md
+          if ($LASTEXITCODE -ne 0) { throw "gh release create failed" }

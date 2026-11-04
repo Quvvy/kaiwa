@@ -7,9 +7,11 @@ and this project aims to follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [2.1.0] — 2026-11-04
+
 ### Added
 
-- **Kaiwa on your iPhone (Linux PCs for now):** Settings → Phone sets up private access through Tailscale in a few steps, then Kaiwa opens from your home screen, wherever you are. Kaiwa keeps running in the background on the PC, and the phone explains what to check if it can't reach it.
+- **Kaiwa on your iPhone:** Settings → Phone sets up private access through Tailscale in a few steps, installing it for you on Windows, then Kaiwa opens from your home screen, wherever you are. Kaiwa keeps running in the background on the PC (in the tray on Windows), and the phone explains what to check if it can't reach it.
 
 ### Changed
 

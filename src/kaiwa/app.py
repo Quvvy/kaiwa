@@ -435,6 +435,21 @@ async def phone_disable() -> dict[str, Any]:
     return await asyncio.to_thread(phone_access.disable)
 
 
+@app.post("/api/phone/install")
+def phone_install() -> dict[str, Any]:
+    return phone_access.install_tailscale()
+
+
+@app.post("/api/phone/signin")
+async def phone_signin() -> dict[str, Any]:
+    return await asyncio.to_thread(phone_access.sign_in)
+
+
+@app.post("/api/phone/email_steps")
+async def phone_email_steps() -> dict[str, Any]:
+    return await asyncio.to_thread(phone_access.email_steps)
+
+
 @app.get("/api/phone/qr/app")
 def phone_qr_app() -> Response:
     """Scan to get the Tailscale app."""
@@ -524,7 +539,11 @@ def updates_dismiss(body: UpdateDismissBody) -> dict[str, Any]:
 
 @app.post("/api/updates/install")
 def updates_install() -> dict[str, Any]:
-    return updates.download_and_launch_installer(force_check=True)
+    result = updates.download_and_launch_installer(force_check=True)
+    # Setup can't replace a Kaiwa that's running hidden in the tray.
+    if result.get("launched") and phone_access.is_enabled():
+        phone_access.request_signal("quit")
+    return result
 
 
 class DeepseekKeyBody(BaseModel):

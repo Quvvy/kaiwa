@@ -380,6 +380,12 @@ def start_kaiwa(registry: ServiceRegistry, *, tts_booting: bool = False) -> None
     child_env["KAIWA_ROOT"] = str(root)
     if tts_booting:
         child_env["KAIWA_TTS_BOOTING"] = "1"
+    # What phone access registers to start Kaiwa with Windows.
+    if getattr(sys, "frozen", False):
+        desktop_cmd = [sys.executable, "--background"]
+    else:
+        desktop_cmd = [sys.executable, "-m", "kaiwa.desktop", "--background"]
+    child_env["KAIWA_DESKTOP_CMD"] = subprocess.list2cmdline(desktop_cmd)
     # The server's own errors go to Kaiwa.api.log, so a failed start is diagnosable.
     from kaiwa.secrets_store import user_data_dir
 

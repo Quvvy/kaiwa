@@ -19,6 +19,7 @@ import threading
 import time
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 from kaiwa import jsonio
 from kaiwa.secrets_store import user_data_dir
@@ -27,6 +28,11 @@ KAIWA_PORT = 8787
 SERVICE_NAME = "kaiwa-phone.service"
 STATE_FILENAME = "phone_access.json"
 IOS_APP_URL = "https://apps.apple.com/app/tailscale/id1470499037"
+
+IS_WINDOWS = sys.platform == "win32"
+RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
+RUN_VALUE = "Kaiwa"
+TAILSCALE_DOWNLOAD_URL = "https://tailscale.com/download"
 
 _LOCAL_HOSTS = {"localhost", "127.0.0.1", "[::1]", "testserver"}  # testserver: FastAPI's TestClient
 _LOCAL_ONLY_PREFIXES = ("/api/phone/", "/api/ptt/")
@@ -45,6 +51,8 @@ _SERVE_WAIT_S = 600.0  # `tailscale serve` waits this long for the consent page
 _last_phone_seen = 0.0
 _serve_proc: subprocess.Popen | None = None
 _serve_lock = threading.Lock()
+_login_url = ""
+_install_state = {"running": False, "error": ""}
 
 
 # --- which requests came from the phone ---
@@ -92,6 +100,64 @@ def is_enabled() -> bool:
     return bool(_load_state().get("enabled"))
 
 
+# --- requests to the desktop app, which is a separate process (desktop.keeper) ---
+
+def _signal_path(name: str) -> Path:
+    return user_data_dir() / f"kaiwa-{name}.signal"
+
+
+def request_signal(name: str) -> None:
+    try:
+        path = _signal_path(name)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.touch()
+    except OSError:
+        pass
+
+
+def take_signal(name: str) -> bool:
+    try:
+        _signal_path(name).unlink()
+    except OSError:
+        return False
+    return True
+
+
+# --- power (Windows) ---
+
+def _power_status() -> tuple[int, int] | None:
+    """(AC line status, battery flag), or None where that can't be read."""
+    if not IS_WINDOWS:
+        return None
+    import ctypes
+
+    class SystemPowerStatus(ctypes.Structure):
+        _fields_ = [
+            ("ACLineStatus", ctypes.c_ubyte),
+            ("BatteryFlag", ctypes.c_ubyte),
+            ("BatteryLifePercent", ctypes.c_ubyte),
+            ("SystemStatusFlag", ctypes.c_ubyte),
+            ("BatteryLifeTime", ctypes.c_ulong),
+            ("BatteryFullLifeTime", ctypes.c_ulong),
+        ]
+
+    status = SystemPowerStatus()
+    if not ctypes.windll.kernel32.GetSystemPowerStatus(ctypes.byref(status)):
+        return None
+    return status.ACLineStatus, status.BatteryFlag
+
+
+def on_battery() -> bool:
+    power = _power_status()
+    return power is not None and power[0] == 0
+
+
+def has_battery() -> bool:
+    """Decides the laptop warning. 128 is Windows' "no system battery"."""
+    power = _power_status()
+    return power is not None and power[1] != 128
+
+
 # --- tailscale ---
 
 def tailscale_cli() -> str | None:
@@ -119,6 +185,8 @@ def _tailscale(*args: str, timeout: float = 8.0) -> subprocess.CompletedProcess[
             [cli, *args],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=timeout,
             creationflags=_creationflags(),
         )
@@ -145,7 +213,7 @@ def _serve_active() -> bool:
 
 def _setup_commands() -> list[str]:
     """What to paste into a terminal for the step Kaiwa can't do itself (Linux)."""
-    if sys.platform == "win32":
+    if IS_WINDOWS:
         return []
     if shutil.which("pacman"):
         install = "sudo pacman -S tailscale"
@@ -179,6 +247,17 @@ def status() -> dict[str, Any]:
         "installed": tailscale_cli() is not None,
         "commands": _setup_commands(),
         "ios_app_url": IOS_APP_URL,
+        "buttons": IS_WINDOWS,  # Windows can install and sign in from the wizard; Linux needs sudo
+        "download_url": TAILSCALE_DOWNLOAD_URL,
+        "installing": _install_state["running"],
+        "install_error": _install_state["error"],
+        "login_url": _login_url,
+        "daemon_up": False,
+        "https_ready": False,
+        "phone_steps": "",
+        "keeps_running": IS_WINDOWS or service_supported(),
+        "starts_with_pc": bool(state.get("linger") or state.get("autostart")),
+        "has_battery": has_battery(),
         "url": "",
         "phone_name": "",
         "phone_online": False,
@@ -192,12 +271,16 @@ def status() -> dict[str, Any]:
     data = _read_tailscale() if result["installed"] else None
     if data is None:
         return result
+    result["daemon_up"] = True
     if data.get("BackendState") != "Running":
         result["step"] = "signin"
         return result
+    result["login_url"] = ""
+    result["https_ready"] = bool(data.get("CertDomains"))
     dns = str((data.get("Self") or {}).get("DNSName") or "").rstrip(".")
     if dns:
         result["url"] = f"https://{dns}/"
+        result["phone_steps"] = phone_steps_text(result["url"])
     phone = _phone_peer(data)
     if phone:
         # iPhones report their hostname as "localhost"; the wizard says "Your phone" instead.
@@ -217,22 +300,21 @@ def status() -> dict[str, Any]:
 
 # --- turning it on and off ---
 
-def _start_serve() -> dict[str, str]:
-    """Run `tailscale serve --bg`. First use may stop to ask for HTTPS approval: it prints
-    a link and keeps waiting, so hand back the link and let it finish in the background."""
+def _run_until_link(cli: str, *args: str) -> tuple[subprocess.Popen, str, str]:
+    """Run a Tailscale command that may stop to ask for approval in a browser: it prints a
+    link and keeps waiting, so hand back the link and let it finish in the background.
+    Returns (process, link or "", everything printed so far)."""
     global _serve_proc
-    cli = tailscale_cli()
-    if not cli:
-        return {"error": "Tailscale isn't installed."}
     with _serve_lock:
         if _serve_proc is not None and _serve_proc.poll() is None:
             _serve_proc.kill()
         proc = subprocess.Popen(
-            [cli, "serve", "--bg", str(KAIWA_PORT)],
+            [cli, *args],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             stdin=subprocess.DEVNULL,
-            text=True,
+            encoding="utf-8",
+            errors="replace",
             creationflags=_creationflags(),
         )
         _serve_proc = proc
@@ -260,12 +342,21 @@ def _start_serve() -> dict[str, str]:
         match = _URL.search(line)
         # Serve's success text also prints the https address it now answers on.
         if match and "tailscale.com" in match.group(0):
-            return {"consent_url": match.group(0)}
-    output = "".join(seen)
+            return proc, match.group(0), "".join(seen)
+    return proc, "", "".join(seen)
+
+
+def _start_serve() -> dict[str, str]:
+    cli = tailscale_cli()
+    if not cli:
+        return {"error": "Tailscale isn't installed."}
+    proc, link, output = _run_until_link(cli, "serve", "--bg", str(KAIWA_PORT))
+    if link:
+        return {"consent_url": link}
     if proc.poll() not in (None, 0):
         if "access denied" in output.lower() or "operator" in output.lower():
             return {"error": "Tailscale needs permission first. Run: sudo tailscale set --operator=$USER"}
-        first = next((ln.strip() for ln in seen if ln.strip()), "tailscale serve failed")
+        first = next((ln.strip() for ln in output.splitlines() if ln.strip()), "tailscale serve failed")
         return {"error": first[:300]}
     return {}
 
@@ -279,6 +370,8 @@ def enable() -> dict[str, Any]:
     state.update(outcome)
     if service_supported() and "error" not in outcome:
         state.update(_install_service())
+    if IS_WINDOWS and "error" not in outcome:
+        state["autostart"] = _set_autostart(True)
     if outcome.get("consent_url"):
         _open_in_browser(outcome["consent_url"])
     _save_state(state)
@@ -300,11 +393,82 @@ def disable() -> dict[str, Any]:
         _systemctl("disable", SERVICE_NAME)
         if state.pop("linger", False):
             _run_quiet("loginctl", "disable-linger")
+    if IS_WINDOWS:
+        _set_autostart(False)
+        state.pop("autostart", None)
     _save_state(state)
     if service_supported() and not _window_open():
         # This request is probably being served by that service: answer first.
         threading.Timer(0.5, remove_service).start()
     return status()
+
+
+def _finish_install(proc: subprocess.Popen) -> None:
+    code = proc.wait()
+    _install_state["running"] = False
+    if code != 0 and tailscale_cli() is None:
+        _install_state["error"] = "Tailscale didn't install. Use the download link instead."
+
+
+def install_tailscale() -> dict[str, Any]:
+    """One button instead of a download page. Windows asks for permission once."""
+    if _install_state["running"] or tailscale_cli():
+        return status()
+    _install_state["error"] = ""
+    winget = shutil.which("winget")
+    if winget:
+        try:
+            proc = subprocess.Popen(
+                [
+                    winget, "install", "--exact", "--id", "Tailscale.Tailscale", "--silent",
+                    "--accept-package-agreements", "--accept-source-agreements",
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                stdin=subprocess.DEVNULL,
+                creationflags=_creationflags(),
+            )
+        except OSError:
+            winget = None
+        else:
+            _install_state["running"] = True
+            threading.Thread(target=_finish_install, args=(proc,), name="kaiwa-tailscale-install", daemon=True).start()
+    if not winget:
+        _open_in_browser(TAILSCALE_DOWNLOAD_URL)
+    return status()
+
+
+def sign_in() -> dict[str, Any]:
+    """Start Tailscale's sign-in and open its page."""
+    global _login_url
+    cli = tailscale_cli()
+    if cli:
+        _proc, link, _output = _run_until_link(cli, "up")
+        if link:
+            _login_url = link
+            _open_in_browser(link)
+    return status()
+
+
+def phone_steps_text(url: str) -> str:
+    return (
+        "Kaiwa on your iPhone\n\n"
+        f"1. Install Tailscale: {IOS_APP_URL}\n"
+        "2. Open it and sign in with the same account as your PC.\n"
+        "3. When your iPhone asks to add a VPN, tap Allow. This is how your phone reaches "
+        "your PC privately. It doesn't change your other browsing.\n"
+        f"4. Open Kaiwa in Safari: {url}\n"
+        "5. Tap Share, then Add to Home Screen. Open Kaiwa from that icon from now on.\n"
+    )
+
+
+def email_steps() -> dict[str, Any]:
+    """Open a draft in the learner's own mail app. Kaiwa sends nothing itself."""
+    current = status()
+    if current["phone_steps"]:
+        subject = quote("Kaiwa on your iPhone")
+        _open_in_browser(f"mailto:?subject={subject}&body={quote(current['phone_steps'])}")
+    return current
 
 
 def _open_in_browser(url: str) -> None:
@@ -324,6 +488,30 @@ def qr_svg(text: str) -> bytes:
     # Always dark on white, whatever the theme: phone cameras need the contrast.
     segno.make(text, error="m").save(out, kind="svg", scale=6, border=2, dark="#000", light="#fff")
     return out.getvalue()
+
+
+# --- starting with Windows ---
+
+def _set_autostart(on: bool) -> bool:
+    """A per-user Run entry: no admin rights, and Kaiwa starts hidden when they sign in.
+    KAIWA_DESKTOP_CMD comes from the desktop app that started this server."""
+    command = (os.environ.get("KAIWA_DESKTOP_CMD") or "").strip()
+    try:
+        import winreg
+
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY, 0, winreg.KEY_SET_VALUE) as key:
+            if on:
+                if not command:
+                    return False
+                winreg.SetValueEx(key, RUN_VALUE, 0, winreg.REG_SZ, command)
+            else:
+                try:
+                    winreg.DeleteValue(key, RUN_VALUE)
+                except FileNotFoundError:
+                    pass
+    except (ImportError, OSError):
+        return False
+    return on
 
 
 # --- the background service (Linux) ---

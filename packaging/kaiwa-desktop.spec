@@ -22,7 +22,10 @@ hiddenimports = [
     "kaiwa.desktop.instance",
     "kaiwa.desktop.lifecycle",
     "kaiwa.desktop.services",
+    "kaiwa.desktop.keeper",
+    "kaiwa.desktop.tray",
     "kaiwa.phone_access",
+    "pystray._win32",
     "kaiwa.prefs",
     "kaiwa.config",
     "clr",
@@ -58,8 +61,6 @@ excludes = [
     "IPython",
     "jupyter",
     "notebook",
-    "pystray",
-    "PIL",
     # Used only by the API / bootstrap processes (bundled in runtime\), which
     # kaiwa.bootstrap imports lazily; the shell never loads them.
     "huggingface_hub",
