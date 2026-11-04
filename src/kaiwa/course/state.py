@@ -25,6 +25,7 @@ from kaiwa import jsonio
 from kaiwa.course import build, grader, srs
 from kaiwa.course.kana import KANA_LESSONS, KANA_ROMAJI, LESSON_BY_ID, lesson_chars
 from kaiwa.course.kana_hooks import alike, hook_for
+from kaiwa.course.missions import MISSIONS
 from kaiwa.course.units import ROMAJI, UNITS
 
 STATE_FILE = "course_state.json"
@@ -251,6 +252,7 @@ def complete_step(unit_id: str, step: str, *, count: int | None = None, path: Pa
         raise ValueError(f"unknown step: {step}")
 
     def apply(state: dict[str, Any]) -> dict[str, Any]:
+        before = len(state["cards"])
         row = state["units"].setdefault(unit_id, {})
         row[f"{step}_on"] = _today().isoformat()  # day-two steps wait until after this day
         if step != "words":
@@ -274,9 +276,18 @@ def complete_step(unit_id: str, step: str, *, count: int | None = None, path: Pa
         if unit_done(state, unit):
             row.setdefault("done_at", datetime.now(timezone.utc).isoformat())
         _mark_day(state)
+        _count_new(state, before)
         return row
 
     return _with_state(apply, path)
+
+
+def _count_new(state: dict[str, Any], before: int) -> None:
+    """How many items were taught today, for the end-of-day summary."""
+    added = len(state["cards"]) - before
+    if added > 0:
+        day = state["daily"].setdefault(_today().isoformat(), {"answers": 0, "right": 0, "ms": 0})
+        day["new"] = int(day.get("new") or 0) + added
 
 
 def complete_kana(lesson_id: str, *, path: Path | None = None) -> dict[str, Any]:
@@ -287,9 +298,11 @@ def complete_kana(lesson_id: str, *, path: Path | None = None) -> dict[str, Any]
 
     def apply(state: dict[str, Any]) -> dict[str, Any]:
         state["kana"].setdefault(lesson_id, _today().isoformat())
+        before = len(state["cards"])
         for ch, _ in lesson["kana"]:
             state["cards"].setdefault(f"kana.{ch}:read", _new_card())
         _mark_day(state)
+        _count_new(state, before)
         return kana_progress(state)
 
     return _with_state(apply, path)
@@ -671,6 +684,7 @@ CATCH_UP_DAYS = 2
 DAY_ONE_STEPS = ("learn", "words")
 # Below this share remembered, new material halves until recall recovers: piling
 # more on top of what's slipping only makes both worse.
+COMEBACK_DAYS = 3
 SLOW_DOWN_BELOW = 80
 SLOW_DOWN_DAYS = 14
 SLOW_DOWN_MIN_REVIEWS = 30
@@ -707,7 +721,9 @@ def catching_up(state: dict[str, Any]) -> bool:
 def todays_reviews(state: dict[str, Any]) -> list[dict[str, Any]]:
     """Today's share of due cards: what fits in the budget left after today's reviews."""
     spent = state["reviewed"].get(_today().isoformat(), 0)
-    budget = pace_of(state)["reviews"] * (2 if catching_up(state) else 1)
+    # Coming back from a break gets a normal day: a doubled pile is how a break becomes quitting.
+    returning = days_away(state) >= COMEBACK_DAYS
+    budget = pace_of(state)["reviews"] * (2 if catching_up(state) and not returning else 1)
     return due_cards(state, limit=80, budget=max(0, budget - spent))
 
 
@@ -898,16 +914,66 @@ def public_kana_lesson(lesson: dict[str, Any], state: dict[str, Any]) -> dict[st
     }
 
 
+REST_EVERY = 7       # studied days in a row that earn a free rest day
+REST_MAX = 2         # rest days that can be saved up
+
+
+def streak_info(state: dict[str, Any]) -> dict[str, int]:
+    """Days in a row, where a week of study earns one missed day that doesn't break it.
+
+    A long streak dying over one bad day is the most common reason people quit a
+    habit app; a little slack keeps the number a reason to come back, not a threat.
+    """
+    days = sorted({d for d in state["days"] if d[:4].isdigit()})
+    n = rests = 0
+    prev: date | None = None
+    for raw in days:
+        try:
+            cur = date.fromisoformat(raw)
+        except ValueError:
+            continue
+        gap = (cur - prev).days - 1 if prev else 0
+        if gap <= rests:
+            rests -= gap
+            n += 1
+        else:
+            n, rests = 1, 0
+        if n % REST_EVERY == 0:
+            rests = min(REST_MAX, rests + 1)
+        prev = cur
+    if prev is None:
+        return {"days": 0, "rests": 0}
+    # Today isn't over yet: only days fully missed before today count against it.
+    missed = (_today() - prev).days - 1
+    if missed > rests:
+        return {"days": 0, "rests": 0}
+    return {"days": n, "rests": rests - max(0, missed)}
+
+
 def streak(state: dict[str, Any]) -> int:
-    days = set(state["days"])
-    cur = _today()
-    if cur.isoformat() not in days:
-        cur -= timedelta(days=1)
-    n = 0
-    while cur.isoformat() in days:
-        n += 1
-        cur -= timedelta(days=1)
-    return n
+    return streak_info(state)["days"]
+
+
+def week_dots(state: dict[str, Any]) -> list[dict[str, Any]]:
+    """Monday to Sunday of this week: which days were studied."""
+    today = _today()
+    monday = today - timedelta(days=today.weekday())
+    studied = set(state["days"])
+    out = []
+    for i in range(7):
+        d = monday + timedelta(days=i)
+        out.append({"d": d.isoformat(), "label": "MTWTFSS"[i], "on": d.isoformat() in studied, "today": d == today, "future": d > today})
+    return out
+
+
+def days_away(state: dict[str, Any]) -> int:
+    """Full days since the last study day (0 when studied today or yesterday)."""
+    for raw in reversed(sorted(state["days"])):
+        try:
+            return max(0, (_today() - date.fromisoformat(raw)).days - 1)
+        except ValueError:
+            continue
+    return 0
 
 
 def learned_phrase_ids(state: dict[str, Any]) -> list[str]:
@@ -986,10 +1052,65 @@ def stats(state: dict[str, Any]) -> dict[str, Any]:
         "units_done": sum(1 for u in UNITS if unit_done(state, u)),
         "units_total": len(UNITS),
         "streak": streak(state),
+        "rests": streak_info(state)["rests"],
+        "week": week_dots(state),
         "studied_today": _today().isoformat() in state["days"],
         "listening": listening_minutes(state),
         "talk_today": int(state["daily"].get(_today().isoformat(), {}).get("talk") or 0),
     }
+
+
+def day_summary(state: dict[str, Any]) -> dict[str, Any]:
+    """Today so far, in the learner's terms."""
+    today = _today().isoformat()
+    day = state["daily"].get(today, {})
+    answers = int(day.get("answers") or 0)
+    finished = [{"id": u["id"], "number": i, "title": u["title"], "goal": u["goal"]}
+                for i, u in enumerate(UNITS, start=1)
+                if str(state["units"].get(u["id"], {}).get("done_at") or "")[:10] == today
+                and not state["units"][u["id"]].get("placed")]
+    tomorrow = (_today() + timedelta(days=1)).isoformat()
+    due_tomorrow = sum(1 for c in state["cards"].values() if not srs.is_learning(c) and str(c.get("due") or "") <= tomorrow)
+    return {
+        "answers": answers,
+        "right": int(day.get("right") or 0),
+        "minutes": round((int(day.get("ms") or 0) + int(day.get("listen_ms") or 0)) / 60000, 1),
+        "new": int(day.get("new") or 0),
+        "talk": int(day.get("talk") or 0),
+        "units_finished": finished,
+        "due_tomorrow": due_tomorrow,
+    }
+
+
+def milestones(state: dict[str, Any]) -> list[dict[str, str]]:
+    """Real abilities reached, oldest first. Counts things the learner can do, never points."""
+    words = sum(1 for w in _WORDS if f"{w}:mean" in state["cards"])
+    phrases = len(learned_phrase_ids(state))
+    listening = state["listening"]["total_ms"] / 60000
+    talk = sum(int(d.get("talk") or 0) for d in state["daily"].values())
+    prog = kana_progress(state)
+    units = sum(1 for u in UNITS if unit_done(state, u))
+    out: list[dict[str, str]] = []
+
+    def add(key: str, reached: bool, text: str) -> None:
+        if reached:
+            out.append({"id": key, "text": text})
+
+    for n in (10, 25, 50, 100):
+        add(f"phrases{n}", phrases >= n, f"{n} phrases you can say.")
+    for n in (50, 100, 200, 300):
+        add(f"words{n}", words >= n, f"{n} words you know.")
+    add("hiragana", prog["hiragana"][0] >= prog["hiragana"][1], "You can read all of hiragana.")
+    add("katakana", prog["katakana"][0] >= prog["katakana"][1], "You can read all of katakana.")
+    for n in (30, 60, 300, 600):
+        add(f"listening{n}", listening >= n, f"{n // 60} hours of listening." if n >= 120 else f"{n} minutes of listening.")
+    for n in (25, 100, 500):
+        add(f"talk{n}", talk >= n, f"{n} lines spoken in talk practice.")
+    for n in (5, 10, 20):
+        add(f"units{n}", units >= n, f"{n} units finished." if n < 20 else "The whole course is done.")
+    for n in (7, 30, 100):
+        add(f"streak{n}", streak(state) >= n, f"{n} days in a row.")
+    return out
 
 
 def today_payload(*, path: Path | None = None) -> dict[str, Any]:
@@ -1019,6 +1140,9 @@ def today_payload(*, path: Path | None = None) -> dict[str, Any]:
         "placement": state.get("placement"),
         "placement_checks": placement_checks(state),
         "unit_titles": [u["title"] for u in UNITS],
+        "away": days_away(state) if today not in state["days"] else 0,
+        "day": day_summary(state),
+        "milestones": milestones(state),
         "paces": {k: {"label": v["label"], "minutes": v["minutes"]} for k, v in PACES.items()},
         **plan_today(state),
     }
@@ -1303,3 +1427,83 @@ def known_phrases_for_chat(*, limit: int = 40, path: Path | None = None) -> list
     state = load_state(path)
     ids = learned_phrase_ids(state)[-limit:]
     return [{"jp": _PHRASES[i]["jp"], "en": _PHRASES[i]["en"]} for i in ids]
+
+
+def strength_of(card: dict[str, Any] | None) -> str:
+    """A card's memory in plain terms."""
+    if not card or srs.is_learning(card):
+        return "new"
+    s = srs.stability(card)
+    return "strong" if s >= YOUNG_DAYS else "growing" if s >= 3 else "new"
+
+
+def course_map(*, path: Path | None = None) -> dict[str, Any]:
+    """Every unit: what it lets you do, and how far along it is."""
+    state = load_state(path)
+    current = next_unit(state)
+    units = []
+    for i, unit in enumerate(UNITS, start=1):
+        row = state["units"].get(unit["id"], {})
+        steps = unit_steps(unit)
+        cards = [state["cards"].get(c) for c in _unit_card_ids(unit)]
+        started = [c for c in cards if c]
+        strong = sum(1 for c in started if strength_of(c) == "strong")
+        units.append({
+            "id": unit["id"], "number": i, "title": unit["title"], "title_jp": unit["title_jp"], "goal": unit["goal"],
+            "status": "done" if unit_done(state, unit) else "current" if current and unit["id"] == current["id"] else "later",
+            "steps": sum(1 for s in steps if row.get(s)), "steps_total": len(steps),
+            "strength": round(100 * strong / len(cards)) if cards else 0,
+            "mission": row.get("mission"), "has_mission": unit["id"] in MISSIONS,
+            "placed": bool(row.get("placed")),
+        })
+    return {"units": units, "kana": kana_progress(state), "kana_lessons": [
+        {"id": l["id"], "number": i, "title": l["title"], "script": l["script"], "done": l["id"] in state["kana"],
+         "chars": " ".join(c for c, _ in l["kana"])} for i, l in enumerate(KANA_LESSONS, start=1)]}
+
+
+def kana_lesson_payload(lesson_id: str, *, path: Path | None = None) -> dict[str, Any] | None:
+    lesson = LESSON_BY_ID.get(lesson_id)
+    return public_kana_lesson(lesson, load_state(path)) if lesson else None
+
+
+def unit_payload(unit_id: str, *, path: Path | None = None) -> dict[str, Any] | None:
+    """A unit opened from the course map, ready for its lesson steps."""
+    unit = unit_by_id(unit_id)
+    if unit is None:
+        return None
+    state = load_state(path)
+    return {"unit": public_unit(unit), "unit_steps": dict(state["units"].get(unit_id, {}))}
+
+
+def phrasebook(*, path: Path | None = None) -> dict[str, Any]:
+    """Everything learned so far, to look up and hear again."""
+    state = load_state(path)
+    phrases, words, grammar = [], [], []
+    for unit in UNITS:
+        for p in unit["phrases"]:
+            cards = [state["cards"].get(f"{p['id']}:{s}") for s in SKILLS]
+            if any(cards):
+                phrases.append({"jp": p["jp"], "en": p["en"], "note": p.get("note", ""), "ro": ROMAJI.get(p["id"], ""),
+                                "unit": unit["title"], "strength": strength_of(min((c for c in cards if c), key=srs.stability))})
+        for w in unit.get("words", []):
+            card = state["cards"].get(f"{w['id']}:mean")
+            if card:
+                words.append({"jp": w["jp"], "en": w["en"], "ro": w.get("ro", ""), "unit": unit["title"], "strength": strength_of(card)})
+        if state["units"].get(unit["id"], {}).get("grammar"):
+            for g in unit.get("grammar", []):
+                grammar.append({"title": g["title"], "rule": g.get("rule", ""), "explain": g["explain"],
+                                "examples": g["examples"], "unit": unit["title"]})
+    return {"phrases": phrases, "words": words, "grammar": grammar}
+
+
+def complete_mission(unit_id: str, *, path: Path | None = None) -> str:
+    if unit_by_id(unit_id) is None:
+        raise KeyError(f"unknown unit: {unit_id}")
+
+    def apply(state: dict[str, Any]) -> str:
+        row = state["units"].setdefault(unit_id, {})
+        row.setdefault("mission", _today().isoformat())
+        _mark_day(state)
+        return row["mission"]
+
+    return _with_state(apply, path)

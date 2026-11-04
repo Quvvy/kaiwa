@@ -153,7 +153,53 @@ def grammar_cards() -> None:
                "grammar done before this update joins the schedule as reviews")
 
 
+def habit_and_map() -> None:
+    from datetime import date
+    from kaiwa.course import missions
+    from kaiwa.course.units import UNITS
+    real = cs._today
+    cs._today = lambda: date(2027, 5, 31)
+    try:
+        run = [(date(2027, 5, 31) - timedelta(days=x)).isoformat() for x in range(1, 9)]
+        st = {**cs._empty(), "days": sorted(run)}
+        _check(cs.streak(st) == 8, "eight days in a row, ending yesterday")
+        gap = [d for d in run if d != run[1]]  # one day missed, after a full week
+        st2 = {**cs._empty(), "days": sorted(gap)}
+        info = cs.streak_info(st2)
+        _check(info["days"] == 1, "a miss before a week's study resets")
+        week = [(date(2027, 5, 31) - timedelta(days=x)).isoformat() for x in range(2, 10)]
+        st3 = {**cs._empty(), "days": sorted(week)}
+        _check(cs.streak(st3) == 8 and cs.streak_info(st3)["rests"] == 0, "a rest day earned by a week covers one missed day")
+        far = {**cs._empty(), "days": sorted((date(2027, 5, 31) - timedelta(days=x)).isoformat() for x in range(5, 10))}
+        _check(cs.streak(far) == 0 and cs.days_away(far) == 4, "a long gap ends it, and days away are counted")
+        dots = cs.week_dots(st)
+        _check(len(dots) == 7 and dots[0]["today"], "this week's dots start on Monday")
+    finally:
+        cs._today = real
+    _check(set(missions.MISSIONS) == {u["id"] for u in UNITS}, "every unit has a mission")
+    _check(all(m["goal"] and m["opener"] and m["suggest"] and m["scene"] for m in missions.MISSIONS.values()), "missions are complete")
+    with tempfile.TemporaryDirectory() as d:
+        path = Path(d) / "s.json"
+        m = cs.course_map(path=path)
+        _check(len(m["units"]) == 20 and m["units"][0]["status"] == "current" and m["units"][1]["status"] == "later", "course map shows where you are")
+        cs.complete_step("u1", "learn", path=path)
+        cs.complete_mission("u1", path=path)
+        m = cs.course_map(path=path)
+        _check(m["units"][0]["steps"] == 1 and m["units"][0]["mission"], "the map tracks steps and missions")
+        _check(cs.unit_payload("u3", path=path)["unit"]["number"] == 3 and cs.unit_payload("nope", path=path) is None, "any unit opens by id")
+        book = cs.phrasebook(path=path)
+        _check(len(book["phrases"]) == 6 and not book["words"] and book["phrases"][0]["strength"] == "new", "phrasebook lists only what's been taught")
+        st = cs.load_state(path)
+        _check(cs.day_summary(st)["new"] == 12, "today's summary counts what was taught")
+        _check(cs.milestones({**cs._empty()}) == [], "no milestones on day one")
+        st4 = cs.load_state(path)
+        for p in [p["id"] for u in UNITS[:2] for p in u["phrases"]]:
+            st4["cards"][f"{p}:listen"] = srs.new_card()
+        _check(any(x["id"] == "phrases10" for x in cs.milestones(st4)), "ten phrases is a milestone")
+
+
 def main() -> None:
+    habit_and_map()
     grammar_cards()
     sound_diff()
     word_formats()

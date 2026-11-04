@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field
 from kaiwa import stt, tts
 from kaiwa.config import get_settings
 from kaiwa.course import ask, coach, hooks, kana_judge, placement, prerender, roleplay, sentences, state, stories
-from kaiwa.course import learner_log
+from kaiwa.course import learner_log, missions
 from kaiwa.course.kana import KANA_ROMAJI
 from kaiwa.course.speech_check import check_phrase, normalize, spot_differences
 from kaiwa.secrets_store import user_data_dir
@@ -104,7 +104,7 @@ class AskBody(BaseModel):
 
 @router.get("/today")
 def today() -> dict[str, Any]:
-    return state.today_payload()
+    return {**state.today_payload(), "has_tutor": bool(get_settings().deepseek_api_key)}
 
 
 @router.post("/tts")
@@ -384,6 +384,55 @@ def step(body: StepBody) -> dict[str, Any]:
     learner_log.log("lesson_step", unit=body.unit_id, step=body.step)
     prerender.start(get_settings())  # the "next lesson" window may have moved
     return {"unit": row, "stats": state.stats(state.load_state())}
+
+
+@router.get("/map")
+def course_map() -> dict[str, Any]:
+    return state.course_map()
+
+
+@router.get("/unit/{unit_id}")
+def open_unit(unit_id: str) -> dict[str, Any]:
+    data = state.unit_payload(unit_id)
+    if data is None:
+        raise HTTPException(status_code=404, detail="Unknown unit")
+    return data
+
+
+@router.get("/kana_lesson/{lesson_id}")
+def kana_lesson(lesson_id: str) -> dict[str, Any]:
+    data = state.kana_lesson_payload(lesson_id)
+    if data is None:
+        raise HTTPException(status_code=404, detail="Unknown lesson")
+    return data
+
+
+@router.get("/phrasebook")
+def phrasebook() -> dict[str, Any]:
+    return state.phrasebook()
+
+
+@router.get("/mission/{unit_id}")
+def mission(unit_id: str) -> dict[str, Any]:
+    if not get_settings().deepseek_api_key:
+        raise HTTPException(status_code=400, detail="Missions need your DeepSeek key (Settings → DeepSeek).")
+    data = missions.mission_for(unit_id)
+    if data is None:
+        raise HTTPException(status_code=404, detail="This unit has no mission.")
+    learner_log.log("talk_start", scene=data["scene"], goal=data["goal"], opener=data["opener"], mission=unit_id)
+    return data
+
+
+class MissionBody(BaseModel):
+    unit_id: str
+
+
+@router.post("/mission_done")
+def mission_done(body: MissionBody) -> dict[str, Any]:
+    try:
+        return {"mission": state.complete_mission(body.unit_id)}
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.post("/pace")

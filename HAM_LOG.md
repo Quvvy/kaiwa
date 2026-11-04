@@ -85,3 +85,26 @@ Grammar you already finished joins the schedule automatically, spread over two w
 **H13. Grammar lessons mix in older questions and end by building.** ✅ `[H12,H13]`
 The drill now includes up to 3 questions from the previous 3 units, then finishes with a short build-it round. *Why:* mixed practice beat blocked practice for L2 grammar a week later (Nakata & Suzuki 2019).
 
+### Seeing your progress
+
+**H14. Course map.** ✅ `[H14-H19]`
+All 20 units in one list, each with what it lets you do, a done mark, a memory-strength bar and a ★ for missions. Open any started unit to redo a step, or re-open any kana lesson. Before this, Kaiwa only ever showed the current unit, and finished lessons couldn't be revisited.
+
+**H15. Phrasebook.** ✅ `[H14-H19]`
+Everything you've learned, searchable by English, kana or romaji, with audio and a New/Growing/Strong tag. Grammar is here as a reference too. *Why:* a conversation learner constantly thinks "how did I say that again?".
+
+**H16. Unit missions.** ✅ `[H14-H19]`
+Finishing a unit now offers a small real scene written for it: order a coffee, turn down an invitation, ask the way. The partner reacts to what you actually say, and you get one fix per turn. A mission marks the unit with ★; it never blocks progress. 20 hand-written missions in `course/missions.py`. Needs the DeepSeek key.
+*Why:* task-based teaching (Ellis 2003, Long 2015). It's the moment the course stops being a course. I ran one with a real typed turn and it worked.
+
+**H17. "You can now…" and an end-of-day screen.** ✅ `[H14-H19]`
+Finishing a unit says what you can now do, in plain words. Finishing the day's plan shows what you did, what's waiting tomorrow, and an easy nudge to say something in Chat. Before, the day ended on one grey line.
+*Why:* people remember how something ended (peak-end rule, Kahneman et al. 1993), and feeling competent is one of the strongest drivers of sticking with things (Deci & Ryan).
+
+**H18. A streak that forgives; a week view.** ✅ 🧪 `[H14-H19]`
+Seven dots for this week. Every 7 days in a row earns a rest day: miss one and the streak holds. After 3+ days away the home screen says welcome back and the review pile isn't doubled that day. Study days also now end at 4 a.m., so a 1 a.m. session counts for the evening it started in.
+*Why:* one missed day killing a long streak is a classic quitting moment. A fresh start framing helps people resume (Dai, Milkman & Riis 2014).
+
+**H19. Real milestones; a calmer home.** ✅ 🧪 `[H14-H19]`
+Quiet one-liners for abilities reached ("You can read all of hiragana", "100 words you know"). No points, levels or leagues. The Start button moved up into the first screenful, placement stays only for new users, and skip-unit, pace and romaji moved under Options.
+

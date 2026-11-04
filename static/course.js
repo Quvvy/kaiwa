@@ -577,21 +577,31 @@
     if (step === "review") return runReview(today.review);
     if (step === "recap") return runReview(today.recap || [], { title: "Recap", planStep: "recap" });
     if (step === "kana") return runKana(today.kana);
-    if (step === "learn") return runLearn(today.unit);
-    if (step === "words") return runWords(today.unit);
-    if (step === "grammar") return runGrammar(today.unit);
-    if (step === "listen") return runListen(today.unit);
-    return runSpeak(today.unit);
+    return runUnitStep(today.unit, step, today.unit_steps || {});
   }
+  function runUnitStep(unit, step, row) {
+    if (step === "learn") return runLearn(unit);
+    if (step === "words") return runWords(unit, row);
+    if (step === "grammar") return runGrammar(unit);
+    if (step === "listen") return runListen(unit);
+    return runSpeak(unit);
+  }
+  // A lesson opened from the course map goes back there, not on through today's plan.
+  let afterLesson = null;
   /** After a step: refresh progress, then go straight to the next planned step. */
   async function continuePlan() {
+    if (afterLesson) {
+      const back = afterLesson;
+      afterLesson = null;
+      return back();
+    }
     await refresh();
     const next = planSteps()[0];
-    return next ? runStep(next) : showHome();
+    return next ? runStep(next) : showDayDone();
   }
   function runNext() {
     const next = planSteps()[0];
-    return next ? runStep(next) : showHome();
+    return next ? runStep(next) : showDayDone();
   }
   let UNIT_TITLES = [];
   async function refresh() {
@@ -601,6 +611,7 @@
 
   async function showHome() {
     stopAudio();
+    afterLesson = null;
     screenId += 1;
     askContext = null;
     askPanel.refresh();
@@ -653,7 +664,7 @@
         learn: `${unit.phrases.length} phrases to learn`,
         words: done.words || !today.words_today || today.words_today >= unit.words.length - (done.words_seen || 0)
           ? `${done.words || !done.words_seen ? unit.words.length : unit.words.length - done.words_seen} words`
-          : `${today.words_today} of ${unit.words.length - (done.words_seen || 0)} words left`,
+          : `Next ${today.words_today} of ${unit.words.length - (done.words_seen || 0)} words`,
         grammar: `${unit.grammar.length} grammar point${unit.grammar.length === 1 ? "" : "s"}, ${unit.drill.length} questions`,
         listen: "A short conversation",
         speak: `Answer ${unit.speak.length} questions out loud`,
@@ -666,18 +677,16 @@
       }
     }
 
-    const kanaText = kp ? ` Hiragana ${kp.hiragana[0]}/${kp.hiragana[1]}, katakana ${kp.katakana[0]}/${kp.katakana[1]}.` : "";
-    const progressText = s.phrases_learned
-      ? `${s.phrases_learned} phrases and ${s.words_learned} words learned, ${s.phrases_strong} phrases remembered well.${kanaText} ${s.streak} day${s.streak === 1 ? "" : "s"} in a row.`
-      : "";
-
     if (placementAfterHome) {
       placementAfterHome = false;
       return runPlacement();
     }
+    const fresh = !s.phrases_learned && !(kp && kp.lessons_done);
     if (steps.length) keys.primary = runNext;
     root.replaceChildren(
       el("div", { class: "home" },
+        today.away >= 3 ? el("p", { class: "home-note home-welcome", text: `Welcome back. It's been ${today.away} days, and that's fine: you keep more than it feels like. Today is a normal-sized day, not a pile.` }) : null,
+        newMilestones().map((m) => el("p", { class: "milestone", text: m.text })),
         unit
           ? el("div", { class: "home-unit" },
               el("p", { class: "home-kicker", text: `Unit ${unit.number} of ${s.units_total}` }),
@@ -687,32 +696,30 @@
               el("h1", { class: "home-title", text: `You've finished all ${s.units_total} units` }),
               el("p", { class: "home-goal", text: "Reviews continue daily. Use Extra listening and Chat for more practice." })),
         unit && unit.reopenedNote ? el("p", { class: "home-note", text: unit.reopenedNote }) : null,
-        progressText ? el("p", { class: "home-progress", text: progressText }) : null,
-        el("div", { class: "home-bar", role: "progressbar", "aria-valuenow": String(pct), "aria-valuemin": "0", "aria-valuemax": "100" },
+        fresh ? el("p", { class: "home-note", text: "Each day: a little new, a little review, and everything out loud. Mistakes are part of how it works; they're what tells Kaiwa what to bring back." }) : null,
+        weekRow(s),
+        el("div", { class: "home-bar", role: "progressbar", "aria-label": "Phrases learned", "aria-valuenow": String(pct), "aria-valuemin": "0", "aria-valuemax": "100" },
           el("span", { style: `width:${pct}%` })),
-        rows.length ? el("ol", { class: "plan" }, rows) : null,
         steps.length
           ? el("div", { class: "home-actions" },
               el("button", { type: "button", class: "lesson-primary", onclick: runNext },
                 `${s.studied_today ? "Continue" : "Start today's lesson"} · about ${today.minutes} min`, kbd("Enter")))
-          : el("p", { class: "home-done", text: "Done for today. More tomorrow." }),
-        !today.placement && !s.phrases_learned && !(today.kana_progress && today.kana_progress.lessons_done)
-          ? el("div", { class: "home-placement" },
-              el("p", { text: "Already know some Japanese? A short test finds where to start." }),
-              el("button", { type: "button", class: "secondary", onclick: runPlacement }, "Take the placement test (about 8 min)"))
-          : null,
-        placementLine(today.placement_checks || []),
-        unit && !unit.reopenedNote && !Object.values(today.unit_steps || {}).some((v) => v === true)
-          ? skipUnitButton(unit)
-          : null,
-        today.retention ? retentionLine(today.retention) : null,
+          : el("p", { class: "home-done", text: doneLine() }),
         today.catching_up
           ? el("p", { class: "home-note", text: "Reviews only today: there's a backlog to clear first. New lessons are still one click away below." })
           : null,
         today.slipping != null
           ? el("p", { class: "home-note", text: `You've been remembering ${today.slipping}% lately, so new material is slowed down until that recovers. This usually only takes a few days.` })
           : null,
-        s.phrases_learned || (today.kana_progress && today.kana_progress.lessons_done)
+        rows.length ? el("ol", { class: "plan" }, rows) : null,
+        fresh
+          ? el("div", { class: "home-placement" },
+              el("p", { text: "Already know some Japanese? A short test finds where to start." }),
+              el("button", { type: "button", class: "secondary", onclick: runPlacement }, "Take the placement test (about 8 min)"))
+          : null,
+        placementLine(today.placement_checks || []),
+        today.retention ? retentionLine(today.retention) : null,
+        !fresh
           ? el("div", { class: "home-more" },
               el("h2", { class: "home-more-title", text: "More practice" }),
               practiceRow(
@@ -724,17 +731,83 @@
                 runTalk,
                 "A short scene with a goal and a hint when you're stuck. The best place to start speaking."),
               practiceRow("Chat", goChat,
-                "Talk about anything, for as long as you like. Easy keeps it to what you've learned."),
-              el("button", { type: "button", class: "secondary home-stats", onclick: runStats,
-                "data-tip": "Retention, what's coming up, your cards, and how scheduling works" }, "Stats"))
+                "Talk about anything, for as long as you like. Easy keeps it to what you've learned."))
           : null,
-        paceRow(),
-        el("label", { class: "home-romaji" },
-          el("input", { type: "checkbox", checked: showRomaji, onchange: (e) => { showRomaji = e.target.checked; writePref("kaiwa_course_romaji", showRomaji ? "1" : "0"); } }),
-          " Show romaji for kana you haven't learned"),
+        el("div", { class: "home-links" },
+          el("button", { type: "button", class: "secondary", onclick: runMap, "data-tip": "All 20 units, what each lets you do, and how far you are" }, "Course map"),
+          !fresh ? el("button", { type: "button", class: "secondary", onclick: runBook, "data-tip": "Everything you've learned, to look up and hear again" }, "Phrasebook") : null,
+          !fresh ? el("button", { type: "button", class: "secondary", onclick: runStats,
+            "data-tip": "Retention, what's coming up, your cards, and how scheduling works" }, "Stats") : null),
+        el("details", { class: "home-options" },
+          el("summary", {}, "Options"),
+          paceRow(),
+          el("label", { class: "home-romaji" },
+            el("input", { type: "checkbox", checked: showRomaji, onchange: (e) => { showRomaji = e.target.checked; writePref("kaiwa_course_romaji", showRomaji ? "1" : "0"); } }),
+            " Show romaji for kana you haven't learned"),
+          unit && !unit.reopenedNote && !Object.values(today.unit_steps || {}).some((v) => v === true)
+            ? skipUnitButton(unit)
+            : null),
       ),
     );
+    markMilestonesSeen();
   }
+  function doneLine() {
+    const d = today.day || {};
+    return d.answers ? `Done for today: ${d.answers} answer${d.answers === 1 ? "" : "s"}${d.new ? `, ${d.new} new` : ""}. More tomorrow.` : "Done for today. More tomorrow.";
+  }
+  /** This week as dots, and the streak: a week's study earns a day off that doesn't break it. */
+  function weekRow(s) {
+    if (!s.streak && !(s.week || []).some((d) => d.on)) return null;
+    const rest = s.rests ? `, ${s.rests} rest day${s.rests === 1 ? "" : "s"} saved` : "";
+    return el("div", { class: "week-row", "data-tip": "Every 7 days in a row earns a rest day: miss one day and the streak holds." },
+      el("span", { class: "week-dots", "aria-hidden": "true" }, s.week.map((d) => el("span", {
+        class: "week-dot" + (d.on ? " on" : "") + (d.today ? " today" : "") + (d.future ? " future" : ""), text: d.label }))),
+      el("span", { class: "week-text", text: s.streak ? `${s.streak} day${s.streak === 1 ? "" : "s"} in a row${rest}` : "Studied this week" }));
+  }
+  /** Abilities reached since the last look. The first ever look only records what's already there. */
+  function newMilestones() {
+    const list = today.milestones || [];
+    const raw = readPref("kaiwa_seen_milestones", "");
+    if (!raw) return [];
+    const seen = new Set(raw.split(","));
+    return list.filter((m) => !seen.has(m.id));
+  }
+  function markMilestonesSeen() {
+    const list = today.milestones || [];
+    writePref("kaiwa_seen_milestones", ["-", ...list.map((m) => m.id)].join(","));
+  }
+
+  /** The end of the day's plan: what you did, what you can now do, and an easy next thing. */
+  async function showDayDone() {
+    try { await refresh(); } catch (_) { return showHome(); }
+    const d = today.day || {};
+    const figures = [
+      d.answers ? figure(String(d.answers), "answers") : null,
+      d.new ? figure(String(d.new), "new things learned") : null,
+      d.minutes >= 1 ? figure(String(Math.round(d.minutes)), "minutes") : null,
+      today.stats.streak > 1 ? figure(String(today.stats.streak), "days in a row") : null,
+    ].filter(Boolean);
+    frame({
+      title: "That's today",
+      body: el("div", { class: "card-body day-done" },
+        newMilestones().map((m) => el("p", { class: "milestone", text: m.text })),
+        (d.units_finished || []).map((u) => el("div", { class: "can-do" },
+          el("p", { class: "can-do-label", text: `Unit ${u.number} done. You can now:` }), el("p", { class: "can-do-text", text: u.goal }))),
+        figures.length ? el("div", { class: "stats-figures" }, figures) : null,
+        el("p", { class: "prompt", text: d.due_tomorrow
+          ? `Tomorrow: ${d.due_tomorrow} review${d.due_tomorrow === 1 ? "" : "s"} waiting, then the next lesson. Sleep is part of this: what you did today sets overnight.`
+          : "Sleep is part of this: what you did today sets overnight." }),
+        el("p", { class: "lesson-note", text: "Got two more minutes? Using what you just learned in a real exchange is the fastest way to keep it." })),
+      actions: [
+        el("button", { type: "button", class: "secondary", onclick: goChat }, "Say something in Chat"),
+        primaryButton("Done", showHome)],
+      primary: showHome,
+    });
+    markMilestonesSeen();
+    askContext = null;
+    askPanel.refresh();
+  }
+
   /** How much a day holds. Takes effect straight away, on today's plan too. */
   function paceRow() {
     return el("div", { class: "pace-row", role: "group", "aria-label": "Daily pace" },
@@ -2250,18 +2323,21 @@
    * A suggested reply is always one click away. Partner lines are voice first;
    * their text is one click (Japanese) or two (English) away, as in listening.
    */
-  async function runTalk() {
-    track("open", { activity: "talk" });
-    frame({ title: "Talk practice", body: el("p", { class: "pending", text: "Setting the scene…" }) });
+  async function runTalk(missionId) {
+    const mission = typeof missionId === "string" ? missionId : null; // a click handler passes an event
+    const talkTitle = mission ? "Mission" : "Talk practice";
+    track("open", { activity: mission ? "mission" : "talk", unit: mission });
+    frame({ title: talkTitle, body: el("p", { class: "pending", text: "Setting the scene…" }) });
     let scene;
     try {
-      scene = await api("/api/course/talk/start", { method: "POST" });
+      scene = mission ? await api(`/api/course/mission/${encodeURIComponent(mission)}`) : await api("/api/course/talk/start", { method: "POST" });
     } catch (err) {
+      const again = () => runTalk(mission);
       frame({
-        title: "Talk practice",
+        title: talkTitle,
         body: el("p", { class: "verdict off", text: String(err.message || err) }),
-        actions: [primaryButton("Try again", runTalk)],
-        primary: runTalk,
+        actions: [primaryButton("Try again", again)],
+        primary: again,
       });
       return;
     }
@@ -2401,20 +2477,22 @@
       send(f);
     } }, typed, el("button", { class: "secondary", type: "submit" }, "Send"));
     const controls = el("div", { class: "talk-controls" }, hold, micRow(), typedForm, hintBtn, hintBox);
-    const nextBtn = primaryButton("Another conversation", runTalk, { disabled: true });
+    const leave = mission ? () => continuePlan() : () => runTalk();
+    const nextBtn = primaryButton(mission ? "Continue" : "Another conversation", leave, { disabled: true });
 
     function finish() {
       finished = true;
       track("talk_end", { goal: scene.goal, tries, done: true });
       controls.hidden = true;
-      thread.after(el("p", { class: "by-ear", text: "Conversation done. Click any line to hear it again." }));
+      thread.after(el("p", { class: "by-ear", text: mission ? `Mission done: ${scene.goal} Click any line to hear it again.` : "Conversation done. Click any line to hear it again." }));
+      if (mission) postJson("/api/course/mission_done", { unit_id: mission }).catch(() => {});
       nextBtn.disabled = false;
-      keys.primary = runTalk;
+      keys.primary = leave;
       keys.hold = null;
     }
 
     frame({
-      title: "Talk practice",
+      title: talkTitle,
       ask: { screen: "talk practice", scene: scene.scene, goal: scene.goal, partner: scene.partner },
       body: el("div", { class: "card-body listen" },
         el("p", { class: "situation", text: scene.scene }),
@@ -2596,12 +2674,12 @@
    * beats reading twenty and being quizzed on all of them. The day's recap then
    * mixes them up. Long word lists can split across days (see state.plan_today).
    */
-  function runWords(unit) {
-    const row = today.unit_steps || {};
+  function runWords(unit, row) {
     const redo = !!row.words;
     const seen = redo ? 0 : row.words_seen || 0;
     const left = unit.words.length - seen;
-    const count = redo ? left : Math.min(left, today.words_today || Math.min(left, 10));
+    const planned = today.unit && today.unit.id === unit.id ? today.words_today : 0;
+    const count = redo ? left : Math.min(left, planned || Math.min(left, 10));
     const words = unit.words.slice(seen, seen + count);
     const BATCH = 5;
     prefetch(words.map((w) => [w.jp, {}]));
@@ -2919,18 +2997,142 @@
     show();
   }
 
+  /** A unit's end: what you can now do, and the mission that puts it to use. */
   function done(unit) {
+    const back = () => continuePlan();
+    const canMission = today.has_tutor;
     frame({
       title: `Unit ${unit.number} done`,
       body: el("div", { class: "card-body" },
         el("h3", { class: "end-title", text: unit.title }),
-        el("p", { class: "prompt", text: `${unit.phrases.length} phrases learned. They're in tomorrow's review.` })),
+        el("div", { class: "can-do" },
+          el("p", { class: "can-do-label", text: "You can now:" }),
+          el("p", { class: "can-do-text", text: unit.goal })),
+        canMission ? el("p", { class: "prompt", text: "Want to try it for real? A short scene where you need exactly this, with a partner who reacts to what you say." }) : null),
       actions: [
-        el("button", { type: "button", class: "secondary", onclick: goChat }, "Use them in Chat"),
-        primaryButton("Back to today", showHome),
-      ],
-      primary: showHome,
+        canMission ? el("button", { type: "button", class: "secondary", onclick: back }, "Not now") : null,
+        canMission ? primaryButton("Start the mission", () => runTalk(unit.id)) : primaryButton("Continue", back),
+      ].filter(Boolean),
+      primary: canMission ? () => runTalk(unit.id) : back,
     });
+  }
+
+  // ---------- course map ----------
+  async function runMap() {
+    stopAudio();
+    screenId += 1;
+    askContext = null;
+    askPanel.refresh();
+    clearKeys();
+    root.replaceChildren(el("div", { class: "home" }, el("p", { class: "pending", text: "Loading…" })));
+    let m;
+    try { m = await api("/api/course/map"); } catch (err) {
+      root.replaceChildren(el("div", { class: "home" }, el("p", { class: "verdict off", text: String(err.message || err) })));
+      return;
+    }
+    const doneCount = m.units.filter((u) => u.status === "done").length;
+    root.replaceChildren(el("div", { class: "home map" },
+      el("div", { class: "lesson-top" },
+        el("button", { class: "secondary lesson-exit", type: "button", onclick: () => showHome() }, "Back"),
+        el("h2", { class: "lesson-title", text: "Course map" }),
+        el("span", { class: "lesson-count", text: `${doneCount} of ${m.units.length}` })),
+      el("ol", { class: "map-units" }, m.units.map((u) => el("li", { class: `map-unit ${u.status}` },
+        el("span", { class: "map-mark", "aria-hidden": "true", text: u.status === "done" ? "✓" : String(u.number) }),
+        el("div", { class: "map-main" },
+          el("p", { class: "map-title" }, u.title, " ", el("span", { lang: "ja", text: u.title_jp }),
+            u.mission ? el("span", { class: "map-star", title: "Mission done", text: " ★" }) : null),
+          el("p", { class: "map-goal", text: u.goal }),
+          u.status !== "later" ? el("span", { class: "map-strength", title: `${u.strength}% of this unit is well remembered (3+ weeks)` },
+            el("span", { style: `width:${u.strength}%` })) : null),
+        u.status !== "later"
+          ? el("button", { type: "button", class: "secondary", onclick: () => unitPage(u.id) }, "Open")
+          : el("span")))),
+      el("h3", { class: "stats-h", text: "Kana" }),
+      el("ol", { class: "map-kana" }, m.kana_lessons.map((k) => el("li", { class: k.done ? "done" : "" },
+        el("button", { type: "button", class: "secondary", onclick: () => kanaFromMap(k.id) },
+          el("span", { lang: "ja", text: k.chars.split(" ").slice(0, 5).join(" ") || k.title }))))),
+    ));
+    keys.primary = showHome;
+  }
+  async function kanaFromMap(id) {
+    try {
+      const lesson = await api(`/api/course/kana_lesson/${encodeURIComponent(id)}`);
+      afterLesson = runMap;
+      runKana(lesson);
+    } catch (err) { root.prepend(el("p", { class: "verdict off", text: String(err.message || err) })); }
+  }
+  /** One unit from the map: its steps, its mission, its conversation to hear again. */
+  async function unitPage(id) {
+    let data;
+    try { data = await api(`/api/course/unit/${encodeURIComponent(id)}`); } catch (err) { return runMap(); }
+    const unit = data.unit;
+    const row = data.unit_steps;
+    const open = (step) => () => { afterLesson = () => unitPage(id); runUnitStep(unit, step, row); };
+    const startMission = () => runTalk(unit.id);
+    root.replaceChildren(el("div", { class: "home" },
+      el("div", { class: "lesson-top" },
+        el("button", { class: "secondary lesson-exit", type: "button", onclick: runMap }, "Back"),
+        el("h2", { class: "lesson-title", text: `Unit ${unit.number}: ${unit.title}` })),
+      el("p", { class: "home-goal", text: unit.goal }),
+      el("ol", { class: "plan" }, unit.steps.map((step) => planRow(STEP_NAMES[step], row[step] ? "Done" : "Not yet", !!row[step], open(step), row[step] ? "Redo" : "Open")),
+        today && today.has_tutor ? planRow("Mission", row.mission ? "Done" : "Use it in a real exchange", !!row.mission, startMission, row.mission ? "Again" : "Start") : null),
+    ));
+    clearKeys();
+    keys.primary = runMap;
+  }
+
+  // ---------- phrasebook ----------
+  async function runBook() {
+    stopAudio();
+    screenId += 1;
+    askContext = null;
+    askPanel.refresh();
+    clearKeys();
+    root.replaceChildren(el("div", { class: "home" }, el("p", { class: "pending", text: "Loading…" })));
+    let book;
+    try { book = await api("/api/course/phrasebook"); } catch (err) {
+      root.replaceChildren(el("div", { class: "home" }, el("p", { class: "verdict off", text: String(err.message || err) })));
+      return;
+    }
+    let tab = "phrases";
+    const list = el("div", { class: "book-list" });
+    const search = el("input", { type: "search", class: "book-search", placeholder: "Search in English, kana or romaji", "aria-label": "Search", oninput: draw });
+    const tabs = el("div", { class: "book-tabs", role: "tablist" });
+    const STRENGTH = { new: "New", growing: "Growing", strong: "Strong" };
+    function row(item) {
+      return el("div", { class: "book-row" },
+        el("button", { class: "secondary line-play", type: "button", "aria-label": `Play ${item.jp}`, onclick: () => play(item.jp) }, "▶"),
+        el("span", { class: "book-jp", lang: "ja", text: item.jp }),
+        el("span", { class: "book-en" }, item.en, item.note ? el("span", { class: "book-note", text: item.note }) : null),
+        el("span", { class: `book-strength ${item.strength}`, title: "How well you remember it", text: STRENGTH[item.strength] }));
+    }
+    function grammarRow(g) {
+      return el("details", { class: "book-grammar" },
+        el("summary", {}, el("strong", { text: g.title }), g.rule ? el("span", { class: "book-rule", text: ` ${g.rule}` }) : null),
+        g.explain.map((p) => el("p", { class: "grammar-text", text: p })),
+        el("ul", { class: "examples" }, g.examples.map((ex) => el("li", {},
+          el("button", { class: "secondary line-play", type: "button", "aria-label": "Play", onclick: () => play(ex.jp) }, "▶"),
+          el("span", { class: "example-jp", lang: "ja", text: ex.jp }),
+          el("span", { class: "example-en", text: ex.en })))));
+    }
+    function draw() {
+      const q = search.value.trim().toLowerCase();
+      const hits = (it) => !q || [it.jp, it.en, it.ro, it.title, it.rule, it.note].some((v) => v && v.toLowerCase().includes(q));
+      const counts = { phrases: book.phrases.filter(hits).length, words: book.words.filter(hits).length, grammar: book.grammar.filter(hits).length };
+      tabs.replaceChildren(...["phrases", "words", "grammar"].map((t) => el("button", {
+        type: "button", role: "tab", "aria-selected": String(t === tab), class: "pace-chip" + (t === tab ? " on" : ""),
+        onclick: () => { tab = t; draw(); } }, `${t[0].toUpperCase()}${t.slice(1)} (${counts[t]})`)));
+      const items = book[tab].filter(hits);
+      list.replaceChildren(...(items.length
+        ? items.map(tab === "grammar" ? grammarRow : row)
+        : [el("p", { class: "status", text: q ? "Nothing matches." : "Nothing here yet. It fills up as you learn." })]));
+    }
+    draw();
+    root.replaceChildren(el("div", { class: "home" },
+      el("div", { class: "lesson-top" },
+        el("button", { class: "secondary lesson-exit", type: "button", onclick: () => showHome() }, "Back"),
+        el("h2", { class: "lesson-title", text: "Phrasebook" })),
+      search, tabs, list));
   }
 
   // Settings → Level → Take the placement test: switch to Learn, then open the test
