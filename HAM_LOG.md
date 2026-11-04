@@ -194,3 +194,17 @@ Options → "Study at 7:00 PM · Add to my calendar" downloads a daily repeating
 I checked the 324 course words against everyday N5 vocabulary and found real holes: the numbers 1-10 as words (though Time and Shopping lean on them), basic food, the body and feeling ill, colours, common verbs. Rather than reorder a course you're part-way through, nine optional packs (75 words) now live on the course map, taught with the same teach-then-test loop. Once learned, they're ordinary cards that Chat and stories can use. Units 8 and 11 point at the Numbers pack if you haven't done it.
 *Why:* it fixes the gap without disturbing anyone's progress, and choosing what to learn is motivating in itself (Deci & Ryan). *For you to check:* meanings and romaji are hand-written; `course/packs.py` is short and worth a read.
 
+### More real use
+
+**H41. Extra listening is now one ongoing series.** ✅ 🧪 `[H41-H44]`
+Stories now follow the same friends (ユキ, ケン, ハナ), carry on from the last scene, and end on a small open thread. The screen also says how much should be familiar ("about 94%"). *Why:* staying with the same people and situation makes input easier to follow ("narrow" input, Krashen 2004), and "what happens next?" is a better reason to listen than finishing an exercise. I generated one episode to check; low-level episodes are necessarily simple, but they're coherent.
+
+**H42. The recap is mixed.** ✅ `[H41-H44]`
+It used to run in teaching order (all kana, then phrases, then words). Now it's shuffled for the day, and a phrase's two sides are never adjacent. *Why:* interleaving. Telling things apart is part of remembering them.
+
+**H43. Corrections get kept, not lost.** ✅ `[H41-H44]`
+When a talk or mission ends, "Worth keeping from this talk" lists every corrected line, with audio and a Keep button that makes it a review card. Ask's examples get Keep too. *Why:* talk practice was producing perfect personalised corrections and then throwing them away.
+
+**H44. A missed build shows the rule.** ✅ `[H41-H44]`
+Getting a sentence wrong in grammar review now shows that point's one-line rule.
+

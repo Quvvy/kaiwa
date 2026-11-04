@@ -468,6 +468,21 @@
     return el("p", { class: "heard-line" }, prefix, el("span", { lang: "ja", text: heard }), extra || null);
   }
 
+  /** Keep a corrected line or example as one of your own phrases. */
+  function keepButton(jp, en) {
+    const btn = el("button", { type: "button", class: "secondary", onclick: async () => {
+      btn.disabled = true;
+      try {
+        await postJson("/api/course/mine", { jp, en: en || "" });
+        btn.textContent = "Kept";
+      } catch (err) {
+        btn.disabled = false;
+        btn.textContent = "Couldn't keep it";
+      }
+    } }, "Keep");
+    return btn;
+  }
+
   // ---------- ask ----------
   // What the current screen is about; frame() sets it, results add to it.
   let askContext = null;
@@ -543,7 +558,8 @@
         parts.push(el("div", { class: "ask-example" },
           el("button", { class: "secondary line-play", type: "button", "aria-label": "Play", onclick: () => play(ex.jp) }, "▶"),
           el("span", { lang: "ja", text: ex.jp }),
-          el("span", { class: "ask-example-en", text: ex.en })));
+          el("span", { class: "ask-example-en", text: ex.en }),
+          ex.en && ex.jp.length <= 40 && !/[一-鿿]/.test(ex.jp) ? keepButton(ex.jp, ex.en) : null));
       }
       if (r.more) parts.push(el("details", { class: "ask-more" }, el("summary", {}, "More"), el("p", { text: r.more })));
       return parts;
@@ -1172,6 +1188,7 @@
       feedback.replaceChildren(...[
         el("p", { class: "verdict " + (right ? "good" : "off"), text: right ? "Right." : "Not quite." }),
         el("p", { class: "build-model", lang: "ja", text: item.tiles.join(" ") }),
+        !right && item.rule ? el("p", { class: "grammar-rule", text: item.rule }) : "",
         el("div", { class: "lesson-play" }, el("button", { class: "secondary", type: "button", onclick: () => play(item.jp) }, "Play", kbd("R"))),
       ]);
       keys.replay = () => play(item.jp);
@@ -1559,7 +1576,7 @@
     /** A grammar point comes back as a different sentence to put together each time. */
     function buildCard(card) {
       const g = card.grammar;
-      const item = g.items[(card.reps || 0) % g.items.length];
+      const item = { ...g.items[(card.reps || 0) % g.items.length], rule: g.rule };
       const slot = el("div", { class: "grade-slot" });
       const nextBtn = primaryButton("Next", () => advance());
       nextBtn.hidden = true;
@@ -2262,7 +2279,7 @@
     }
     listenView({
       title: "Extra listening",
-      dialogue: { scene: story.replay ? `Again: ${story.scene}` : story.scene, lines: story.lines, form: story.form },
+      dialogue: { scene: story.replay ? `Again: ${story.scene}` : story.scene, lines: story.lines, form: story.form, known: story.known_share },
       questions: story.questions,
       doneLabel: "Next one",
       onDone: () => runExtraListening(true),
@@ -2448,6 +2465,7 @@
       ask: { screen: "listening", scene: d.scene, lines: d.lines.map((l) => `${l.who}: ${l.jp} (${l.en})`), questions: qs.map((q) => q.q) },
       body: el("div", { class: "card-body listen" },
         d.scene ? el("p", { class: "prompt", text: d.scene }) : null,
+        d.known ? el("p", { class: "status", text: `Built from what you know: about ${Math.round(d.known * 100)}% should be familiar.` }) : null,
         el("div", { class: "listen-bar" }, playBtn, slowBtn, heardNote),
         thread,
         questionsBox,
@@ -2527,6 +2545,7 @@
     const PARTNER = { voice: "b" };
     const MAX_TRIES = 10; // retries included; the scene closes on its own long before
     const history = [];
+    const fixes = []; // corrected versions from this talk, to look back at once it's over
     let suggest = scene.suggest;
     let tries = 0;
     let pending = false;
@@ -2629,6 +2648,9 @@
       }
       tries += 1;
       typed.value = "";
+      if (r.verdict !== "great" && r.model && normalizeKana(r.model) !== normalizeKana(r.heard) && !fixes.some((f) => f.jp === r.model)) {
+        fixes.push({ jp: r.model, en: r.said_en || "", tip: r.tip });
+      }
       myLine(r.heard, r.verdict);
       renderFeedback(r);
       if (r.verdict === "retry") {
@@ -2669,6 +2691,15 @@
       controls.hidden = true;
       thread.after(el("p", { class: "by-ear", text: mission ? `Mission done: ${scene.goal} Click any line to hear it again.` : "Conversation done. Click any line to hear it again." }));
       if (mission) postJson("/api/course/mission_done", { unit_id: mission }).catch(() => {});
+      if (fixes.length) {
+        feedback.replaceChildren(el("div", { class: "talk-fixes" },
+          el("p", { class: "model-label", text: "Worth keeping from this talk" }),
+          fixes.map((f) => el("div", { class: "ask-example" },
+            el("button", { class: "secondary line-play", type: "button", "aria-label": "Play", onclick: () => play(f.jp) }, "▶"),
+            el("span", { lang: "ja", text: f.jp }),
+            el("span", { class: "ask-example-en", text: f.en }),
+            f.en && f.jp.length <= 40 && !/[一-鿿]/.test(f.jp) ? keepButton(f.jp, f.en) : null))));
+      }
       nextBtn.disabled = false;
       keys.primary = leave;
       keys.hold = null;

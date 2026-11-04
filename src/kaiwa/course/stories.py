@@ -74,6 +74,14 @@ WORDS_SHOWN = 60    # per strength group, so the prompt stays small at any level
 PATTERNS_SHOWN = 15
 ANCHORS = 3
 NAMES = ["アレックス", "ユキ", "ケン", "ハナ", "タロウ", "エミ", "サム", "リサ", "ダイキ", "マヤ"]
+# The same few people, week after week. Familiar people and an ongoing situation take
+# load off understanding ("narrow" input, Krashen 2004), and wanting to know what
+# happens next is a better reason to listen than finishing an exercise.
+CAST = """This is an ongoing everyday series about the same friends. Use them, and no one else unless needed:
+ユキ (a student who loves cats), ケン (works in an office, always hungry), ハナ (Yuki's friend, plans everything).
+Carry on from the most recent scene when it makes sense, and end on a small open thread:
+something they plan to do, or a small question left hanging. Facts from earlier scenes stay true.
+"""
 
 
 def _valid(data: dict[str, Any]) -> bool:
@@ -142,8 +150,8 @@ def generate(settings: Settings, *, topic_hint: str = "", avoid: list[str] | Non
         f"Setting idea: {topic_hint or random.choice(SETTINGS)}.\n"
         f"Build it around these words: {', '.join(w['jp'] for w in anchors) or 'anything known'}. "
         f"Use likes and dislikes (すき/きらい) only if these words call for it.\n"
-        f"People: {' and '.join(random.sample(NAMES, 2))}.\n"
-        f"Recent scenes (don't repeat): {'; '.join(recent[-12:]) or '(none)'}"
+        f"{CAST}"
+        f"Story so far, oldest first (continue it, don't repeat a scene): {'; '.join(recent[-12:]) or '(this is the first one)'}"
     )
     known_pieces = ([w["jp"] for w in ctx["shaky"] + ctx["solid"]] + [p["jp"] for p in known if p]
                     + ctx["patterns"])

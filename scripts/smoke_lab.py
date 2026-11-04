@@ -276,6 +276,21 @@ def word_packs() -> None:
         _check("いち" in cs.known_vocab(path=path)[0], "Chat and stories can use them")
 
 
+def recap_mix() -> None:
+    st = cs._empty()
+    for ch in "あいうえお":
+        st["cards"][f"kana.{ch}:read"] = srs.new_card()
+    for p in cs.UNITS[0]["phrases"]:
+        for side in cs.SKILLS:
+            st["cards"][f"{p['id']}:{side}"] = srs.new_card()
+    rows = cs.recap_cards(st)
+    kinds = [r["kind"] for r in rows]
+    _check(len(rows) == 17 and kinds != sorted(kinds), "the recap mixes kinds of card")
+    items = [r["card_id"].split(":")[0] for r in rows]
+    _check(all(a != b for a, b in zip(items, items[1:])), "a phrase's two sides aren't next to each other")
+    _check([r["card_id"] for r in cs.recap_cards(st)] == [r["card_id"] for r in rows], "the mix holds for the day")
+
+
 def fixes() -> None:
     with tempfile.TemporaryDirectory() as d:
         path = Path(d) / "s.json"
@@ -323,6 +338,7 @@ def slips_and_counts() -> None:
 
 
 def main() -> None:
+    recap_mix()
     word_packs()
     fixes()
     slips_and_counts()

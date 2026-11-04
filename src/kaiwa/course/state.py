@@ -222,7 +222,7 @@ def public_unit(unit: dict[str, Any]) -> dict[str, Any]:
         "words": unit.get("words", []),
         "grammar": unit.get("grammar", []),
         "drill": unit.get("drill", []),
-        "build": [{**item, "card_id": f"{g['id']}:build", "point": g["id"]} for g in unit.get("grammar", [])
+        "build": [{**item, "card_id": f"{g['id']}:build", "point": g["id"], "rule": g.get("rule", "")} for g in unit.get("grammar", [])
                   for item in build.items_for(g["id"])],
         # Questions from the units before, mixed into this unit's drill.
         "earlier_drill": [q for u in UNITS[max(0, index - 3):index] for q in u.get("drill", [])],
@@ -701,7 +701,16 @@ def recap_cards(state: dict[str, Any]) -> list[dict[str, Any]]:
         if kind and srs.is_learning(card) and str(card.get("due") or "") <= today:
             rows.append((srs.due_at(card), card_id, kind))
     rows.sort(key=lambda r: r[0])
-    return [_card_row(r[1], r[2], state["cards"][r[1]]) for r in rows[:RECAP_LIMIT]]
+    picked = rows[:RECAP_LIMIT]
+    # Mixed, not in the order they were taught: telling kinds apart is part of the
+    # practice, and a phrase's two sides next to each other give each other away.
+    random.Random(today).shuffle(picked)
+    ordered: list[tuple] = []
+    while picked:
+        last = ordered[-1][2][1] if ordered else None
+        i = next((n for n, r in enumerate(picked) if r[2][1] != last), 0)
+        ordered.append(picked.pop(i))
+    return [_card_row(r[1], r[2], state["cards"][r[1]]) for r in ordered]
 
 
 # ---------- pacing ----------
