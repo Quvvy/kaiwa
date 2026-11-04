@@ -2,13 +2,22 @@
 <html lang="en" data-theme="system">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="Kaiwa" />
+  <link rel="manifest" href="/static/manifest.webmanifest" />
   <title>Kaiwa</title>
   <link rel="icon" href="/static/icons/kaiwa.ico" sizes="any" />
   <link rel="icon" type="image/png" href="/static/icons/kaiwa-text-only.png" />
-  <link rel="apple-touch-icon" href="/static/icons/kaiwa-text-only.png" />
+  <link rel="apple-touch-icon" href="/static/icons/kaiwa-apple-touch.png" />
   <script>
     // Theme before first paint (prefs from the server confirm it later).
+    // Opened from a phone rather than on the PC: hides what only makes sense on the PC.
+    if (!["127.0.0.1", "localhost", "[::1]"].includes(location.hostname)) {
+      document.documentElement.dataset.remote = "1";
+    }
     window.kaiwaTheme = (() => {
       const valid = ["system", "light", "dark"];
       const set = (v) => {
@@ -76,7 +85,13 @@
       <button type="button" id="engineAlertDismiss" class="secondary">Dismiss</button>
     </div>
 
-    <div id="updateBanner" class="update-banner" hidden role="status">
+    <div id="homeScreenTip" class="update-banner" hidden role="status">
+      <div class="update-banner-body">Tap Share, then Add to Home Screen, to open Kaiwa like an app.</div>
+      <div class="update-banner-actions">
+        <button type="button" id="homeScreenTipClose" class="secondary">OK</button>
+      </div>
+    </div>
+    <div id="updateBanner" class="update-banner" data-pc-only hidden role="status">
       <div class="update-banner-body" id="updateBannerText"></div>
       <div class="update-banner-actions">
         <button type="button" id="updateBannerInstall">Install update</button>
@@ -91,7 +106,7 @@
     <section class="mode" id="modeChat">
       <div class="chat-stage">
         <div id="log" aria-live="polite">
-          <p class="chat-disclaimer" role="note">Free conversation about anything. Hold Talk (or Space) and speak, or type below. New to speaking? Talk practice on the Learn tab gives you a goal and hints.</p>
+          <p class="chat-disclaimer" role="note">Free conversation about anything. Hold Talk and speak, or type below. New to speaking? Talk practice on the Learn tab gives you a goal and hints.</p>
         </div>
         <aside id="chatsDrawer" class="chats-drawer" hidden>
           <div class="chats-drawer-head">
@@ -189,11 +204,12 @@
           <nav class="settings-rail" aria-label="Settings sections">
             <button type="button" class="active" data-settings-section="general">General</button>
             <button type="button" data-settings-section="speech">Speech</button>
-            <button type="button" data-settings-section="ptt">Push-to-talk</button>
+            <button type="button" data-settings-section="ptt" data-pc-only>Push-to-talk</button>
             <button type="button" data-settings-section="chat">Chat</button>
             <button type="button" data-settings-section="level">Level</button>
             <button type="button" data-settings-section="memory">Memory</button>
             <button type="button" data-settings-section="data">Data</button>
+            <button type="button" data-settings-section="phone" data-pc-only>Phone</button>
           </nav>
         </div>
         <div class="settings-pane">
@@ -206,7 +222,7 @@
                 <div class="field settings-searchable" data-settings-search="theme dark light mode appearance colors system">
                   <label for="themeSelect">Theme</label>
                   <select id="themeSelect">
-                    <option value="system">Same as Windows</option>
+                    <option value="system">Same as system</option>
                     <option value="light">Light</option>
                     <option value="dark">Dark</option>
                   </select>
@@ -226,9 +242,9 @@
                   <label class="check"><input id="autoAdvanceToggle" type="checkbox" /> Move on by itself after right answers</label>
                 </div>
               </fieldset>
-              <fieldset class="group">
+              <fieldset class="group" data-pc-only>
                 <legend>DeepSeek</legend>
-                <div class="field settings-searchable" data-settings-search="api key deepseek secret llm token">
+                <div data-pc-only class="field settings-searchable" data-settings-search="api key deepseek secret llm token">
                   <label for="deepseekKeyInput" data-tip="Used for Chat and the lesson coach. Stored on this PC only.">API key</label>
                   <div class="stack">
                     <span class="value" id="deepseekKeyMasked">Not set</span>
@@ -240,9 +256,9 @@
                   </div>
                 </div>
               </fieldset>
-              <fieldset class="group">
+              <fieldset class="group" data-pc-only>
                 <legend>Updates</legend>
-                <div class="field settings-searchable" data-settings-search="about version update github release installer setup">
+                <div data-pc-only class="field settings-searchable" data-settings-search="about version update github release installer setup">
                   <label data-tip="Updates come from GitHub Releases. Installing downloads the setup file and runs it; Windows may ask for permission.">Version</label>
                   <div class="stack">
                     <span class="value" id="aboutVersionLabel">…</span>
@@ -260,7 +276,7 @@
               <h2 class="section-title">Speech</h2>
               <fieldset class="group">
                 <legend>Microphone</legend>
-                <div class="field settings-searchable" data-settings-search="microphone mic input device recording level headset">
+                <div data-pc-only class="field settings-searchable" data-settings-search="microphone mic input device recording level headset">
                   <label data-tip="Talk and watch the level bar. If it doesn't move, pick another device. Learn, Chat and push-to-talk all use this microphone.">Input device</label>
                   <div id="settingsMicRow"></div>
                 </div>
@@ -289,7 +305,7 @@
               </fieldset>
             </div>
 
-            <div class="settings-section" data-settings-section="ptt" hidden>
+            <div class="settings-section" data-settings-section="ptt" data-pc-only hidden>
               <h2 class="section-title">Push-to-talk</h2>
               <fieldset class="group">
                 <legend>Global key</legend>
@@ -568,6 +584,14 @@
               </fieldset>
             </div>
 
+            <div class="settings-section" data-settings-section="phone" data-pc-only hidden>
+              <h2 class="section-title">Phone</h2>
+              <fieldset class="group">
+                <legend>Use Kaiwa on your phone</legend>
+                <div id="phoneSetup" class="phone-setup settings-searchable" data-settings-search="phone iphone mobile tailscale qr"></div>
+              </fieldset>
+            </div>
+
             <div class="settings-section" data-settings-section="data" hidden>
               <h2 class="section-title">Data</h2>
               <fieldset class="group">
@@ -577,7 +601,7 @@
                   <div class="stack">
                     <span class="value">Your progress, and a learning log of your answers and mistakes (with their type), what you replay or peek at while listening, hints you use, and when you study. It's used to tailor practice to you. No audio is kept. Each profile has its own, stored on this PC only.</span>
                     <div class="controls">
-                      <button id="openDataFolder" class="secondary" type="button">Open the folder</button>
+                      <button id="openDataFolder" class="secondary" data-pc-only type="button">Open the folder</button>
                     </div>
                     <span class="status" id="openDataFolderStatus"></span>
                   </div>
@@ -613,6 +637,7 @@
   </div>
 
   <script src="/static/tips.js"></script>
+  <script src="/static/audio.js"></script>
   <script src="/static/mic.js"></script>
   <script>
     const talkBtn = document.getElementById("talk");
@@ -887,7 +912,7 @@
     });
 
     const PREFS_SAVE_SECTIONS = new Set(["chat", "speech", "ptt", "level"]);
-    const SETTINGS_SECTIONS = new Set(["general", "speech", "ptt", "chat", "level", "memory", "data"]);
+    const SETTINGS_SECTIONS = new Set(["general", "speech", "ptt", "chat", "level", "memory", "data", "phone"]);
     const SETTINGS_SECTION_MIGRATE = {
       profiles: "data",
       about: "general",
@@ -961,7 +986,7 @@
 
     function mountMicPicker(hostId) {
       const host = document.getElementById(hostId);
-      if (!host || !window.KaiwaMic || host.firstChild) return;
+      if (!host || !window.KaiwaMic || window.KaiwaMic.remote || host.firstChild) return;
       host.append(window.KaiwaMic.picker({ compact: hostId === "chatMicRow" }));
     }
 
@@ -1108,8 +1133,7 @@
 
     function playWavBase64(b64) {
       if (!b64) return;
-      const audio = new Audio("data:audio/wav;base64," + b64);
-      audio.play().catch(() => setStatus("Audio blocked. Click Replay."));
+      window.KaiwaAudio.play(b64, { onBlocked: () => setStatus("Audio blocked. Tap Replay.") });
     }
 
     function playWavBase64AndWait(b64) {
@@ -1118,7 +1142,6 @@
           resolve();
           return;
         }
-        const audio = new Audio("data:audio/wav;base64," + b64);
         let settled = false;
         const done = () => {
           if (settled) return;
@@ -1127,9 +1150,7 @@
           resolve();
         };
         const timer = setTimeout(done, 12000);
-        audio.addEventListener("ended", done, { once: true });
-        audio.addEventListener("error", done, { once: true });
-        audio.play().catch(done);
+        window.KaiwaAudio.play(b64).then(done);
       });
     }
 
@@ -1144,14 +1165,10 @@
       const next = audioPlayQueue.shift();
       if (!next) return;
       audioPlaying = true;
-      const audio = new Audio("data:audio/wav;base64," + next);
-      const done = () => {
+      window.KaiwaAudio.play(next).then(() => {
         audioPlaying = false;
         pumpAudioQueue();
-      };
-      audio.addEventListener("ended", done);
-      audio.addEventListener("error", done);
-      audio.play().catch(done);
+      });
     }
 
     function resetAudioQueue() {
@@ -1271,7 +1288,9 @@
       if (recordWantsStop) {
         micHandle.stop();
         micHandle = null;
-        setStatus("Released before the microphone opened. Hold until the button turns red.");
+        setStatus(window.KaiwaMic.takeJustGranted()
+          ? "Microphone's on. Now hold the button and speak."
+          : "Released before the microphone opened. Hold until the button turns red.");
         return;
       }
       recording = true;
@@ -1297,8 +1316,7 @@
         return;
       }
       if (res.silent) {
-        const mic = window.KaiwaMic.currentLabel() || "the selected microphone";
-        setStatus(`No sound from ${mic}. Pick another microphone below.`);
+        setStatus(window.KaiwaMic.noSoundMessage());
         return;
       }
       setStatus("Thinking…");
@@ -1307,31 +1325,16 @@
     }
 
     function bindHold(btn) {
-      btn.addEventListener("mousedown", (e) => {
+      const forThisMode = () => (mode === "chat" && btn === talkBtn) || (mode === "practice" && btn === practiceTalkBtn);
+      btn.addEventListener("pointerdown", (e) => {
         e.preventDefault();
-        if (mode === "chat" && btn !== talkBtn) return;
-        if (mode === "practice" && btn !== practiceTalkBtn) return;
+        btn.setPointerCapture?.(e.pointerId);
+        if (!forThisMode()) return;
         startRecording().catch((err) => setStatus(String(err.message || err)));
       });
-      btn.addEventListener("mouseup", () => {
-        if ((mode === "chat" && btn === talkBtn) || (mode === "practice" && btn === practiceTalkBtn)) {
-          stopRecording();
-        }
-      });
-      btn.addEventListener("mouseleave", () => {
-        if (recording && activeTalkBtn === btn) stopRecording();
-      });
-      btn.addEventListener("touchstart", (e) => {
-        e.preventDefault();
-        if ((mode === "chat" && btn !== talkBtn) || (mode === "practice" && btn !== practiceTalkBtn)) return;
-        startRecording().catch((err) => setStatus(String(err.message || err)));
-      }, { passive: false });
-      btn.addEventListener("touchend", (e) => {
-        e.preventDefault();
-        if ((mode === "chat" && btn === talkBtn) || (mode === "practice" && btn === practiceTalkBtn)) {
-          stopRecording();
-        }
-      });
+      btn.addEventListener("pointerup", () => { if (forThisMode()) stopRecording(); });
+      btn.addEventListener("pointercancel", () => { if (forThisMode()) stopRecording(); });
+      btn.addEventListener("contextmenu", (e) => e.preventDefault());
     }
     bindHold(talkBtn);
     // Hold Space to talk in Chat (not while typing or when a button has keyboard focus).
@@ -1678,8 +1681,9 @@
         throw new Error(msg);
       }
       if (!data.audio_base64) throw new Error("No audio returned");
-      const audio = new Audio("data:" + (data.audio_mime || "audio/wav") + ";base64," + data.audio_base64);
-      await audio.play();
+      await new Promise((resolve, reject) => {
+        window.KaiwaAudio.play(data.audio_base64, { mime: data.audio_mime || "audio/wav", onBlocked: reject }).then(resolve);
+      });
       clearEngineAlert();
       voiceStatusEl.textContent = "Preview ok";
     }
@@ -1879,7 +1883,7 @@
       const note = document.createElement("p");
       note.className = "chat-disclaimer";
       note.setAttribute("role", "note");
-      note.textContent = "Free conversation about anything. Hold Talk (or Space) and speak, or type below. New to speaking? Talk practice on the Learn tab gives you a goal and hints.";
+      note.textContent = "Free conversation about anything. Hold Talk and speak, or type below. New to speaking? Talk practice on the Learn tab gives you a goal and hints.";
       logEl.prepend(note);
     }
 
@@ -2701,7 +2705,7 @@
     }
 
     async function registerPttSession() {
-      if (!sessionId) return;
+      if (!sessionId || document.documentElement.dataset.remote === "1") return;
       try {
         await fetch("/api/ptt/register", {
           method: "POST",
@@ -3837,7 +3841,8 @@
 
     function setApiKeyGateVisible(show) {
       const gate = document.getElementById("apiKeyGate");
-      if (gate) gate.hidden = !show;
+      // The key lives on the PC, so it can only be entered there.
+      if (gate) gate.hidden = !show || document.documentElement.dataset.remote === "1";
     }
 
     function applySecretsStatus(data) {
@@ -4128,15 +4133,34 @@
       }
     })();
 
-    registerPttSession();
-    refreshPttHookStatus();
-    setInterval(() => {
-      pollPttEvents();
-    }, 2000);
-    setInterval(() => {
+    // Push-to-talk is the PC's; a phone shouldn't spend data polling for it.
+    if (document.documentElement.dataset.remote !== "1") {
+      registerPttSession();
       refreshPttHookStatus();
-    }, 4000);
+      setInterval(() => {
+        pollPttEvents();
+      }, 2000);
+      setInterval(() => {
+        refreshPttHookStatus();
+      }, 4000);
+    }
   </script>
+  <script src="/static/phone.js"></script>
   <script src="/static/course.js"></script>
+  <script>
+    // Phones only: the offline page, and a one-time nudge to install from Safari.
+    if (document.documentElement.dataset.remote === "1") {
+      if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
+      const iphone = /iP(hone|ad|od)/.test(navigator.userAgent);
+      let dismissed = false;
+      try { dismissed = localStorage.getItem("kaiwa_home_tip_done") === "1"; } catch (_) {}
+      const tip = document.getElementById("homeScreenTip");
+      tip.hidden = !iphone || navigator.standalone === true || dismissed;
+      document.getElementById("homeScreenTipClose").addEventListener("click", () => {
+        tip.hidden = true;
+        try { localStorage.setItem("kaiwa_home_tip_done", "1"); } catch (_) {}
+      });
+    }
+  </script>
 </body>
 </html>

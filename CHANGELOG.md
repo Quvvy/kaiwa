@@ -7,6 +7,20 @@ and this project aims to follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **Kaiwa on your iPhone (Linux PCs for now):** Settings → Phone sets up private access through Tailscale in a few steps, then Kaiwa opens from your home screen, wherever you are. Kaiwa keeps running in the background on the PC, and the phone explains what to check if it can't reach it.
+
+### Changed
+
+- Sound now plays through one shared player, and hold-to-talk behaves the same on touch screens in Chat and Learn.
+- Kaiwa's layout works at phone width.
+
+### Fixed
+
+- **Chat** no longer shows Japanese speech as another language ("Og gengirðu, ska?") when Whisper mishears a learner's accent.
+- **Chat** takes accented Japanese for English much less often ("You could eat on your screen" for ゆっくり). Very short answers like はい and いいえ can still be misheard.
+
 ## [2.0.3] — 2026-10-25
 
 ### Fixed

@@ -10,6 +10,9 @@ from kaiwa.desktop.instance import apply_portable_mode, claim_single_instance
 from kaiwa.desktop.lifecycle import Lifecycle
 from kaiwa.desktop.ptt import PttController
 from kaiwa.desktop.window import KAIWA_URL, error_html, friendly_boot_message, splash_html
+from kaiwa import phone_access
+
+SERVICE_WAIT_S = 120
 
 
 def _bootstrap_frozen_paths() -> None:
@@ -120,6 +123,10 @@ def main() -> None:
             lifecycle.stop_session()
         except Exception as exc:
             _log(f"stop_session error: {exc}")
+        try:
+            phone_access.after_window_closed()
+        except Exception as exc:
+            _log(f"phone service hand-over error: {exc}")
 
     def set_status(msg: str, pct: int | None = None) -> None:
         """Update splash text without evaluate_js (avoids Edge thread deadlocks)."""
@@ -161,9 +168,31 @@ def main() -> None:
         except Exception as e2:
             _log(f"load_html error page failed: {e2}")
 
+    def attach_to_service() -> None:
+        """With phone access on, the service owns the server: wait for it rather than
+        start a second one on the same port."""
+        if not (phone_access.is_enabled() and phone_access.service_supported()):
+            return
+        if lifecycle.session_healthy():
+            return
+        set_status("Starting Kaiwa…")
+        if not phone_access.start_service():
+            _log("couldn't start the phone service; starting Kaiwa directly")
+            return
+        deadline = time.monotonic() + SERVICE_WAIT_S
+        while time.monotonic() < deadline:
+            if lifecycle.session_healthy():
+                return
+            time.sleep(0.5)
+        raise RuntimeError(
+            "Kaiwa's background service didn't start. "
+            "Details: journalctl --user -u kaiwa-phone"
+        )
+
     def boot() -> None:
         _log("boot begin")
         try:
+            attach_to_service()
             if lifecycle.session_healthy():
                 _log("API already healthy → load UI")
                 set_status("Opening Kaiwa…")

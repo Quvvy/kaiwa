@@ -1,0 +1,14 @@
+{
+  "name": "Kaiwa",
+  "short_name": "Kaiwa",
+  "description": "Learn to understand and speak everyday Japanese.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#161a20",
+  "icons": [
+    { "src": "/static/icons/kaiwa-apple-touch.png", "sizes": "180x180", "type": "image/png" },
+    { "src": "/static/icons/kaiwa-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

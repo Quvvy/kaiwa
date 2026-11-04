@@ -52,6 +52,23 @@ def _webm(wav: Path) -> bytes:
     return out.getvalue()
 
 
+def _m4a(wav: Path) -> bytes:
+    """Re-encode a wav as fragmented mp4/aac, the format an iPhone's MediaRecorder uploads."""
+    out = io.BytesIO()
+    with av.open(str(wav)) as src, av.open(
+        out, "w", format="mp4", options={"movflags": "frag_keyframe+empty_moov"}
+    ) as dst:
+        stream = dst.add_stream("aac", rate=48000)
+        resampler = av.AudioResampler(format="fltp", layout="mono", rate=48000)
+        for frame in src.decode(audio=0):
+            for f in resampler.resample(frame):
+                for packet in stream.encode(f):
+                    dst.mux(packet)
+        for packet in stream.encode(None):
+            dst.mux(packet)
+    return out.getvalue()
+
+
 def main() -> None:
     wav = ROOT / "recordings" / "smoke_tts.wav"
     if not wav.is_file():
@@ -77,6 +94,10 @@ def main() -> None:
     phrase_id = next(iter(course_state._PHRASES))
     r = client.post("/api/course/check", files=files, data={"phrase_id": phrase_id})
     _check(r.status_code != 500, f"lesson say-it-back: {r.status_code} {r.text[:200]}")
+
+    iphone = {"audio": ("utterance.m4a", _m4a(wav), "audio/mp4")}
+    r = client.post("/api/course/check_text", files=iphone, data={"target": "あ"})
+    _check(r.status_code == 200 and r.json().get("heard"), f"iPhone m4a say-it: {r.status_code} {r.text[:200]}")
 
     print("smoke_audio_routes: all ok")
 

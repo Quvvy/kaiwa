@@ -35,6 +35,14 @@ python3 -m venv .venv
 - **Global push-to-talk** (pynput) only sees X11/XWayland input; on a Wayland session use the in-app button.
 - **Updates:** no in-app installer; `git pull`.
 
+### On your phone
+
+Kaiwa stays on your PC and your iPhone reaches it privately through [Tailscale](https://tailscale.com), from anywhere. Only your own devices can open it. Go to **Settings → Phone** and follow the steps; the page moves on by itself as each one finishes.
+
+- **While it's on:** a systemd user service (`kaiwa-phone`) keeps Kaiwa running with no window open, restarts it if it crashes, starts it at boot, and stops the PC idling to sleep. Choosing Sleep yourself still sleeps. Whisper stays loaded in GPU memory.
+- **Turn it off** in the same place. Logs: `journalctl --user -u kaiwa-phone`.
+- **After `git pull`:** `systemctl --user restart kaiwa-phone`, or the phone keeps the old version.
+
 ## Stack
 
 ```

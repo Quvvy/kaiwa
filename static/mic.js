@@ -12,6 +12,9 @@
   const PREF_LABEL = "kaiwa_mic_label";
   const IDLE_RELEASE_MS = 3 * 60 * 1000;
   const SILENCE_PEAK = 0.03;
+  const REMOTE = document.documentElement.dataset.remote === "1";
+  const IOS = /iP(hone|ad|od)/.test(navigator.userAgent)
+    || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 
   let stream = null;
   let opening = null;
@@ -19,6 +22,8 @@
   let analyser = null;
   let buf = null;
   let idleTimer = null;
+  let grantedThisPage = false;
+  let justGranted = false;
   const listeners = new Set();
 
   function read(key) {
@@ -75,12 +80,18 @@
           delete audio.deviceId;
           stream = await navigator.mediaDevices.getUserMedia({ audio });
         } else if (err && err.name === "NotAllowedError") {
-          throw new Error("Kaiwa isn't allowed to use the microphone. Allow it in Windows Settings → Privacy → Microphone.");
+          throw new Error(IOS
+            ? "Kaiwa isn't allowed to use the microphone. Allow it when asked, or in the iPhone's Settings → Apps → Safari → Microphone."
+            : "Kaiwa isn't allowed to use the microphone. Allow it in your system's privacy settings.");
         } else if (err && err.name === "NotFoundError") {
           throw new Error("No microphone found. Plug one in, then try again.");
         } else {
           throw new Error("Couldn't open the microphone: " + ((err && err.message) || err));
         }
+      }
+      if (!grantedThisPage) {
+        grantedThisPage = true;
+        justGranted = REMOTE;
       }
       try {
         ctx = ctx || new AudioContext();
@@ -110,6 +121,14 @@
     notify();
   }
 
+  /** The level meter needs a running AudioContext, which iPhones only allow from a tap. */
+  function wakeMeter() {
+    try {
+      ctx = ctx || new AudioContext();
+      if (ctx.state !== "running") ctx.resume().catch(() => {});
+    } catch (_) {}
+  }
+
   /** Current input level, 0–1. */
   function level() {
     if (!analyser) return 0;
@@ -130,11 +149,13 @@
     write(PREF_ID, id || "");
     write(PREF_LABEL, label || "");
     release();
-    fetch("/api/prefs/mic", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ label: label || "" }),
-    }).catch(() => {});
+    if (!REMOTE) {
+      fetch("/api/prefs/mic", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ label: label || "" }),
+      }).catch(() => {});
+    }
     await open();
   }
 
@@ -151,12 +172,14 @@
     let peak = 0;
     const started = performance.now();
     const meter = setInterval(() => { peak = Math.max(peak, level()); }, 50);
+    let meterRan = false;
     rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
     rec.start(200);
     return {
       stop() {
         clearInterval(meter);
         scheduleRelease();
+        meterRan = !!analyser && !!ctx && ctx.state === "running";
         return new Promise((resolve) => {
           rec.onstop = () => {
             const type = rec.mimeType || mime || "audio/webm";
@@ -165,8 +188,11 @@
               ext: type.includes("mp4") ? "m4a" : "webm",
               ms: performance.now() - started,
               peak,
-              silent: peak < SILENCE_PEAK,
+              // With no working meter, let Whisper decide rather than call it silent.
+              silent: meterRan && peak < SILENCE_PEAK,
             });
+            // An open mic turns iPhone playback down, so close it before the reply.
+            if (IOS) release();
           };
           if (rec.state === "recording") {
             rec.requestData();
@@ -239,6 +265,9 @@
   const select_ = select;
 
   navigator.mediaDevices?.addEventListener?.("devicechange", notify);
+  for (const name of ["pointerup", "touchend", "click"]) {
+    document.addEventListener(name, wakeMeter, true);
+  }
 
   window.KaiwaMic = {
     picker,
@@ -251,6 +280,18 @@
     selectedLabel: () => read(PREF_LABEL),
     currentLabel,
     isOpen: () => !!stream,
+    remote: REMOTE,
+    /** True once, after the phone's permission prompt interrupted the first hold. */
+    takeJustGranted() {
+      const was = justGranted;
+      justGranted = false;
+      return was;
+    },
+    /** What to say when a recording came back silent. */
+    noSoundMessage() {
+      if (REMOTE) return "No sound from the microphone. Check nothing is covering it, then try again.";
+      return `No sound from ${currentLabel() || "the selected microphone"}. Pick another microphone below.`;
+    },
     onChange: (cb) => { listeners.add(cb); return () => listeners.delete(cb); },
   };
 })();

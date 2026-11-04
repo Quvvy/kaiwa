@@ -4,6 +4,9 @@
 (() => {
   "use strict";
 
+  // A tap fires mouseover too, which would leave a tip stuck open on a phone.
+  if (!window.matchMedia("(hover: hover)").matches) return;
+
   const DELAY_MS = 400;
   const tip = document.createElement("div");
   tip.className = "tip-pop";

@@ -21,7 +21,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from kaiwa.config import ROOT, get_settings, reload_settings
-from kaiwa import __version__, llm, profiles, secrets_store, stt, tts, updates
+from kaiwa import __version__, llm, phone_access, profiles, secrets_store, stt, tts, updates
 from kaiwa import voices as voices_mod
 from kaiwa import prompt_stamp
 from kaiwa.persona import PERSONALITY_PRESETS, infer_learner_state, preset_public_list
@@ -117,6 +117,18 @@ async def _revalidate_pages(request: Request, call_next):
     if path == "/" or path.startswith("/static/"):
         response.headers["Cache-Control"] = "no-cache"
     return response
+
+
+@app.middleware("http")
+async def _phone_guard(request: Request, call_next):
+    """A phone can do lessons and Chat, not change anything about the PC itself."""
+    if phone_access.is_remote(request.headers.get("host"), request.headers.get("tailscale-user-login")):
+        if phone_access.refuses_remote(request.url.path, request.method):
+            return JSONResponse({"detail": "Only available on the PC."}, status_code=403)
+        phone_access.note_phone_request()
+    return await call_next(request)
+
+
 app.include_router(course_routes.router)
 
 # In-memory chat history keyed by browser session id.
@@ -394,12 +406,48 @@ def index() -> FileResponse:
     return FileResponse(static_dir / "index.html")
 
 
+@app.get("/sw.js")
+def service_worker() -> FileResponse:
+    # Served from the root so its scope covers the page, not just /static/.
+    return FileResponse(static_dir / "sw.js", media_type="text/javascript", headers={"Cache-Control": "no-cache"})
+
+
 @app.get("/favicon.ico")
 def favicon() -> FileResponse:
     ico = static_dir / "icons" / "kaiwa.ico"
     if ico.is_file():
         return FileResponse(ico, media_type="image/x-icon")
     return FileResponse(static_dir / "icons" / "kaiwa-text-only.png", media_type="image/png")
+
+
+@app.get("/api/phone/status")
+async def phone_status() -> dict[str, Any]:
+    return await asyncio.to_thread(phone_access.status)
+
+
+@app.post("/api/phone/enable")
+async def phone_enable() -> dict[str, Any]:
+    return await asyncio.to_thread(phone_access.enable)
+
+
+@app.post("/api/phone/disable")
+async def phone_disable() -> dict[str, Any]:
+    return await asyncio.to_thread(phone_access.disable)
+
+
+@app.get("/api/phone/qr/app")
+def phone_qr_app() -> Response:
+    """Scan to get the Tailscale app."""
+    return Response(phone_access.qr_svg(phone_access.IOS_APP_URL), media_type="image/svg+xml")
+
+
+@app.get("/api/phone/qr/kaiwa")
+def phone_qr_kaiwa() -> Response:
+    """Scan to open Kaiwa on the phone."""
+    url = phone_access.status().get("url")
+    if not url:
+        raise HTTPException(status_code=409, detail="Tailscale isn't signed in yet.")
+    return Response(phone_access.qr_svg(url), media_type="image/svg+xml")
 
 
 @app.post("/api/data/open_folder")
@@ -601,11 +649,13 @@ def put_mic(body: MicBody) -> dict[str, Any]:
 
 
 @app.put("/api/prefs")
-def put_prefs(body: PrefsUpdate) -> dict[str, Any]:
+def put_prefs(body: PrefsUpdate, request: Request) -> dict[str, Any]:
     try:
         prefs = validate_prefs_dict(body.model_dump())
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if phone_access.is_remote(request.headers.get("host"), request.headers.get("tailscale-user-login")):
+        prefs.mic_label = load_prefs().mic_label  # a phone's mic isn't the PC's push-to-talk mic
     prefs.voicevox_speaker_id = tts.resolve_speaker_id(
         settings,
         engine=prefs.tts_engine,

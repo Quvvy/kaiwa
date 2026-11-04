@@ -149,7 +149,7 @@
   }
   function stopAudio() {
     if (currentAudio) {
-      currentAudio.pause();
+      window.KaiwaAudio.stop();
       currentAudio = null;
     }
   }
@@ -163,13 +163,8 @@
       return;
     }
     setAudioProblem(null);
-    await new Promise((resolve) => {
-      const audio = new Audio("data:audio/wav;base64," + b64);
-      currentAudio = audio;
-      audio.addEventListener("ended", resolve, { once: true });
-      audio.addEventListener("error", resolve, { once: true });
-      audio.play().catch(resolve);
-    });
+    currentAudio = window.KaiwaAudio.play(b64);
+    await currentAudio;
   }
   function prefetch(items) {
     for (const [text, opts] of items) audioFor(text, opts).catch(() => {});
@@ -256,7 +251,9 @@
         // Let go before the mic was ready: nothing usable was recorded.
         handle.stop();
         resetLabel();
-        onProblem("Released before the microphone opened. Hold until the bar turns red.");
+        onProblem(window.KaiwaMic.takeJustGranted()
+          ? "Microphone's on. Now hold the button and speak."
+          : "Released before the microphone opened. Hold until the bar turns red.");
         return;
       }
       rec = handle;
@@ -278,8 +275,7 @@
       if (res.ms < 400) {
         onProblem("Too short. Hold the whole time you speak.");
       } else if (res.silent) {
-        const mic = window.KaiwaMic.currentLabel() || "the selected microphone";
-        onProblem(`No sound from ${mic}. Pick another microphone below.`);
+        onProblem(window.KaiwaMic.noSoundMessage());
       } else {
         onAudio(res.blob, res.ext);
       }
@@ -287,12 +283,13 @@
     btn.addEventListener("pointerdown", (e) => { e.preventDefault(); btn.setPointerCapture?.(e.pointerId); start(); });
     btn.addEventListener("pointerup", stop);
     btn.addEventListener("pointercancel", stop);
+    btn.addEventListener("contextmenu", (e) => e.preventDefault());
     btn.holdApi = { start, stop };
     return btn;
   }
 
   function micRow() {
-    return window.KaiwaMic.picker({ compact: true });
+    return window.KaiwaMic.remote ? el("span", {}) : window.KaiwaMic.picker({ compact: true });
   }
 
   function showProblem(result) {
@@ -1615,7 +1612,7 @@
       frame({
         title: "Placement: Repeat after me",
         body: el("div", { class: "card-body" },
-          el("p", { class: "lesson-note", text: "Last part: hear a phrase, then hold the bar (or Space) and say it back. It measures how much you can take in and reproduce." }),
+          el("p", { class: "lesson-note", text: "Last part: hear a phrase, then hold the bar and say it back. It measures how much you can take in and reproduce." }),
           micRow()),
         actions: [el("button", { type: "button", class: "secondary", onclick: results }, "Skip (no microphone)"),
           primaryButton("Start", () => skill("imitate"))],

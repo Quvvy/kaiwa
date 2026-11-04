@@ -940,7 +940,7 @@
 .ask-launcher {
   position: fixed;
   right: 16px;
-  bottom: 16px;
+  bottom: calc(16px + env(safe-area-inset-bottom));
   z-index: 20;
   min-height: 36px;
   padding: 0 14px;
@@ -1608,4 +1608,15 @@ body:not([data-mode="learn"]) .ask-dock {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+/* ---------- touch: every lesson button big enough for a thumb ---------- */
+@media (pointer: coarse) {
+  .home button,
+  .lesson button {
+    min-height: 44px;
+  }
+  .ask-launcher {
+    bottom: calc(84px + env(safe-area-inset-bottom));
+  }
 }

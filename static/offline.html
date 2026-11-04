@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Kaiwa</title>
+  <style>
+    :root { color-scheme: light dark; --bg: #fff; --fg: #16181b; --muted: #565a60; --accent: #2d4f8e; }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #1a1d21; --fg: #e8eaed; --muted: #a3a8af; --accent: #93acdf; }
+    }
+    html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--fg); font: 17px/1.45 -apple-system, system-ui, sans-serif; }
+    main { max-width: 26rem; margin: 0 auto; padding: calc(env(safe-area-inset-top) + 3rem) 1.5rem 2rem; }
+    h1 { font-size: 1.5rem; margin: 0 0 0.5rem; }
+    p { color: var(--muted); margin: 0 0 1rem; }
+    ul { padding-left: 1.25rem; margin: 0 0 1.5rem; }
+    li { margin-bottom: 0.6rem; }
+    button { font: inherit; font-weight: 600; min-height: 48px; width: 100%; border: 0; border-radius: 8px; background: var(--accent); color: var(--bg); }
+    #trying { font-size: 0.9rem; text-align: center; margin-top: 1rem; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Can't reach your PC</h1>
+    <p>Kaiwa runs on your PC, so it needs to be reachable. Your progress is safe. Check that:</p>
+    <ul>
+      <li>Your PC is on and not asleep.</li>
+      <li>Tailscale is connected on this phone. Open the Tailscale app to check.</li>
+      <li>This phone has internet.</li>
+    </ul>
+    <button type="button" onclick="location.reload()">Try again</button>
+    <p id="trying">Trying again by itself…</p>
+  </main>
+  <script>
+    setInterval(async () => {
+      try {
+        const res = await fetch("/api/health", { cache: "no-store" });
+        if (res.ok) location.reload();
+      } catch (_) {}
+    }, 5000);
+  </script>
+</body>
+</html>

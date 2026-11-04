@@ -22,6 +22,7 @@ hiddenimports = [
     "kaiwa.desktop.instance",
     "kaiwa.desktop.lifecycle",
     "kaiwa.desktop.services",
+    "kaiwa.phone_access",
     "kaiwa.prefs",
     "kaiwa.config",
     "clr",

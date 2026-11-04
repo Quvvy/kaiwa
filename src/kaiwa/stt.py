@@ -279,7 +279,12 @@ def _join_segments(segments) -> str:
     return "".join(kept).strip()
 
 
-_JP_SCRIPT_RE = re.compile(r"[\u3040-\u30ff\u3400-\u9fff]")
+# Chat's English check, tuned on a learner's own clips (scripts/smoke_chat_stt.py has the cases).
+CHAT_EN_MIN_PROB = 0.55
+CHAT_EN_SURE_PROB = 0.9
+CHAT_EN_CLEAR_CONFIDENCE = -0.4
+
+_JP_SCRIPT_RE = re.compile(r"[\u3040-\u30ff\u3400-\u9fff\uf900-\ufaff\uff66-\uff9f]")
 _IDENTITY_DUMP_RES = (
     re.compile(r"会話さん"),
     re.compile(r"会話"),
@@ -337,6 +342,25 @@ def _jp_script_count(text: str) -> int:
     return len(_JP_SCRIPT_RE.findall(text or ""))
 
 
+def _has_foreign_letters(text: str) -> bool:
+    """Any letter that isn't kana or kanji (Latin, Hangul, Cyrillic…)."""
+    return any(ch.isalpha() and not _JP_SCRIPT_RE.match(ch) for ch in text or "")
+
+
+_foreign_tokens: tuple[int, list[int]] | None = None
+
+
+def _foreign_token_ids(model: WhisperModel) -> list[int]:
+    """Every text token that spells a non-Japanese letter, for ``suppress_tokens``."""
+    global _foreign_tokens
+    if _foreign_tokens is None or _foreign_tokens[0] != id(model):
+        tokenizer = model.hf_tokenizer
+        end = tokenizer.token_to_id("<|endoftext|>")
+        ids = [i for i in range(end) if _has_foreign_letters(tokenizer.decode([i]))]
+        _foreign_tokens = (id(model), ids)
+    return _foreign_tokens[1]
+
+
 def transcribe_file(
     settings: Settings,
     path: str | Path,
@@ -361,43 +385,65 @@ def transcribe_file(
     return _join_segments(segments)
 
 
+def _chat_pass(model: WhisperModel, path: str | Path, **options: Any) -> tuple[str, float, Any]:
+    """One pass: (text, average confidence per token, Whisper's info)."""
+    segments, info = _transcribe(model, path, {"vad_filter": True, "beam_size": 1, **options})
+    segments = list(segments)
+    tokens = sum(len(seg.tokens) for seg in segments)
+    confidence = sum(seg.avg_logprob * len(seg.tokens) for seg in segments) / tokens if tokens else -9.0
+    return _join_segments(segments), confidence, info
+
+
 def transcribe_chat_file(
     settings: Settings,
     path: str | Path,
 ) -> tuple[str, dict[str, Any]]:
-    """Chat STT: keep clear English; accept first-pass JP when confident or script-rich.
+    """Chat STT: keep real English, and don't take a learner's Japanese for it.
 
-    Forced ``language=ja`` alone would "translate" English speech into Japanese.
-    Auto-detect first. Second pass only when the first pass is empty, not clear EN,
-    and lacks Japanese script (decision #103). No identity ``initial_prompt`` /
-    ``hotwords`` (#125 / #135).
+    Forced ``language=ja`` alone would "translate" English speech into Japanese, so
+    auto-detect first. But Whisper is often sure that accented Japanese is English
+    ("You could eat on your screen" for ゆっくり), so a less than clear English pass is
+    checked against a Japanese one. Tuned on the learner's own clips (decision #103).
+    No identity ``initial_prompt`` / ``hotwords`` (#125 / #135).
     """
     model = get_model(settings)
-    kwargs: dict[str, Any] = {
-        "vad_filter": True,
-        "beam_size": 1,
-    }
-    segments, info = _transcribe(model, path, kwargs)
-    auto_text = _join_segments(segments)
+    auto_text, auto_confidence, info = _chat_pass(model, path)
     detected = (getattr(info, "language", None) or "").lower()
     prob = float(getattr(info, "language_probability", 0.0) or 0.0)
     base_meta: dict[str, Any] = {
         "detected": detected or "",
         "prob": round(prob, 3),
     }
+    likely_english = detected == "en" and prob >= CHAT_EN_MIN_PROB and bool(auto_text)
 
-    if detected == "en" and prob >= 0.55 and auto_text:
+    if likely_english and auto_confidence >= CHAT_EN_CLEAR_CONFIDENCE:
         return auto_text, {**base_meta, "passes": 1, "accepted": "en"}
 
     if detected == "ja" and auto_text and prob >= 0.55:
         return auto_text, {**base_meta, "passes": 1, "accepted": "ja"}
 
     # Whisper often mis-tags learner JP as zh/ko/etc.; keep if script is clearly JP.
-    if auto_text and _jp_script_count(auto_text) >= 2:
+    # Mixed with another alphabet ("Mmm, genkigです") it heard the wrong language.
+    if auto_text and _jp_script_count(auto_text) >= 2 and not _has_foreign_letters(auto_text):
         return auto_text, {**base_meta, "passes": 1, "accepted": "jp_script"}
 
-    forced = transcribe_file(settings, path, language="ja")
-    return forced, {**base_meta, "passes": 2, "accepted": "forced_ja"}
+    forced, forced_confidence, _info = _chat_pass(model, path, language="ja")
+    if not _has_foreign_letters(forced):
+        # Very sure it's English and still the better fit: "Thanks" as "デイ" isn't Japanese.
+        if likely_english and prob >= CHAT_EN_SURE_PROB and auto_confidence > forced_confidence:
+            return auto_text, {**base_meta, "passes": 2, "accepted": "en"}
+        return forced, {**base_meta, "passes": 2, "accepted": "forced_ja"}
+
+    # Told to write Japanese and it still wrote "I don't know": that really was English.
+    if likely_english:
+        return auto_text, {**base_meta, "passes": 2, "accepted": "en"}
+
+    # language="ja" is only a hint: it can still spell out "Og gengirðu, ska?". Rule the
+    # other alphabets out, only now because a list this long adds ~0.5 s to a pass.
+    only_japanese, _confidence, _info = _chat_pass(
+        model, path, language="ja", suppress_tokens=[-1, *_foreign_token_ids(model)]
+    )
+    return only_japanese, {**base_meta, "passes": 3, "accepted": "forced_ja"}
 
 
 def transcribe_audio_bytes(

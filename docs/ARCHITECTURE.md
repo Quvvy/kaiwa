@@ -221,6 +221,14 @@ User data stays under `%LocalAppData%\Kaiwa\`. **Hardware:** `WHISPER_DEVICE=aut
 
 **Updates (6.9):** UI calls `/api/updates/check` (GitHub Releases latest; 24h AppData cache). When newer, a banner + Settings → About offer **Update now**, which downloads `KaiwaSetup-*.exe` to `%LocalAppData%\Kaiwa\downloads\updates\` and launches it (`os.startfile`). Desktop log: `%LocalAppData%\Kaiwa\Kaiwa.desktop.log`.
 
+## Phone access (`phone_access.py`, `desktop/background.py`)
+
+Kaiwa stays on `127.0.0.1`; `tailscale serve --bg 8787` gives it a private HTTPS address on the learner's tailnet. Never Funnel: the API has no login. Requests carrying `Tailscale-User-Login` or a non-localhost `Host` count as remote and are refused on routes that act on the PC (`/api/phone/*`, PTT writes, updates, API key, open folder). The page sets `data-remote` from its hostname and hides `[data-pc-only]`.
+
+**Who owns the server (Linux):** with phone access on, the `kaiwa-phone` systemd user service runs it and a window attaches through the existing "API already healthy" path, so closing the window leaves it running. Enabling while a window is open keeps that window's server until it closes, then `on_closed` starts the service. Disabling removes `tailscale serve` at once and stops the service when the window closes. Windows has no service yet, so phone access there only works while Kaiwa is open.
+
+**Phone page:** `static/sw.js` is network-only and exists to show `offline.html` when a page load fails or returns a 502/503/504. `static/audio.js` is one reused audio element, because iOS only lets audio start from a tap; it is unlocked on the first tap. `mic.js` releases the mic after each recording on iOS, since an open mic lowers playback volume.
+
 ## Out of scope (v0)
 
 - Pronunciation dictionary / absolute pitch-accent grading (NHK / MARINE H–L)
