@@ -278,3 +278,5 @@ My first labels (~12/~17/~25) came from averages that included quiet weeks after
 **H50. New learners pick a pace and a time up front.** ✅ `[H50]`
 The first home screen asks how much time you want to give this, with honest minutes and months, and when you'll study. After that, both move under Options. *Why:* a choice you made yourself is easier to stick to, and the pace is a promise worth seeing before you start. Also fixes Start's time estimate on day one.
 
+*Later fix to H49:* the first-day allowance vanished once the kana lesson finished, so day one stopped before any phrases. A full first-day walkthrough caught it, and a test now covers it.
+

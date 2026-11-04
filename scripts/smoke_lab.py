@@ -98,6 +98,10 @@ def pacing_plans() -> None:
         _check(again["plan"] == ["recap"], "after today's lessons only the recap is left")
         cs.complete_step("u1", "learn", path=path)
         _check(abs(cs.load_state(path)["daily"][cs._today().isoformat()]["lesson_min"] - cs.load_state(path)["daily"][cs._today().isoformat()]["lesson_min"]) == 0 and cs.plan_today(cs.load_state(path))["plan"] == ["recap"], "redoing a step spends nothing new")
+    with tempfile.TemporaryDirectory() as d:
+        path = Path(d) / "s.json"
+        cs.complete_kana("h1", path=path)
+        _check("learn" in cs.plan_today(cs.load_state(path))["plan"], "the first day still reaches real phrases after its kana lesson")
     low = cs._empty()
     low["log"] = [{"d": cs._today().isoformat(), "ok": i % 2 == 0} for i in range(40)]
     _check(cs.recall_slipping(low) == 50, "recall below the line is reported")

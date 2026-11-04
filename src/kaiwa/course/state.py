@@ -838,7 +838,7 @@ def plan_today(state: dict[str, Any]) -> dict[str, Any]:
     minutes_left = pace["lesson_minutes"] * share - spent
     new_left = pace["new_items"] * share - int(day.get("new") or 0)
     started = spent > 0
-    if not state["days"]:
+    if set(state["days"]) <= {iso}:
         minutes_left += FIRST_DAY_EXTRA  # the very first day gets a real phrase, not only five vowels
     minutes_budget = minutes_left
     row = state["units"].get(unit["id"], {}) if unit else {}
