@@ -496,6 +496,16 @@ def mine_remove(phrase_id: str) -> dict[str, Any]:
     return {"ok": True}
 
 
+@router.post("/recall")
+async def free_recall(audio: UploadFile | None = File(default=None), text: str = Form(default="")) -> dict[str, Any]:
+    """End-of-day free recall: say whatever you remember from today; which phrases came through?"""
+    heard = await _transcribe(audio) if audio is not None else text.strip()[:1000]
+    st = await asyncio.to_thread(state.load_state)
+    result = state.recall_matches(st, heard)
+    learner_log.log("recall", heard=heard, recalled=[p["jp"] for p in result["recalled"]], missed=[p["jp"] for p in result["missed"]])
+    return {"heard": heard, **result}
+
+
 @router.get("/packs")
 def word_packs() -> dict[str, Any]:
     return {"packs": state.packs_overview()}

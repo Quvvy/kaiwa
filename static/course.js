@@ -775,7 +775,7 @@
               el("p", { class: "home-goal", text: unit.goal }))
           : el("div", { class: "home-unit" },
               el("h1", { class: "home-title", text: `You've finished all ${s.units_total} units` }),
-              el("p", { class: "home-goal", text: "Reviews continue daily. Use Extra listening and Chat for more practice." })),
+              el("p", { class: "home-goal", text: "That's real: you can greet, order, shop, plan a day and hold a short conversation in Japanese. What keeps it now is using it. Reviews continue daily, and Chat, missions and the word packs are all yours." })),
         unit && unit.reopenedNote ? el("p", { class: "home-note", text: unit.reopenedNote }) : null,
         unit && ["u8", "u11"].includes(unit.id) && !(today.words_pool || []).some((w) => w.jp === "きゅう")
           ? el("p", { class: "home-note" }, "This unit leans on numbers. If they're shaky, there's a 3-minute Numbers pack in the ",
@@ -882,6 +882,45 @@
     writePref("kaiwa_seen_milestones", ["-", ...list.map((m) => m.id)].join(","));
   }
 
+  /**
+   * Free recall: before leaving, say everything you remember from today's phrases, no
+   * prompts. It's about the most effective cheap thing a learner can do (Karpicke &
+   * Blunt 2011), and nothing else in the day asks you to pull them out unprompted.
+   */
+  function recallBox() {
+    const list = today.phrases_today || [];
+    const dayKey = String((today.stats.week || []).find((w) => w.today)?.d);
+    if (list.length < 3 || readPref("kaiwa_recall_day", "") === dayKey) return null;
+    const result = el("div", { class: "result", "aria-live": "polite" });
+    const show = (r) => {
+      writePref("kaiwa_recall_day", dayKey);
+      const total = r.recalled.length + r.missed.length;
+      result.replaceChildren(
+        el("p", { class: "verdict " + (r.recalled.length >= total / 2 ? "good" : "close"), text: `${r.recalled.length} of ${total} from memory.` }),
+        r.missed.length ? el("div", { class: "recall-missed" },
+          el("p", { class: "status", text: "These got away. They'll be back:" }),
+          r.missed.map((p) => el("p", { class: "ask-example" },
+            el("button", { class: "secondary line-play", type: "button", "aria-label": "Play", onclick: () => play(p.jp) }, "▶"),
+            el("span", { lang: "ja", text: p.jp }), el("span", { class: "ask-example-en", text: p.en })))) : "");
+      box.hidden = true;
+    };
+    const send = async (form) => {
+      result.replaceChildren(el("p", { class: "pending", text: "Listening back…" }));
+      try { show(await api("/api/course/recall", { method: "POST", body: form })); }
+      catch (err) { result.replaceChildren(el("p", { class: "verdict off", text: String(err.message || err) })); }
+    };
+    const box = produceBox({
+      placeholder: "Or type what you remember",
+      onTyped: ({ kana }) => { const f = new FormData(); f.append("text", kana); send(f); box.reopen(); },
+      onAudio: (blob, ext) => send(audioForm(blob, ext, {})),
+      onProblem: showProblem(result),
+    });
+    return el("div", { class: "recall" },
+      el("p", { class: "can-do-label", text: `One last thing: today you met ${list.length} new phrases.` }),
+      el("p", { class: "lesson-note", text: "Without looking, say every one you can remember. It's fine if it's only one or two: trying is what does it." }),
+      box, result);
+  }
+
   /** The end of the day's plan: what you did, what you can now do, and an easy next thing. */
   async function showDayDone() {
     try { await refresh(); } catch (_) { return showHome(); }
@@ -899,6 +938,7 @@
         (d.units_finished || []).map((u) => el("div", { class: "can-do" },
           el("p", { class: "can-do-label", text: `Unit ${u.number} done. You can now:` }), el("p", { class: "can-do-text", text: u.goal }))),
         figures.length ? el("div", { class: "stats-figures" }, figures) : null,
+        recallBox(),
         el("p", { class: "prompt", text: d.due_tomorrow
           ? `Tomorrow: ${d.due_tomorrow} review${d.due_tomorrow === 1 ? "" : "s"} waiting, then the next lesson. Sleep is part of this: what you did today sets overnight.`
           : "Sleep is part of this: what you did today sets overnight." }),
@@ -908,6 +948,8 @@
         primaryButton("Done", showHome)],
       primary: showHome,
     });
+    const holdBtn = root.querySelector(".recall .hold");
+    if (holdBtn) keys.hold = holdBtn.holdApi;
     markMilestonesSeen();
     askContext = null;
     askPanel.refresh();
@@ -2428,6 +2470,10 @@
     const shadowBtn = el("button", { type: "button", class: "secondary", hidden: true,
       "data-tip": "Repeat each line right after hearing it. Good for rhythm and for catching words at speed.",
       onclick: () => runShadow(d.lines, voice, finishListen) }, "Say it with them");
+    const speakers = [...new Set(d.lines.map(who))];
+    const roleBtn = speakers.length >= 2 ? el("button", { type: "button", class: "secondary", hidden: true,
+      "data-tip": "Now you're one of them: the other person speaks, you say your lines from their meaning. Your real answers don't need to be word for word.",
+      onclick: () => runRole(d.lines, who, voice, finishListen) }, "Take a part") : null;
     const byEar = el("p", { class: "by-ear", hidden: true, text: "Caught by ear." });
     const questionsBox = el("div", { class: "questions", hidden: true },
       el("h3", { class: "questions-title", text: "Did you catch it?" }),
@@ -2450,6 +2496,7 @@
               if (answered.size === qs.length) {
                 doneBtn.disabled = false;
                 shadowBtn.hidden = false;
+                if (roleBtn) roleBtn.hidden = false;
                 keys.primary = finishListen;
                 byEar.hidden = peeked || [...answered.values()].some((v) => !v);
               }
@@ -2470,10 +2517,83 @@
         thread,
         questionsBox,
       ),
-      actions: [shadowBtn, doneBtn],
+      actions: [roleBtn, shadowBtn, doneBtn].filter(Boolean),
     });
     keys.replay = playAll;
     if (autoplay) playAll();
+  }
+
+  /**
+   * Take one speaker's part: the other voice speaks, and you say your line from its
+   * meaning. The step between repeating and a free conversation: real timing and a real
+   * partner, with the words still known. No LLM, so it always works.
+   */
+  function runRole(lines, who, voice, onDone) {
+    const mine = who(lines[0]) === "a" && lines.filter((l) => who(l) === "a").length >= 2 ? "a" : who(lines[lines.length - 1]);
+    const lineFor = lines.filter((l) => who(l) === mine);
+    let i = 0;
+    let at = 0;
+    track("shadow", { role: mine, lines: lineFor.length });
+    const shown = [];
+    async function step() {
+      if (at >= lines.length) return end();
+      const line = lines[at];
+      if (who(line) !== mine) {
+        shown.push(line);
+        draw(null);
+        const here = onThisScreen();
+        await play(line.jp, voice(line));
+        await wait(250);
+        if (!here()) return undefined;
+        at += 1;
+        return step();
+      }
+      return draw(line);
+    }
+    function draw(line) {
+      const result = el("div", { class: "result", "aria-live": "polite" });
+      const answer = el("p", { class: "phrase-jp", lang: "ja", hidden: true, text: line ? line.jp : "" });
+      const onward = () => { shown.push(line); at += 1; i += 1; step(); };
+      const nextBtn = primaryButton("Next", onward);
+      nextBtn.hidden = true;
+      const reveal = () => {
+        answer.hidden = false;
+        nextBtn.hidden = false;
+        keys.primary = onward;
+        play(line.jp, voice(line));
+      };
+      const hold = line ? holdControl("Hold and say your line", async (blob, ext) => {
+        result.replaceChildren(el("p", { class: "pending", text: "Checking…" }));
+        try {
+          const r = await api("/api/course/check_text", { method: "POST", body: audioForm(blob, ext, { target: line.jp.slice(0, 80) }) });
+          result.replaceChildren(...[verdictLine(r.band), heardLine("Sounded like ", r.heard), diffLine(r.diff)].filter(Boolean));
+          reveal();
+        } catch (err) {
+          result.replaceChildren(el("p", { class: "verdict off", text: String(err.message || err) }));
+        }
+      }, showProblem(result)) : null;
+      const past = el("div", { class: "role-log" }, shown.map((l) => el("p", { class: who(l) === mine ? "role-mine" : "role-other", lang: "ja", text: l.jp })));
+      frame({
+        title: "Your part", index: i, total: lineFor.length,
+        ask: line ? { screen: "role play", jp: line.jp, en: line.en } : { screen: "role play" },
+        body: el("div", { class: "card-body" }, past,
+          line ? [el("p", { class: "prompt", text: "Your turn. Say:" }), el("p", { class: "prompt-en", text: line.en }), answer, hold, micRow(), result] : el("p", { class: "status", text: "Listen…" })),
+        actions: line
+          ? [el("button", { type: "button", class: "secondary", onclick: reveal }, "Show me"), nextBtn]
+          : [],
+        hold,
+      });
+    }
+    function end() {
+      frame({
+        title: "Your part",
+        body: el("div", { class: "card-body" }, el("h3", { class: "end-title", text: "You held up your side." }),
+          el("p", { class: "prompt", text: "That's what a real exchange feels like. Doing it again from memory is worth it." })),
+        actions: [el("button", { type: "button", class: "secondary", onclick: () => runRole(lines, who, voice, onDone) }, "Again"), primaryButton("Continue", onDone)],
+        primary: onDone,
+      });
+    }
+    step();
   }
 
   /** Shadowing: hear a line, say it straight back, see which sounds didn't come through. */
@@ -3235,6 +3355,7 @@
         el("div", { class: "can-do" },
           el("p", { class: "can-do-label", text: "You can now:" }),
           el("p", { class: "can-do-text", text: unit.goal })),
+        unit.culture ? el("p", { class: "culture-note" }, el("strong", { text: "Did you know? " }), unit.culture) : null,
         canMission ? el("p", { class: "prompt", text: "Want to try it for real? A short scene where you need exactly this, with a partner who reacts to what you say." }) : null),
       actions: [
         canMission ? el("button", { type: "button", class: "secondary", onclick: back }, "Not now") : null,

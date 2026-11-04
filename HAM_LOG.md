@@ -208,3 +208,17 @@ When a talk or mission ends, "Worth keeping from this talk" lists every correcte
 **H44. A missed build shows the rule.** ✅ `[H41-H44]`
 Getting a sentence wrong in grammar review now shows that point's one-line rule.
 
+**H45. Free recall at the end of the day.** ✅ 🎤 `[H45-H48]`
+On a day you met new phrases, the end-of-day screen offers: "Without looking, say every one you can remember." Speak or type. It tells you how many came through and plays back what got away. Matching ignores order and politeness endings and tolerates recognition slips. Offered once a day.
+*Why:* unprompted recall is one of the most effective cheap study moves there is (Karpicke & Blunt 2011), and nothing else in the day asks for it.
+
+**H46. Take a part.** ✅ 🎤 `[H45-H48]`
+After a conversation's questions: the other voice speaks its lines, and you say yours from their meaning. No LLM, so it always works.
+*Why:* this is the missing rung between repeating (shadowing) and a free exchange (talk practice): real turn-taking, with the words still known.
+
+**H47. A small true thing about Japan per unit.** ✅ 🧪 `[H45-H48]`
+The unit-done screen includes one "Did you know?" tied to the unit, such as why あしたは、ちょっと… is a complete polite no, or that your mother has two names depending on who's talking. Please read these (`CULTURE` in `missions.py`); I'm confident in them, but they're yours to approve.
+
+**H48. A better finish line.** ✅ `[H45-H48]`
+Finishing all 20 units now tells you what you can really do and what keeps it alive, not just "reviews continue".
+

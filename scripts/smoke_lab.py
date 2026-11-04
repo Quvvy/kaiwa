@@ -276,6 +276,24 @@ def word_packs() -> None:
         _check("いち" in cs.known_vocab(path=path)[0], "Chat and stories can use them")
 
 
+def free_recall_and_culture() -> None:
+    from kaiwa.course import missions
+    from kaiwa.course.units import UNITS
+    _check(set(missions.CULTURE) == {u["id"] for u in UNITS}, "every unit has a culture note")
+    st = cs._empty()
+    st["units"]["u1"] = {"learn": True, "learn_on": cs._today().isoformat()}
+    _check(len(cs.todays_phrases(st)) == 6, "today's phrases are known")
+    r = cs.recall_matches(st, "おはようございます ありがとうございます")
+    got = {p["jp"] for p in r["recalled"]}
+    _check("おはようございます。" in got and "ありがとうございます。" in got and len(r["missed"]) == 4, "two phrases said, two recalled")
+    r = cs.recall_matches(st, "おはよう、すみません、じゃあまた")
+    got = {p["jp"] for p in r["recalled"]}
+    _check({"おはようございます。", "すみません。", "じゃあ、また。"} <= got, "casual forms and run-together speech still count")
+    _check(cs.recall_matches(st, "パンをたべます")["recalled"] == [], "unrelated speech recalls nothing")
+    st2 = {**cs._empty(), "units": {"u1": {"learn": True, "learn_on": "2020-01-01"}}}
+    _check(cs.todays_phrases(st2) == [], "older lessons aren't today's")
+
+
 def recap_mix() -> None:
     st = cs._empty()
     for ch in "あいうえお":
@@ -338,6 +356,7 @@ def slips_and_counts() -> None:
 
 
 def main() -> None:
+    free_recall_and_culture()
     recap_mix()
     word_packs()
     fixes()

@@ -7,6 +7,36 @@ and this project aims to follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+Study lab branch: see `HAM_LOG.md` for each change and why.
+
+### Added
+
+- **Grammar reviews:** grammar points come back on a schedule, as sentences you put together from tiles.
+- **Missions:** a real little scene at the end of each unit.
+- **Course map and phrasebook:** every unit and everything you've learned, searchable with audio.
+- **My phrases:** ask how to say something about your own life, and keep it as cards. Corrections from talks and alternatives from Chat can be kept too.
+- **Word packs:** optional sets of everyday words the units don't reach, including the numbers 1 to 10.
+- **Fluency drills:** Speed round, Numbers by ear, Hands-free.
+- **Listening:** a Slower button, Say it with them, Take a part, and an ongoing cast in Extra listening.
+- **Free recall** and a summary at the end of the day.
+- **Daily pace** (Relaxed, Regular, Intensive), a two-minute option for busy days, and a calendar file for your study time.
+- **What trips you up lately** on the stats page.
+
+### Changed
+
+- Words are taught five at a time with a test after each batch; new phrases end with a quick check.
+- Reviews aim for 87% recall instead of 90%, and new material slows down if recall drops below 80%.
+- Word cards are by ear after first exposure, known words alternate saying and understanding, and reviews rotate voices.
+- A streak survives a missed day once you've earned a rest day, and study days end at 4 a.m.
+- Kana get a picture for every character, and drills offer the kana that really get confused.
+- The home screen puts Start first, says how long today takes, and tucks away options.
+
+### Fixed
+
+- Leaving a lesson no longer loses your place, and a failed save offers to retry.
+- Say-it cards can be typed, so no microphone no longer means failing them.
+- Keys from a lesson you left no longer fire on the home screen.
+
 ## [2.1.0] — 2026-11-04
 
 ### Added

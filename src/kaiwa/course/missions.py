@@ -99,3 +99,29 @@ MISSIONS: dict[str, dict[str, str]] = {
 def mission_for(unit_id: str) -> dict[str, Any] | None:
     m = MISSIONS.get(unit_id)
     return {**m, "turns": 4, "mission": unit_id} if m else None
+
+
+# One small true thing about Japan per unit, shown when the unit is finished. Real
+# people using the language is why most learners started; it's worth a line.
+CULTURE: dict[str, str] = {
+    "u1": "いただきます literally means something close to \"I humbly receive\". Saying it before a meal is a small thank-you, and most people in Japan do it even when eating alone.",
+    "u2": "In Japan you usually give your family name first, and people call each other by family name plus さん until invited not to. Never add さん to your own name.",
+    "u3": "Japanese people often assume foreigners can't speak any Japanese, so even a slow もういちど、おねがいします tends to get a delighted reaction.",
+    "u4": "すき is softer than the English \"love\" or \"like\": 「すきです」 said to a person is a real confession, so it's safest used about things until you know what you mean.",
+    "u5": "Tipping isn't done in Japan and can cause confusion. In many small restaurants you pay at the register on your way out, not at the table.",
+    "u6": "Breakfast at home can still be rice, miso soup and fish, though toast and coffee are just as common now. Convenience stores sell a good breakfast too.",
+    "u7": "Most streets in Japan have no names. Addresses work by district and block, so people give directions by landmarks: the station, a convenience store, a bank.",
+    "u8": "Japanese trains are famous for running on time, and a delay of even a few minutes can come with an apology. Being on time to meet someone matters just as much.",
+    "u9": "Praise often gets brushed off in Japan. Say someone's Japanese is good and you'll probably hear いえいえ (no, no). It's politeness, not disagreement.",
+    "u10": "A common way to start the week with colleagues is asking about the weekend, and bringing small gifts of local sweets back from a trip is close to a rule.",
+    "u11": "Prices in Japan often show with and without tax. Many shops still prefer you put money in the small tray at the register rather than hand it over directly.",
+    "u12": "Your own family gets humble words (はは, ちち) and someone else's gets respectful ones (おかあさん, おとうさん). The same person has two names depending on who's talking.",
+    "u13": "〜たいです is fine for what you want, but asking a superior what they want with it sounds too direct. Japanese tends to ask around the question instead.",
+    "u14": "Even the please-form 〜てください can sound like an instruction. Between friends you'll usually hear softer forms, and from staff, more formal ones.",
+    "u15": "Almost nobody says a flat いいえ to an invitation. あしたは、ちょっと… (\"tomorrow is a bit…\") is a complete, polite no, and the other person is expected to understand.",
+    "u16": "Many homes in Japan still have a genkan, a small entry area where you take off your shoes. Slippers go on inside, and come off again for tatami.",
+    "u17": "Long commutes are normal in big cities, and many people use the time to read or study. You might be surrounded by people doing what you're doing right now.",
+    "u18": "Taxis in Japan often have doors that open by themselves, so don't reach for the handle. On escalators people stand on one side: the left in Tokyo, the right in Osaka.",
+    "u19": "Weather is the classic way to start talking to a stranger in Japan, as it is in many places. Rainy season (つゆ) runs roughly June to mid-July across most of the country.",
+    "u20": "When you make plans with friends, it's common to confirm once more the day before. And meeting at a well-known spot outside a station is such a habit that some have become famous meeting points.",
+}

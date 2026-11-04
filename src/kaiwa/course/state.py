@@ -26,7 +26,7 @@ from kaiwa import jsonio
 from kaiwa.course import build, drills, grader, my_phrases, srs
 from kaiwa.course.kana import KANA_LESSONS, KANA_ROMAJI, LESSON_BY_ID, lesson_chars
 from kaiwa.course.kana_hooks import alike, hook_for
-from kaiwa.course.missions import MISSIONS
+from kaiwa.course.missions import CULTURE, MISSIONS
 from kaiwa.course.packs import PACK_BY_ID, PACKS
 from kaiwa.course.units import ROMAJI, UNITS
 
@@ -227,6 +227,7 @@ def public_unit(unit: dict[str, Any]) -> dict[str, Any]:
         # Questions from the units before, mixed into this unit's drill.
         "earlier_drill": [q for u in UNITS[max(0, index - 3):index] for q in u.get("drill", [])],
         "steps": unit_steps(unit),
+        "culture": CULTURE.get(unit["id"], ""),
         "number": index + 1,
         "phrases": [phrase(p["id"]) for p in unit["phrases"]],
     }
@@ -1202,6 +1203,7 @@ def today_payload(*, path: Path | None = None) -> dict[str, Any]:
         "placement": state.get("placement"),
         "placement_checks": placement_checks(state),
         "unit_titles": [u["title"] for u in UNITS],
+        "phrases_today": todays_phrases(state),
         "away": days_away(state) if today not in state["days"] else 0,
         "drills": drills.available(state["units"]),
         "bests": state["bests"],
@@ -1674,6 +1676,40 @@ def slip_summary(rows: list[dict[str, Any]], *, path: Path | None = None) -> lis
         example = next((d for d in reversed(details) if d), "")
         out.append({"type": kind, "label": SLIP_LABELS[kind], "count": len(details), "example": example, "cards": cards})
     return out
+
+
+def todays_phrases(state: dict[str, Any]) -> list[dict[str, str]]:
+    """Phrases taught today (a unit's day one, plus any kept today)."""
+    today = _today().isoformat()
+    out = []
+    for unit in UNITS:
+        row = state["units"].get(unit["id"], {})
+        if row.get("learn_on") == today and not row.get("placed"):
+            out.extend({"id": p["id"], "jp": p["jp"], "en": p["en"]} for p in unit["phrases"])
+    return out
+
+
+def recall_matches(state: dict[str, Any], heard: str) -> dict[str, Any]:
+    """Which of today's phrases showed up in a free-recall attempt.
+
+    Matched on sounds, ignoring order: Whisper writes kanji and runs phrases together,
+    and any part of the transcript may hold any phrase. Polite endings are optional.
+    """
+    from kaiwa.course.speech_check import check_phrase, normalize, similarity
+
+    said = normalize(heard)
+    recalled, missed = [], []
+    for p in todays_phrases(state):
+        full = phrase(p["id"]) or p
+        target = normalize(p["jp"])
+        variants = [target] + [normalize(a) for a in full.get("accept") or [] if "*" not in a]
+        hit = any(v and v in said for v in variants) or check_phrase(p["jp"], heard, full.get("accept")).band == "good"
+        if not hit and len(target) >= 4:
+            # Close enough in a stretch of the transcript counts too (speech recognition slips).
+            n = len(target)
+            hit = any(similarity(target, said[i:i + n]) >= 75 for i in range(0, max(1, len(said) - n + 1)))
+        (recalled if hit else missed).append({"jp": p["jp"], "en": p["en"]})
+    return {"recalled": recalled, "missed": missed}
 
 
 def packs_overview(*, path: Path | None = None) -> list[dict[str, Any]]:

@@ -2191,3 +2191,38 @@ button.secondary.pressed {
   padding: 0;
   text-decoration: underline;
 }
+
+.culture-note {
+  color: var(--ink-2);
+  font-size: 14.5px;
+  line-height: 1.55;
+  margin: 12px 0;
+}
+
+.recall {
+  border-bottom: 1px solid var(--line);
+  border-top: 1px solid var(--line);
+  margin: 12px 0;
+  padding: 12px 0;
+}
+
+.recall .ask-example {
+  margin-top: 4px;
+}
+
+.role-log {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.role-other {
+  color: var(--ink-2);
+  font-size: 15.5px;
+}
+
+.role-mine {
+  font-size: 15.5px;
+  text-align: right;
+}
