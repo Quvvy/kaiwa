@@ -81,7 +81,7 @@ PERSONALITY_PRESETS: list[PersonalityPreset] = [
 # --- Chat system prompt architecture (decision #101, restated #144) ---
 # Hierarchy is the single priority source; other blocks add prefs/runtime detail only.
 # Bump when tutor policy changes (not TTS/installer/PTT). Missing AppData stamp = 0.
-PROMPT_REVISION = 10
+PROMPT_REVISION = 11
 
 PRIORITY_HIERARCHY_BLOCK = """\
 優先順位（上ほど強い。衝突したら番号の小さい方に従う）:
@@ -974,6 +974,10 @@ def course_phrases_block(course: dict[str, Any]) -> str:
 """
     if shaky:
         out += f"まだ定着していない単語（自然に使えるときに会話へ戻す。1ターンに1つまで）: {shaky}\n"
+    recent = course.get("recent") or []
+    if recent:
+        fresh = " / ".join(row["jp"] for row in recent)
+        out += f"この数日で習ったばかりの表現: {fresh}\n- 習った直後に使うと定着するので、会話の中で自然に、これらで答えられる質問を優先してする。答えを先に言わない。\n"
     return out + """- 会話はできるだけこの表現・単語・文型の組み合わせで作る。習っていない動詞の形は使わない。
 - 学習者がこの表現を使って答えられる質問をする（例: 「すきです」を習ったなら「〜がすきですか」）。
 - 習っていない語は1ターンに最大1つ。使ったら同じ返事の中でやさしく言い換えるか、短い英語を添える。

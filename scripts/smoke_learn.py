@@ -234,7 +234,7 @@ def main() -> None:
         except LookupError:
             _check(True, "unknown card_id raises")
 
-    _check(PROMPT_REVISION == 10, "Chat PROMPT_REVISION is 10")
+    _check(PROMPT_REVISION == 11, "Chat PROMPT_REVISION is 11")
     print("smoke_learn ok")
 
 

@@ -12,6 +12,7 @@ import threading
 from kaiwa import tts
 from kaiwa.config import Settings
 from kaiwa.course.kana import KANA_LESSONS
+from kaiwa.course import build
 from kaiwa.course.units import UNITS
 from kaiwa.prefs import load_prefs
 
@@ -73,10 +74,18 @@ def lesson_lines(*, everything: bool = False) -> list[tuple[str, str, float | No
             lines.append((line["jp"], who if who in VOICE_SLOTS else "a", None))
         for task in unit["speak"]:
             lines.append((task["say"], "a", None))
+        for point in unit.get("grammar", []):
+            for item in build.items_for(point["id"]):
+                lines.append((item["jp"], "a", None))
         # Slow versions last: they are only played on request.
     for unit in units:
         for phrase in unit["phrases"]:
             lines.append((phrase["jp"], "a", SLOW_SPEED))
+    # Other voices for replays and reviews last of all: they're heard less.
+    for unit in units:
+        for phrase in unit["phrases"]:
+            for voice in ("b", "c"):
+                lines.append((phrase["jp"], voice, None))
     seen: set[tuple[str, str, float | None]] = set()
     return [x for x in lines if not (x in seen or seen.add(x))]
 

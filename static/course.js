@@ -369,7 +369,7 @@
    * Number keys pick an option; a right answer moves on by itself.
    */
   function choiceBlock({ options, answer, onAnswer, jp = false, explain = "" }) {
-    const feedback = el("p", { class: "verdict" });
+    const feedback = el("p", { class: "verdict", role: "status" });
     let done = false;
     const buttons = options.map((opt, i) =>
       el("button", { class: "secondary choice", type: "button", lang: jp ? "ja" : null, onclick: () => pick(i) },
@@ -587,15 +587,17 @@
       : null;
     const note = el("p", { class: "lesson-audio-note", hidden: !audioProblem });
     fillAudioNote(note);
-    root.replaceChildren(
-      el("div", { class: "lesson" },
-        top,
-        steps,
-        note,
-        el("div", { class: "lesson-body" }, body),
-        actions.length ? el("div", { class: "lesson-actions" }, actions) : null,
-      ),
+    const lessonNode = el("div", { class: "lesson", tabindex: "-1" },
+      top,
+      steps,
+      note,
+      el("div", { class: "lesson-body" }, body),
+      actions.length ? el("div", { class: "lesson-actions" }, actions) : null,
     );
+    root.replaceChildren(lessonNode);
+    // A new screen is new content for a screen reader, and keys shouldn't stay on a removed button.
+    if (!lessonNode.querySelector("input:focus")) lessonNode.focus({ preventScroll: true });
+    root.scrollTop = 0;
     askPanel.refresh();
   }
   function primaryButton(label, onclick, { disabled = false } = {}) {
@@ -608,7 +610,34 @@
   function planSteps() {
     return [...(today.plan || [])];
   }
+  // The first time through each kind of step: what it's for. Effortful practice feels less
+  // productive than it is (Bjork), so knowing why it's hard is part of sticking with it.
+  const STEP_WHY = {
+    review: ["Review", "Getting something out of memory is what strengthens it. If it feels a bit hard, it's working: a miss just brings the card back sooner."],
+    learn: ["New phrases", "Hear each one and say it out loud. Saying it matters even when you feel silly: your mouth has to learn it too."],
+    words: ["Words", "A few at a time, tested right away. Don't try to memorise before the test. The test is the studying."],
+    grammar: ["Grammar", "Just enough to see the pattern, then you use it. You'll put real sentences together yourself, and they come back later."],
+    listen: ["Listen", "Listen first, no text. You won't catch everything, and you don't need to. Getting the gist from sound alone is the skill."],
+    speak: ["Speak", "Answer in your own words if you can. Getting it out imperfectly teaches more than getting it perfect silently."],
+    kana: ["Kana", "Use the picture for each one, even if it seems silly. Pictures are how these get learned quickly, and you'll drop them once it's automatic."],
+  };
+  function withWhy(step, go) {
+    const why = STEP_WHY[step];
+    const key = `kaiwa_why_${step}`;
+    if (!why || readPref(key, "") === "1") return go();
+    writePref(key, "1");
+    frame({
+      title: why[0],
+      body: el("div", { class: "card-body" }, el("p", { class: "lesson-note why-note", text: why[1] })),
+      actions: [primaryButton("Got it", go)],
+      primary: go,
+    });
+    return undefined;
+  }
   function runStep(step) {
+    return withWhy(step, () => startStep(step));
+  }
+  function startStep(step) {
     track("open", { activity: step, unit: today.unit ? today.unit.id : null });
     if (step === "review") return runReview(today.review);
     if (step === "recap") return runReview(today.recap || [], { title: "Recap", planStep: "recap" });
@@ -1061,7 +1090,7 @@
     let helped = false;
     const answerLine = el("div", { class: "build-answer", "aria-label": "Your sentence" });
     const bank = el("div", { class: "build-bank" });
-    const feedback = el("div", { class: "result" });
+    const feedback = el("div", { class: "result", "aria-live": "polite" });
     const checkBtn = el("button", { type: "button", class: "secondary", onclick: check }, "Check", kbd("Enter"));
     const hintBtn = el("button", { type: "button", class: "secondary", onclick: hint }, "Hint", kbd("H"));
     const accepted = [item.jp, ...(item.also || [])];
@@ -1317,7 +1346,7 @@
 
     /** Multiple choice: answer, see the grade and when it's back, Enter to go on. */
     function choiceCard(card, { big, bigJp, answer, options, audio, voice = {}, audioLater = false, after, extra = null, fmt, askJp }) {
-      const result = el("div", { class: "result" });
+      const result = el("div", { class: "result", "aria-live": "polite" });
       const slot = el("div", { class: "grade-slot" });
       let helped = false;
       const nextBtn = primaryButton("Next", () => advance());
@@ -1405,7 +1434,7 @@
     function produceCard(card) {
       const isKana = card.kind === "kana";
       const target = isKana ? card.kana.char : card.word.jp;
-      const result = el("div", { class: "result" });
+      const result = el("div", { class: "result", "aria-live": "polite" });
       const slot = el("div", { class: "grade-slot" });
       const nextBtn = primaryButton("Next", () => advance());
       nextBtn.hidden = true;
@@ -1516,7 +1545,7 @@
     /** Say a phrase from its English: by voice or typed, with a hint before giving up. */
     function speakCard(card) {
       const p = card.phrase;
-      const result = el("div", { class: "result" });
+      const result = el("div", { class: "result", "aria-live": "polite" });
       const slot = el("div", { class: "grade-slot" });
       const answer = el("div", { class: "reveal", hidden: true });
       const nextBtn = primaryButton("Next", () => advance());
@@ -1782,6 +1811,12 @@
       el("ul", { class: "stats-rules" }, s.grading.lines.map((line) => el("li", { text: line }))),
       el("p", { class: "stats-caption", text: s.grading.basis + (s.grading.tuned ? "" : " Changing a grade with 1–4 teaches it.") }));
 
+    const can = section("What you can do now",
+      s.can_do.length
+        ? el("ul", { class: "stats-rules" }, s.can_do.map((line) => el("li", { text: line })))
+        : el("p", { class: "status", text: "Finish a unit and it shows up here." }),
+      s.milestones.length ? el("p", { class: "stats-caption", text: s.milestones.map((m) => m.text).join(" ") }) : null);
+
     const how = section("How scheduling works",
       el("p", { class: "stats-text", text: "Kaiwa estimates how long you'll remember each card and brings it back just before you'd forget, aiming for 87% recall." }),
       el("p", { class: "stats-text", text: "New and missed cards come back within minutes, then the next day, then further apart each time you get them right. That's why you see some cards twice in a session." }),
@@ -1791,7 +1826,8 @@
       el("div", { class: "lesson-top" },
         el("button", { class: "secondary lesson-exit", type: "button", onclick: () => showHome() }, "Back"),
         el("h2", { class: "lesson-title", text: "Stats" })),
-      today, retention, forecast, cardsTable, intervals, calendar, tricky, grading, how));
+      can, today, forecast, calendar, tricky, retention,
+      el("details", { class: "stats-more" }, el("summary", {}, "More detail"), cardsTable, intervals, grading, how)));
     keys.primary = showHome;
   }
   function figure(value, label) {
@@ -1905,7 +1941,7 @@
       const replay = el("button", { type: "button", class: "secondary", onclick: () => play(item.jp, voice) }, "Play again", kbd("R"));
 
       if (name === "imitate") {
-        const result = el("div", { class: "result" });
+        const result = el("div", { class: "result", "aria-live": "polite" });
         const hold = holdControl("Hold and say it", async (blob, ext) => {
           result.replaceChildren(el("p", { class: "pending", text: "Checking…" }));
           try {
@@ -2058,7 +2094,7 @@
       keepSpot(spot, i);
       const p = phrases[i];
       const say = voiceCycler(p.jp);
-      const result = el("div", { class: "result" });
+      const result = el("div", { class: "result", "aria-live": "polite" });
       const hold = holdControl("Hold and say it", async (blob, ext) => {
         result.replaceChildren(el("p", { class: "pending", text: "Checking…" }));
         try {
@@ -2179,7 +2215,7 @@
     }
     listenView({
       title: "Extra listening",
-      dialogue: { scene: story.scene, lines: story.lines, form: story.form },
+      dialogue: { scene: story.replay ? `Again: ${story.scene}` : story.scene, lines: story.lines, form: story.form },
       questions: story.questions,
       doneLabel: "Next one",
       onDone: () => runExtraListening(true),
@@ -2383,7 +2419,7 @@
       if (i >= lines.length) return onDone();
       const line = lines[i];
       const say = () => play(line.jp, voice(line));
-      const result = el("div", { class: "result" });
+      const result = el("div", { class: "result", "aria-live": "polite" });
       const next = () => { i += 1; show(); };
       const hold = holdControl("Hold and say it back", async (blob, ext) => {
         result.replaceChildren(el("p", { class: "pending", text: "Checking…" }));
@@ -2490,7 +2526,7 @@
         el("div", { class: `bubble-mine mine-${cls}`, lang: "ja", text: heard })));
     }
 
-    const feedback = el("div", { class: "result" });
+    const feedback = el("div", { class: "result", "aria-live": "polite" });
     const hintBox = el("div", { class: "hint", hidden: true });
     const hintBtn = el("button", { class: "secondary hint-toggle", type: "button", onclick: () => {
       hintBox.hidden = !hintBox.hidden;
@@ -3022,7 +3058,7 @@
     function show() {
       keepSpot(spot, t);
       const task = tasks[t];
-      const result = el("div", { class: "result" });
+      const result = el("div", { class: "result", "aria-live": "polite" });
       const hint = el("div", { class: "hint", hidden: true },
         el("p", { lang: "ja", text: task.hint }),
         el("button", { class: "secondary", type: "button", onclick: () => play(task.hint.replace(/＿/g, "")) }, "Play"),
@@ -3426,7 +3462,7 @@
         if (n >= items.length) return end();
         const it = items[n];
         prefetch(items.slice(n + 1, n + 3).map((x) => [x.say, {}]));
-        const result = el("div", { class: "result" });
+        const result = el("div", { class: "result", "aria-live": "polite" });
         const nextBtn = primaryButton("Next", () => { n += 1; ask(); });
         nextBtn.hidden = true;
         const clean = (v) => v.replace(/[,，¥円\s]/g, "").replace(/[：.]/g, ":").replace(/^(\d{1,2})$/, kind === "time" ? "$1:00" : "$1").replace(/^0(\d):/, "$1:");

@@ -17,7 +17,7 @@ from typing import Any
 
 from kaiwa.config import Settings
 from kaiwa.course.learner_log import MISTAKES_PROMPT, mistakes
-from kaiwa.course.state import learned_phrase_ids, listening_context, load_state, phrase
+from kaiwa.course.state import learned_phrase_ids, listening_context, load_state, phrase, recent_phrases
 
 # Easy-mode Chat replies below this share of known kana are rewritten once. Lower
 # than talk practice (0.85): Chat lines are short, and its rules allow one new word.
@@ -49,6 +49,7 @@ def context() -> dict[str, Any]:
     phrases = [p for p in (phrase(i) for i in ids) if p]
     return {
         "phrases": [{"jp": p["jp"], "en": p["en"]} for p in phrases[-PHRASES_SHOWN:]],
+        "recent": recent_phrases(state),
         "shaky": random.sample(ctx["shaky"], min(len(ctx["shaky"]), SHAKY_SHOWN)),
         "solid": random.sample(ctx["solid"], min(len(ctx["solid"]), SOLID_SHOWN)),
         "patterns": random.sample(ctx["patterns"], min(len(ctx["patterns"]), PATTERNS_SHOWN)),

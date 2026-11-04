@@ -17,6 +17,7 @@ units written in the newer template gain steps without resetting older progress.
 
 from __future__ import annotations
 
+import random
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -1015,6 +1016,17 @@ def listening_minutes(state: dict[str, Any]) -> dict[str, float]:
             "total": round(state["listening"]["total_ms"] / 60000)}
 
 
+def old_dialogue(state: dict[str, Any]) -> dict[str, Any] | None:
+    """A listened-to unit's conversation again, preferring what hasn't been heard lately."""
+    units = [u for u in UNITS if state["units"].get(u["id"], {}).get("listen")]
+    fresh = [u for u in units if u["dialogue"]["scene"] not in state["listening"]["recent"]]
+    if not units:
+        return None
+    unit = random.choice(fresh or units)
+    return {"scene": unit["dialogue"]["scene"], "lines": unit["dialogue"]["lines"], "questions": unit["questions"],
+            "form": "dialogue", "replay": True}
+
+
 def record_listening(seconds: float, *, scene: str = "", path: Path | None = None) -> dict[str, float]:
     ms = int(max(0.0, min(float(seconds), LISTEN_REPORT_MAX_S)) * 1000)
 
@@ -1254,6 +1266,8 @@ def course_stats(*, path: Path | None = None) -> dict[str, Any]:
         "leeches": leeches,
         "target": round(100 * srs.SCHEDULER.desired_retention),
         "grading": grader.describe(state["grader"] or grader.tune(state["grades"])),
+        "can_do": [u["goal"] for u in UNITS if unit_done(state, u) and not state["units"][u["id"]].get("placed")],
+        "milestones": milestones(state),
     }
 
 
@@ -1430,6 +1444,20 @@ def apply_placement(result: dict[str, Any], *, path: Path | None = None) -> dict
     profile.placement = {"source": "placement test", "units": round(comp, 1), "date": today.isoformat()}
     lp.save_profile(profile)
     return summary
+
+
+RECENT_DAYS = 3
+
+
+def recent_phrases(state: dict[str, Any]) -> list[dict[str, str]]:
+    """Phrases taught in the last few days: what Chat should give the learner a chance to use."""
+    since = (_today() - timedelta(days=RECENT_DAYS)).isoformat()
+    out = []
+    for unit in UNITS:
+        row = state["units"].get(unit["id"], {})
+        if str(row.get("learn_on") or "") >= since and not row.get("placed"):
+            out.extend({"jp": p["jp"], "en": p["en"]} for p in unit["phrases"])
+    return out[-12:]
 
 
 def known_phrases_for_chat(*, limit: int = 40, path: Path | None = None) -> list[dict[str, str]]:

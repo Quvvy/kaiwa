@@ -228,7 +228,25 @@ def fluency_and_mine() -> None:
     _check(my_phrases.clean_kept([{"id": "x", "jp": "a"}, {"id": "my.1", "jp": "b"}, "junk"])[0]["id"] == "my.1" and len(my_phrases.clean_kept([{"id": "x", "jp": "a"}, "junk"])) == 0, "bad saved rows are dropped")
 
 
+def chat_focus_and_offline() -> None:
+    from kaiwa import persona
+    from kaiwa.course import prerender
+    st = cs._empty()
+    st["units"]["u4"] = {"learn": True, "learn_on": cs._today().isoformat(), "listen": True}
+    st["units"]["u1"] = {"learn": True, "learn_on": "2020-01-01", "listen": True}
+    recent = cs.recent_phrases(st)
+    _check(any("ねこ" in r["jp"] for r in recent) and not any("おはよう" in r["jp"] for r in recent), "Chat's fresh phrases are the last few days'")
+    block = persona.course_phrases_block({"phrases": recent, "recent": recent})
+    _check("習ったばかり" in block and "答えを先に言わない" in block, "the tutor is told to give them a chance to use them")
+    old = cs.old_dialogue(st)
+    _check(old is not None and old["replay"] and old["lines"] and old["questions"], "without a key, listening falls back to a finished unit's conversation")
+    _check(cs.old_dialogue(cs._empty()) is None, "nothing to replay before any listening")
+    lines = prerender.lesson_lines()
+    _check(any(v == "b" for _, v, _s in lines) and any(t == "がくせいですか" for t, _v, _s in lines), "other voices and build sentences get prerendered")
+
+
 def main() -> None:
+    chat_focus_and_offline()
     fluency_and_mine()
     habit_and_map()
     grammar_cards()

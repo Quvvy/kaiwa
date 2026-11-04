@@ -292,15 +292,18 @@ async def speak_task(
 async def story() -> dict[str, Any]:
     """Extra listening built from learned phrases."""
     settings = get_settings()
-    if not settings.deepseek_api_key:
-        raise HTTPException(status_code=400, detail="Extra listening needs your DeepSeek key (Settings → DeepSeek).")
-    data = await asyncio.to_thread(stories.take, settings)
+    data = await asyncio.to_thread(stories.take, settings) if settings.deepseek_api_key else None
     if data is None:
-        if not state.learned_phrase_ids(state.load_state()):
+        st = state.load_state()
+        if not state.learned_phrase_ids(st):
             raise HTTPException(status_code=400, detail="Learn your first phrases, then extra listening unlocks.")
-        raise HTTPException(status_code=502, detail="Couldn't make a conversation this time — try again.")
+        # No key or no connection: hearing a finished unit's conversation again is still real listening.
+        data = state.old_dialogue(st)
+        if data is None:
+            detail = "Couldn't make a conversation this time — try again." if settings.deepseek_api_key else "Extra listening needs your DeepSeek key (Settings → DeepSeek), or a finished unit's conversation to replay."
+            raise HTTPException(status_code=502 if settings.deepseek_api_key else 400, detail=detail)
     learner_log.log("story", scene=data["scene"], form=data.get("form"), known_share=data.get("known_share"),
-                    lines=[line["jp"] for line in data["lines"]], glosses=[line["gloss"] for line in data["lines"] if line["gloss"]])
+                    lines=[line["jp"] for line in data["lines"]], glosses=[line.get("gloss") for line in data["lines"] if line.get("gloss")])
     return data
 
 

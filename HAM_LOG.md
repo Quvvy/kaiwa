@@ -110,21 +110,21 @@ Quiet one-liners for abilities reached ("You can read all of hiragana", "100 wor
 
 ### Fewer ways to get stuck
 
-**H20. Leaving a lesson doesn't lose your place.** ✅ `[H20-H24]`
+**H20. Leaving a lesson doesn't lose your place.** ✅ `[H20-H28]`
 Exit a lesson and reopen it, and you're back where you were (per phrase, per word batch, per grammar point). Before, leaving lesson 18 of 20 meant starting over.
 
-**H21. A dropped connection doesn't lose a lesson.** ✅ `[H20-H24]`
+**H21. A dropped connection doesn't lose a lesson.** ✅ `[H20-H28]`
 If saving a finished step fails, it says so and offers Try again. Before, the app froze silently. This matters most on the phone, between networks.
 
-**H22. Quieter result bar.** ✅ 🧪 `[H20-H24]`
+**H22. Quieter result bar.** ✅ 🧪 `[H20-H28]`
 After an answer you see "Good · next in 3 days" with a small Change link. The four grade buttons appear only if you ask, and keys 1-4 still work. *Why:* Kaiwa grades for you, so showing Anki's four buttons on every card invites a decision that isn't needed.
 
-**H23. Kana reading cards stay silent until you answer.** ✅ `[H20-H24]`
+**H23. Kana reading cards stay silent until you answer.** ✅ `[H20-H28]`
 The Play button on a "how do you read this?" card gave the answer away.
 
 ### Listening
 
-**H24. Slower button and shadowing.** ✅ 🎤 `[H20-H24]`
+**H24. Slower button and shadowing.** ✅ 🎤 `[H20-H28]`
 Conversations get a **Slower** toggle. After the questions, **Say it with them** walks through each line: hear it, say it straight back, see which sounds didn't come through. Optional, and it never holds up the lesson.
 *Why:* shadowing helps L2 listening, especially at lower levels (Hamada 2016), and Kaiwa had no rhythm or prosody practice.
 
@@ -132,17 +132,37 @@ Conversations get a **Slower** toggle. After the questions, **Say it with them**
 
 Nation's "four strands" say a course should split time between input, output, language study and fluency. Kaiwa had the first three.
 
-**H25. Speed round.** ✅ `[H25-H28]`
+**H25. Speed round.** ✅ `[H20-H28]`
 One minute of known words by ear: hear it, tap the meaning, with your best score to beat. It never touches the review schedule. *Why:* fluency practice is known material under time pressure. It's also the closest thing here to a game, and the game is real recall.
 
-**H26. Numbers by ear.** ✅ `[H25-H28]`
+**H26. Numbers by ear.** ✅ `[H20-H28]`
 Hear a price or time at full speed and type it. Gets harder when you get 9/10. Unlocks with the Time and Shopping units. No LLM, works offline. *Why:* numbers are what everyone loses in a real shop, even when they "know" them.
 
-**H27. Hands-free.** ✅ `[H25-H28]`
+**H27. Hands-free.** ✅ `[H20-H28]`
 For walking or dishes: the device reads the English, you say the Japanese aloud, it says it back in two voices. Weakest phrases first, ungraded, counts as listening time. *Why:* trying to recall before hearing makes this retrieval and not passive audio. It adds practice time that a screen can't reach.
 
 ### Your own Japanese
 
-**H28. My phrases.** ✅ `[H25-H28]`
+**H28. My phrases.** ✅ `[H20-H28]`
 Phrasebook → Mine: write what you want to say ("I work in IT"), hear the simplest natural Japanese, tap Keep, and it becomes normal review cards. Chat's "Other ways to say it" also gets a Keep button. *Why:* what's about your own life is what you'll actually say and what sticks (self-reference effect, Rogers et al. 1977). The Japanese is forced to kana, retrying once if the model slips into kanji or Latin letters.
+
+### Chat, polish and resilience
+
+**H29. Chat aims at what you just learned.** ✅ 🧪 `[H29-H34]`
+The tutor now knows which phrases you learned in the last 3 days, and prefers questions you can answer with them, without saying the answer first. `PROMPT_REVISION` goes 10→11. *Why:* using a phrase soon after learning it is what makes it yours, and this keeps your "no Try saying… in Chat" rule intact because the nudge lives in the question being asked. I chose this over on-screen "try to use these" chips for that reason.
+
+**H30. Why each step is the way it is.** ✅ 🧪 `[H29-H34]`
+The first time you hit each kind of step, one short screen says what it's for: "Don't try to memorise before the test. The test is the studying." It shows once per step. A one-line note on a new learner's home says mistakes are part of how it works. *Why:* effective study feels worse than it is (Bjork's desirable difficulties), and people abandon methods that feel hard unless they know why.
+
+**H31. Stats start with what you can do.** ✅ `[H29-H34]`
+"What you can do now" comes first, from finished units and milestones. Retention tables, intervals and scheduling notes moved under More detail.
+
+**H32. Extra listening works without a key.** ✅ `[H29-H34]`
+With no key or no connection, it replays a finished unit's conversation (fresh ones first) instead of an error.
+
+**H33. Accessibility and phones.** ✅ `[H29-H34]`
+Results are announced to screen readers, focus moves to each new screen, reduced-motion is respected, key hints are hidden on touch screens, answer buttons are thumb-sized, and the phone plan list is half as tall.
+
+**H34. Other voices and build sentences are prerendered.** ✅ `[H29-H34]`
+So a replay in a new voice doesn't wait on the engine.
 
