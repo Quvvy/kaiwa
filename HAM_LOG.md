@@ -188,3 +188,9 @@ Options → "Study at 7:00 PM · Add to my calendar" downloads a daily repeating
 - Tomorrow's count on the day-end screen never shows more than a day's share.
 - Quick drills are tucked under a fold so the home screen stays at three main choices.
 
+### Vocabulary gaps
+
+**H40. Word packs.** ✅ `[H40]`
+I checked the 324 course words against everyday N5 vocabulary and found real holes: the numbers 1-10 as words (though Time and Shopping lean on them), basic food, the body and feeling ill, colours, common verbs. Rather than reorder a course you're part-way through, nine optional packs (75 words) now live on the course map, taught with the same teach-then-test loop. Once learned, they're ordinary cards that Chat and stories can use. Units 8 and 11 point at the Numbers pack if you haven't done it.
+*Why:* it fixes the gap without disturbing anyone's progress, and choosing what to learn is motivating in itself (Deci & Ryan). *For you to check:* meanings and romaji are hand-written; `course/packs.py` is short and worth a read.
+

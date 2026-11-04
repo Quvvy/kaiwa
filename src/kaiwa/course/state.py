@@ -27,6 +27,7 @@ from kaiwa.course import build, drills, grader, my_phrases, srs
 from kaiwa.course.kana import KANA_LESSONS, KANA_ROMAJI, LESSON_BY_ID, lesson_chars
 from kaiwa.course.kana_hooks import alike, hook_for
 from kaiwa.course.missions import MISSIONS
+from kaiwa.course.packs import PACK_BY_ID, PACKS
 from kaiwa.course.units import ROMAJI, UNITS
 
 STATE_FILE = "course_state.json"
@@ -52,6 +53,10 @@ for _unit in UNITS:
         _WORDS[_w["id"]] = dict(_w)
         _WORD_UNIT[_w["id"]] = _unit["id"]
 
+
+for _pack in PACKS:
+    for _w in _pack["words"]:
+        _WORDS[_w["id"]] = dict(_w)
 
 COURSE_PHRASES = sum(len(_u["phrases"]) for _u in UNITS)
 
@@ -1133,7 +1138,7 @@ def day_summary(state: dict[str, Any]) -> dict[str, Any]:
 def milestones(state: dict[str, Any]) -> list[dict[str, str]]:
     """Real abilities reached, oldest first. Counts things the learner can do, never points."""
     words = sum(1 for w in _WORDS if f"{w}:mean" in state["cards"])
-    phrases = len(learned_phrase_ids(state))
+    phrases = sum(1 for p in learned_phrase_ids(state) if not p.startswith("my."))
     listening = state["listening"]["total_ms"] / 60000
     talk = sum(int(d.get("talk") or 0) for d in state["daily"].values())
     prog = kana_progress(state)
@@ -1559,6 +1564,11 @@ def phrasebook(*, path: Path | None = None) -> dict[str, Any]:
             for g in unit.get("grammar", []):
                 grammar.append({"title": g["title"], "rule": g.get("rule", ""), "explain": g["explain"],
                                 "examples": g["examples"], "unit": unit["title"]})
+    for pack in PACKS:
+        for w in pack["words"]:
+            card = state["cards"].get(f"{w['id']}:mean")
+            if card:
+                words.append({"jp": w["jp"], "en": w["en"], "ro": w["ro"], "unit": pack["title"], "strength": strength_of(card)})
     mine = [{**row, "strength": strength_of(min((c for c in (state["cards"].get(f"{row['id']}:{s}") for s in SKILLS) if c), key=srs.stability, default=None))}
             for row in state["mine"]]
     return {"phrases": phrases, "words": words, "grammar": grammar, "mine": mine}
@@ -1655,6 +1665,31 @@ def slip_summary(rows: list[dict[str, Any]], *, path: Path | None = None) -> lis
         example = next((d for d in reversed(details) if d), "")
         out.append({"type": kind, "label": SLIP_LABELS[kind], "count": len(details), "example": example, "cards": cards})
     return out
+
+
+def packs_overview(*, path: Path | None = None) -> list[dict[str, Any]]:
+    state = load_state(path)
+    return [{"id": p["id"], "title": p["title"], "blurb": p["blurb"], "words": p["words"],
+             "taught": sum(1 for w in p["words"] if f"{w['id']}:mean" in state["cards"])} for p in PACKS]
+
+
+def complete_pack(pack_id: str, *, path: Path | None = None) -> int:
+    """Schedule a pack's words; returns how many were new."""
+    pack = PACK_BY_ID.get(pack_id)
+    if pack is None:
+        raise KeyError(f"unknown pack: {pack_id}")
+
+    def apply(state: dict[str, Any]) -> int:
+        n = 0
+        for w in pack["words"]:
+            cid = f"{w['id']}:mean"
+            if cid not in state["cards"]:
+                _add_card(state, cid)
+                n += 1
+        _mark_day(state)
+        return n
+
+    return _with_state(apply, path)
 
 
 def complete_mission(unit_id: str, *, path: Path | None = None) -> str:

@@ -256,6 +256,26 @@ def chat_focus_and_offline() -> None:
     _check(any(v == "b" for _, v, _s in lines) and any(t == "がくせいですか" for t, _v, _s in lines), "other voices and build sentences get prerendered")
 
 
+def word_packs() -> None:
+    from kaiwa.course import packs
+    from kaiwa.course.units import UNITS
+    in_units = {w["jp"] for u in UNITS for w in u["words"]}
+    all_words = [w for p in packs.PACKS for w in p["words"]]
+    _check(not [w["jp"] for w in all_words if w["jp"] in in_units], "pack words don't repeat the units'")
+    ids = [w["id"] for w in all_words]
+    _check(len(ids) == len(set(ids)) and len({w["jp"] for w in all_words}) == len(all_words), "pack words are unique")
+    _check(all(w["ro"].isascii() and w["en"] for w in all_words), "every pack word has romaji and a meaning")
+    with tempfile.TemporaryDirectory() as d:
+        path = Path(d) / "s.json"
+        _check(cs.complete_pack("numbers", path=path) == 10, "a pack schedules its words")
+        _check(cs.complete_pack("numbers", path=path) == 0, "and only once")
+        st = cs.load_state(path)
+        _check(cs._card_kind("p.numbers.ichi:mean") == ("word", "p.numbers.ichi", "mean"), "they're ordinary word cards")
+        _check(cs.packs_overview(path=path)[0]["taught"] == 10, "progress shows")
+        _check(any(w["jp"] == "きゅう" for w in cs.phrasebook(path=path)["words"]), "the phrasebook lists them")
+        _check("いち" in cs.known_vocab(path=path)[0], "Chat and stories can use them")
+
+
 def fixes() -> None:
     with tempfile.TemporaryDirectory() as d:
         path = Path(d) / "s.json"
@@ -303,6 +323,7 @@ def slips_and_counts() -> None:
 
 
 def main() -> None:
+    word_packs()
     fixes()
     slips_and_counts()
     chat_focus_and_offline()

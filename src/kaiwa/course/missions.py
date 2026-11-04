@@ -37,7 +37,7 @@ MISSIONS: dict[str, dict[str, str]] = {
            "goal": "Say what you eat and drink, and ask what they do.",
            "partner": "リサ", "opener": "あさごはんをたべますか。", "opener_en": "Do you eat breakfast?",
            "suggest": "はい、パンをたべます。"},
-    "u7": {"scene": "You've just got off the train in a town you don't know. You need the station's toilet and a convenience store.",
+    "u7": {"scene": "You've just got off the train in a town you don't know. You need a convenience store.",
            "goal": "Ask a passer-by where the convenience store is.",
            "partner": "ヤマダ", "opener": "こんにちは。どこにいきますか。", "opener_en": "Hello. Where are you going?",
            "suggest": "コンビニにいきます。コンビニは、どこですか。"},

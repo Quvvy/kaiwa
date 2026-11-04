@@ -761,6 +761,10 @@
               el("h1", { class: "home-title", text: `You've finished all ${s.units_total} units` }),
               el("p", { class: "home-goal", text: "Reviews continue daily. Use Extra listening and Chat for more practice." })),
         unit && unit.reopenedNote ? el("p", { class: "home-note", text: unit.reopenedNote }) : null,
+        unit && ["u8", "u11"].includes(unit.id) && !(today.words_pool || []).some((w) => w.jp === "きゅう")
+          ? el("p", { class: "home-note" }, "This unit leans on numbers. If they're shaky, there's a 3-minute Numbers pack in the ",
+              el("button", { type: "button", class: "link-button", onclick: runMap }, "course map"), ".")
+          : null,
         fresh ? el("p", { class: "home-note", text: "Each day: a little new, a little review, and everything out loud. Mistakes are part of how it works; they're what tells Kaiwa what to bring back." }) : null,
         weekRow(s),
         el("div", { class: "home-bar", role: "progressbar", "aria-label": "Phrases learned", "aria-valuenow": String(pct), "aria-valuemin": "0", "aria-valuemax": "100" },
@@ -2863,15 +2867,22 @@
     const left = unit.words.length - seen;
     const planned = today.unit && today.unit.id === unit.id ? today.words_today : 0;
     const count = redo ? left : Math.min(left, planned || Math.min(left, 10));
-    const words = unit.words.slice(seen, seen + count);
+    teachWords({
+      heading: `Words, unit ${unit.number}`,
+      words: unit.words.slice(seen, seen + count),
+      others: unit.words,
+      spot: `words:${unit.id}:${seen}`,
+      onFinish: () => saveThen("/api/course/step", redo ? { unit_id: unit.id, step: "words" } : { unit_id: unit.id, step: "words", count }, continuePlan),
+    });
+  }
+  /** The teach-then-test loop, for a unit's words or a word pack. */
+  function teachWords({ heading, words, others, spot, onFinish }) {
     const BATCH = 5;
     prefetch(words.map((w) => [w.jp, {}]));
     const batches = [];
     for (let i = 0; i < words.length; i += BATCH) batches.push(words.slice(i, i + BATCH));
-    const spot = `words:${unit.id}:${seen}`;
     let b = Math.min(spotIn(spot), Math.max(0, batches.length - 1));
-    const heading = () => `Words, unit ${unit.number}`;
-    const known = () => [...batches.slice(0, b + 1).flat(), ...(today.words_pool || []), ...unit.words];
+    const known = () => [...batches.slice(0, b + 1).flat(), ...(today.words_pool || []), ...others];
 
     function intro() {
       keepSpot(spot, b);
@@ -2881,7 +2892,7 @@
       if (b > 0) actions.push(el("button", { type: "button", class: "secondary", onclick: () => { b -= 1; intro(); } }, "Back"));
       actions.push(primaryButton("Test these", go));
       frame({
-        title: heading(), index: b, total: batches.length,
+        title: heading, index: b, total: batches.length,
         ask: { screen: "word list", words: slice.map((w) => `${w.jp} = ${w.en}`) },
         body: el("div", { class: "card-body" },
           el("table", { class: "word-table" },
@@ -2906,7 +2917,7 @@
         nextBtn.hidden = true;
         function advance() { n += 1; ask(); }
         frame({
-          title: heading(), index: b, total: batches.length,
+          title: heading, index: b, total: batches.length,
           ask: { screen: "word quiz", jp: w.jp, en: w.en },
           body: el("div", { class: "card-body" },
             el("p", { class: "kana-big kana-word", lang: "ja", text: w.jp }),
@@ -2931,11 +2942,7 @@
     }
     function afterBatch() {
       if (b < batches.length - 1) { b += 1; return intro(); }
-      return finish();
-    }
-
-    function finish() {
-      return saveThen("/api/course/step", redo ? { unit_id: unit.id, step: "words" } : { unit_id: unit.id, step: "words", count }, continuePlan);
+      return onFinish();
     }
     intro();
   }
@@ -3215,7 +3222,10 @@
     clearKeys();
     root.replaceChildren(el("div", { class: "home" }, el("p", { class: "pending", text: "Loading…" })));
     let m;
-    try { m = await api("/api/course/map"); } catch (err) {
+    let packs = [];
+    try {
+      [m, { packs }] = await Promise.all([api("/api/course/map"), api("/api/course/packs")]);
+    } catch (err) {
       root.replaceChildren(el("div", { class: "home" }, el("p", { class: "verdict off", text: String(err.message || err) })));
       return;
     }
@@ -3236,12 +3246,38 @@
         u.status !== "later"
           ? el("button", { type: "button", class: "secondary", onclick: () => unitPage(u.id) }, "Open")
           : el("span")))),
+      el("h3", { class: "stats-h", text: "Word packs" }),
+      el("p", { class: "stats-caption", text: "Extra words the units don't reach. Add one when you want it: they join your reviews like any other word." }),
+      el("ul", { class: "pack-list" }, packs.map((p) => el("li", { class: "pack" + (p.taught >= p.words.length ? " done" : "") },
+        el("div", {},
+          el("p", { class: "map-title", text: p.title }),
+          el("p", { class: "map-goal", text: `${p.blurb} ${p.words.length} words.` })),
+        p.taught >= p.words.length
+          ? el("span", { class: "map-star", text: "✓" })
+          : el("button", { type: "button", class: "secondary", onclick: () => runPack(p) }, "Learn")))),
       el("h3", { class: "stats-h", text: "Kana" }),
       el("ol", { class: "map-kana" }, m.kana_lessons.map((k) => el("li", { class: k.done ? "done" : "" },
         el("button", { type: "button", class: "secondary", onclick: () => kanaFromMap(k.id) },
           el("span", { lang: "ja", text: k.chars.split(" ").slice(0, 5).join(" ") || k.title }))))),
     ));
     keys.primary = showHome;
+  }
+  function runPack(pack) {
+    track("open", { activity: "pack", pack: pack.id });
+    teachWords({
+      heading: pack.title, words: pack.words, others: pack.words, spot: `pack:${pack.id}`,
+      onFinish: () => saveThen("/api/course/pack", { pack_id: pack.id }, async () => {
+        await refresh();
+        frame({
+          title: pack.title,
+          body: el("div", { class: "card-body" },
+            el("h3", { class: "end-title", text: `${pack.words.length} new words` }),
+            el("p", { class: "prompt", text: "They'll come up in your next recap, then in your reviews." })),
+          actions: [primaryButton("Back to the map", runMap)],
+          primary: runMap,
+        });
+      }),
+    });
   }
   async function kanaFromMap(id) {
     try {

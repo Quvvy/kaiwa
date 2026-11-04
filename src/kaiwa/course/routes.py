@@ -496,6 +496,23 @@ def mine_remove(phrase_id: str) -> dict[str, Any]:
     return {"ok": True}
 
 
+@router.get("/packs")
+def word_packs() -> dict[str, Any]:
+    return {"packs": state.packs_overview()}
+
+
+class PackBody(BaseModel):
+    pack_id: str
+
+
+@router.post("/pack")
+def pack_done(body: PackBody) -> dict[str, Any]:
+    try:
+        return {"added": state.complete_pack(body.pack_id)}
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
 @router.get("/reminder.ics")
 def reminder(time: str = "19:00") -> Response:
     """A daily calendar event for study time: works on any device, no notification service."""
