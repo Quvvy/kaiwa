@@ -775,7 +775,7 @@ def main() -> None:
         _check(mid.get("lines") == lines, "in-progress sitting still includes lines")
         finish_sitting(state_path_override=state_file)
 
-    _check(PROMPT_REVISION == 10, "Chat PROMPT_REVISION is 10")
+    _check(PROMPT_REVISION == 11, "Chat PROMPT_REVISION is 10")
     _check(wo_ga_recast_stem("コーヒーを好きです") == "好き", "wo-suki stem")
     _check(wo_ga_recast_stem("日本語がわかる") == "", "ga-wakaru is not a miss")
     _check(wo_ga_recast_stem("猫好きです") == "", "no を is not a recast stem")

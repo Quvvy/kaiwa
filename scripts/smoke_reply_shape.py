@@ -213,7 +213,7 @@ def main() -> None:
     )
     _check("考えは1つ" not in free_prompt, "free prompt is not gym-locked")
 
-    _check(PROMPT_REVISION == 10, "prompt revision is 10")
+    _check(PROMPT_REVISION == 11, "prompt revision is 11")
     empty_prompt = build_tutor_system_prompt(prefs_pre, profile=pre)
     _check("名前・身元の固定ルール" in empty_prompt, "identity names block present")
     _check("自分は「会話（Kaiwa / カイワ）」" in empty_prompt, "self name is Kaiwa")

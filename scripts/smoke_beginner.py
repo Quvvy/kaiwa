@@ -200,7 +200,7 @@ def scenario_doesnt_understand(tmp: Path) -> None:
     )
     _check("選択肢" not in collapse_prompt, s, "Chat collapse prompt has no 選択肢")
     _check("同じ考え" in collapse_prompt, s, "Chat collapse prompt paraphrases")
-    _check(PROMPT_REVISION == 10, s, "Chat PROMPT_REVISION is 10")
+    _check(PROMPT_REVISION == 11, s, "Chat PROMPT_REVISION is 10")
 
 
 def scenario_misunderstands(tmp: Path) -> None:

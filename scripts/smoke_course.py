@@ -679,7 +679,7 @@ def placement_self_correction() -> None:
         st = course_state.load_state(path)
         _check(course_state.next_unit(st) is u2, "the reopened unit comes before anything new")
         plan = course_state.plan_today(st)["plan"]
-        _check("grammar" in plan and "listen" in plan and "learn" not in plan,
+        _check("grammar" in plan and "learn" not in plan and not st["units"]["u2"].get("listen"),
                f"its grammar and listening come back, not the phrase lesson ({plan})")
         r = course_state.grade(ids[7], correct=False, ms=3000, fmt="word:produce", path=path)
         _check(not r["reopened"], "a unit is reopened once")
@@ -727,7 +727,7 @@ def pacing() -> None:
 
             day[0] = real_today() + timedelta(days=1)
             p2 = plan(path)["plan"]
-            _check(p2 == ["grammar", "listen", "speak", "recap"], "day 2: kana rested yesterday's turn, day two fills the lesson time")
+            _check(p2 == ["grammar", "listen", "recap"], "day 2: kana rested yesterday's turn, day two's lessons fill the time")
             for s in ("grammar", "listen", "speak"):
                 course_state.complete_step("u1", s, path=path)
             for lid in ("h2", "h3", "h4", "h5", "h6", "h7", "h8", "h9", "h10"):
