@@ -198,7 +198,38 @@ def habit_and_map() -> None:
         _check(any(x["id"] == "phrases10" for x in cs.milestones(st4)), "ten phrases is a milestone")
 
 
+def fluency_and_mine() -> None:
+    from kaiwa.course import drills, my_phrases
+    prices = drills.round_items("price", 1, seed=4)
+    _check(len(prices) == 10 and all(p["say"].endswith("えん") and int(p["answer"]) % 100 == 0 for p in prices), "a price round is ten spoken prices")
+    three = next(p for s in range(40) for p in drills.round_items("price", 1, seed=s) if p["answer"] == "300")
+    _check(three["say"] == "さんびゃくえん", "300 is さんびゃく, not さんひゃく")
+    times = drills.round_items("time", 2, seed=4)
+    _check(all(":" in t["answer"] and t["say"].endswith("です") for t in times), "time rounds answer in h:mm")
+    four = next(t for s in range(40) for t in drills.round_items("time", 1, seed=s) if t["answer"] == "4:00")
+    _check(four["say"] == "よじです", "4 o'clock is よじ")
+    _check(drills.available({"u8": {"learn": True}}) == {"time": True, "price": False}, "drills unlock with their units")
+    with tempfile.TemporaryDirectory() as d:
+        path = Path(d) / "s.json"
+        row = cs.keep_my_phrase("わたしのいぬはレックスです。", "My dog is called Rex.", path=path)
+        st = cs.load_state(path)
+        _check(row["id"].startswith("my.") and f"{row['id']}:speak" in st["cards"] and f"{row['id']}:listen" in st["cards"], "a kept phrase gets both cards")
+        _check(cs._card_kind(f"{row['id']}:speak") == ("phrase", row["id"], "speak"), "its cards are ordinary phrase cards")
+        _check(cs.stats(st)["phrases_learned"] == 0 and cs.stats(st)["phrases_total"] == cs.COURSE_PHRASES, "own phrases don't distort course progress")
+        _check(cs.phrasebook(path=path)["mine"][0]["jp"] == row["jp"], "the phrasebook lists it")
+        _check(row["ro"] and row["ro"].isascii(), "it has romaji")
+        cs.keep_my_phrase("わたしのいぬはレックスです。", "again", path=path)
+        _check(len(cs.load_state(path)["mine"]) == 1, "keeping it twice keeps one")
+        _check(cs.grade(f"{row['id']}:speak", correct=True, path=path)["card_id"], "it can be reviewed")
+        _check(cs.remove_my_phrase(row["id"], path=path) and not cs.load_state(path)["mine"], "it can be removed")
+        _check(not any(c.startswith("my.") for c in cs.load_state(path)["cards"]), "removing it removes its cards")
+        _check(cs.record_best("speed", 12, path=path) == {"best": 12, "previous": 0}, "a first score is the best")
+        _check(cs.record_best("speed", 9, path=path) == {"best": 12, "previous": 12}, "a lower score doesn't replace it")
+    _check(my_phrases.clean_kept([{"id": "x", "jp": "a"}, {"id": "my.1", "jp": "b"}, "junk"])[0]["id"] == "my.1" and len(my_phrases.clean_kept([{"id": "x", "jp": "a"}, "junk"])) == 0, "bad saved rows are dropped")
+
+
 def main() -> None:
+    fluency_and_mine()
     habit_and_map()
     grammar_cards()
     sound_diff()

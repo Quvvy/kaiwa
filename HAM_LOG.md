@@ -108,3 +108,41 @@ Seven dots for this week. Every 7 days in a row earns a rest day: miss one and t
 **H19. Real milestones; a calmer home.** ✅ 🧪 `[H14-H19]`
 Quiet one-liners for abilities reached ("You can read all of hiragana", "100 words you know"). No points, levels or leagues. The Start button moved up into the first screenful, placement stays only for new users, and skip-unit, pace and romaji moved under Options.
 
+### Fewer ways to get stuck
+
+**H20. Leaving a lesson doesn't lose your place.** ✅ `[H20-H24]`
+Exit a lesson and reopen it, and you're back where you were (per phrase, per word batch, per grammar point). Before, leaving lesson 18 of 20 meant starting over.
+
+**H21. A dropped connection doesn't lose a lesson.** ✅ `[H20-H24]`
+If saving a finished step fails, it says so and offers Try again. Before, the app froze silently. This matters most on the phone, between networks.
+
+**H22. Quieter result bar.** ✅ 🧪 `[H20-H24]`
+After an answer you see "Good · next in 3 days" with a small Change link. The four grade buttons appear only if you ask, and keys 1-4 still work. *Why:* Kaiwa grades for you, so showing Anki's four buttons on every card invites a decision that isn't needed.
+
+**H23. Kana reading cards stay silent until you answer.** ✅ `[H20-H24]`
+The Play button on a "how do you read this?" card gave the answer away.
+
+### Listening
+
+**H24. Slower button and shadowing.** ✅ 🎤 `[H20-H24]`
+Conversations get a **Slower** toggle. After the questions, **Say it with them** walks through each line: hear it, say it straight back, see which sounds didn't come through. Optional, and it never holds up the lesson.
+*Why:* shadowing helps L2 listening, especially at lower levels (Hamada 2016), and Kaiwa had no rhythm or prosody practice.
+
+### Fluency (a missing strand)
+
+Nation's "four strands" say a course should split time between input, output, language study and fluency. Kaiwa had the first three.
+
+**H25. Speed round.** ✅ `[H25-H28]`
+One minute of known words by ear: hear it, tap the meaning, with your best score to beat. It never touches the review schedule. *Why:* fluency practice is known material under time pressure. It's also the closest thing here to a game, and the game is real recall.
+
+**H26. Numbers by ear.** ✅ `[H25-H28]`
+Hear a price or time at full speed and type it. Gets harder when you get 9/10. Unlocks with the Time and Shopping units. No LLM, works offline. *Why:* numbers are what everyone loses in a real shop, even when they "know" them.
+
+**H27. Hands-free.** ✅ `[H25-H28]`
+For walking or dishes: the device reads the English, you say the Japanese aloud, it says it back in two voices. Weakest phrases first, ungraded, counts as listening time. *Why:* trying to recall before hearing makes this retrieval and not passive audio. It adds practice time that a screen can't reach.
+
+### Your own Japanese
+
+**H28. My phrases.** ✅ `[H25-H28]`
+Phrasebook → Mine: write what you want to say ("I work in IT"), hear the simplest natural Japanese, tap Keep, and it becomes normal review cards. Chat's "Other ways to say it" also gets a Keep button. *Why:* what's about your own life is what you'll actually say and what sticks (self-reference effect, Rogers et al. 1977). The Japanese is forced to kana, retrying once if the model slips into kanji or Latin letters.
+

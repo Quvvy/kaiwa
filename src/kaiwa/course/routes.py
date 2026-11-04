@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field
 from kaiwa import stt, tts
 from kaiwa.config import get_settings
 from kaiwa.course import ask, coach, hooks, kana_judge, placement, prerender, roleplay, sentences, state, stories
-from kaiwa.course import learner_log, missions
+from kaiwa.course import drills, learner_log, missions, my_phrases
 from kaiwa.course.kana import KANA_ROMAJI
 from kaiwa.course.speech_check import check_phrase, normalize, spot_differences
 from kaiwa.secrets_store import user_data_dir
@@ -433,6 +433,64 @@ def mission_done(body: MissionBody) -> dict[str, Any]:
         return {"mission": state.complete_mission(body.unit_id)}
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+class BestBody(BaseModel):
+    key: str = Field(pattern=r"^[a-z_]{1,24}$")
+    value: int = Field(ge=0, le=100_000)
+
+
+@router.post("/best")
+def best(body: BestBody) -> dict[str, Any]:
+    return state.record_best(body.key, body.value)
+
+
+@router.get("/drill/{kind}")
+def number_drill(kind: str, level: int = 1) -> dict[str, Any]:
+    if kind not in ("price", "time"):
+        raise HTTPException(status_code=404, detail="Unknown drill")
+    return {"items": drills.round_items(kind, max(1, min(3, level)))}
+
+
+class MineSuggestBody(BaseModel):
+    text: str = Field(min_length=1, max_length=160)
+
+
+class MineKeepBody(BaseModel):
+    jp: str = Field(min_length=1, max_length=my_phrases.MAX_LEN)
+    en: str = Field(default="", max_length=200)
+    note: str = Field(default="", max_length=200)
+
+
+@router.post("/mine/suggest")
+async def mine_suggest(body: MineSuggestBody) -> dict[str, Any]:
+    """How a beginner could say what the learner wants to say."""
+    settings = get_settings()
+    if not settings.deepseek_api_key:
+        raise HTTPException(status_code=400, detail="This needs your DeepSeek key (Settings → DeepSeek).")
+    known = await asyncio.to_thread(state.known_phrases_for_chat)
+    data = await asyncio.to_thread(my_phrases.suggest, settings, body.text, known)
+    if data is None:
+        raise HTTPException(status_code=502, detail="Couldn't work that out this time. Try again, or say it more simply.")
+    learner_log.log("mine_suggest", asked=body.text, jp=data["jp"], en=data["en"])
+    return data
+
+
+@router.post("/mine")
+def mine_keep(body: MineKeepBody) -> dict[str, Any]:
+    try:
+        row = state.keep_my_phrase(body.jp, body.en, body.note)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    learner_log.log("mine_keep", jp=row["jp"], en=row["en"])
+    return row
+
+
+@router.delete("/mine/{phrase_id}")
+def mine_remove(phrase_id: str) -> dict[str, Any]:
+    if not state.remove_my_phrase(phrase_id):
+        raise HTTPException(status_code=404, detail="Not in your phrases")
+    return {"ok": True}
 
 
 @router.post("/pace")

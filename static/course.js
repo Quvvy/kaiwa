@@ -394,6 +394,42 @@
     return { options: choicesFor(word.en, pool.map((w) => w.en)), answer: word.en };
   }
 
+  // Where you were in a lesson, so leaving and coming back doesn't start it over.
+  function spotIn(key) {
+    try {
+      const d = JSON.parse(readPref("kaiwa_spot", "{}"));
+      return d.key === key ? Number(d.at) || 0 : 0;
+    } catch (_) { return 0; }
+  }
+  function keepSpot(key, at) {
+    writePref("kaiwa_spot", JSON.stringify({ key, at }));
+  }
+  function clearSpot() {
+    writePref("kaiwa_spot", "{}");
+  }
+  /**
+   * Record a finished lesson step, then go on. A lost connection (a phone between
+   * networks, say) must not lose the lesson: it says so and offers to try again.
+   */
+  async function saveThen(path, body, then) {
+    try {
+      const out = await postJson(path, body);
+      clearSpot();
+      return then(out);
+    } catch (err) {
+      const again = () => saveThen(path, body, then);
+      frame({
+        title: "Couldn't save that",
+        body: el("div", { class: "card-body" },
+          el("p", { class: "verdict off", text: "Your lesson is done, but saving it failed. Check that Kaiwa can reach your PC, then try again." }),
+          el("p", { class: "status", text: String(err.message || err) })),
+        actions: [primaryButton("Try again", again)],
+        primary: again,
+      });
+      return undefined;
+    }
+  }
+
   /** Learner log: events only the page sees (the server logs answers itself). */
   function track(kind, data = {}) {
     postJson("/api/course/log", { kind, data }).catch(() => {});
@@ -731,7 +767,14 @@
                 runTalk,
                 "A short scene with a goal and a hint when you're stuck. The best place to start speaking."),
               practiceRow("Chat", goChat,
-                "Talk about anything, for as long as you like. Easy keeps it to what you've learned."))
+                "Talk about anything, for as long as you like. Easy keeps it to what you've learned."),
+              (today.words_pool || []).length + (today.phrases_pool || []).length >= SPEED_MIN
+                ? practiceRow(today.bests && today.bests.speed ? `Speed round (best ${today.bests.speed})` : "Speed round", runSpeed,
+                    "One minute, known words only: hear it, tap the meaning. Builds the speed real conversation needs.") : null,
+              today.drills && (today.drills.time || today.drills.price)
+                ? practiceRow("Numbers by ear", runNumbers, "Prices and times, at full speed. The thing everyone loses in real life.") : null,
+              (today.phrases_pool || []).length >= 6
+                ? practiceRow("Hands-free", runHandsFree, "Walking or doing dishes? It says the English, you say the Japanese out loud, it says it back.") : null)
           : null,
         el("div", { class: "home-links" },
           el("button", { type: "button", class: "secondary", onclick: runMap, "data-tip": "All 20 units, what each lets you do, and how far you are" }, "Course map"),
@@ -1195,9 +1238,14 @@
         "data-tip": `${GRADE_NAMES[g]} · ${fmtInterval(r.intervals[g])}`,
         onclick: () => changeGrade(g, bar),
       }, el("span", { class: "choice-key", text: String(g) }), GRADE_NAMES[g]));
+      // The chips stay out of the way: the grade is Kaiwa's job. 1-4 still change it.
+      const chipRow = el("span", { class: "grade-chips", "aria-label": "Change the grade", hidden: !current.changed }, chips);
+      const changeBtn = el("button", { type: "button", class: "grade-change", hidden: !!current.changed,
+        onclick: () => { chipRow.hidden = false; changeBtn.hidden = true; } }, "Change");
       bar.replaceChildren(...[
         el("span", { class: "grade-label", text: gradeLabel(r) }),
-        el("span", { class: "grade-chips", "aria-label": "Change the grade" }, chips),
+        changeBtn,
+        chipRow,
         r.auto_rating !== r.rating ? el("span", { class: "grade-note", text: `(Kaiwa picked ${GRADE_NAMES[r.auto_rating]})` }) : null,
       ].filter(Boolean));
       keys.grade = (g) => changeGrade(g, bar);
@@ -1268,7 +1316,7 @@
     const repeatTag = (card) => (card.repeat ? el("span", { class: "repeat-tag", text: card.repeat === 1 ? "2nd look" : "3rd look" }) : null);
 
     /** Multiple choice: answer, see the grade and when it's back, Enter to go on. */
-    function choiceCard(card, { big, bigJp, answer, options, audio, voice = {}, after, extra = null, fmt, askJp }) {
+    function choiceCard(card, { big, bigJp, answer, options, audio, voice = {}, audioLater = false, after, extra = null, fmt, askJp }) {
       const result = el("div", { class: "result" });
       const slot = el("div", { class: "grade-slot" });
       let helped = false;
@@ -1277,12 +1325,16 @@
       const body = el("div", { class: "card-body" },
         repeatTag(card),
         big ? el("p", { class: bigJp ? "kana-big" : "prompt-en", lang: bigJp ? "ja" : null, text: big }) : null,
-        audio ? playRow(audio, voice) : null,
+        audio && !audioLater ? playRow(audio, voice) : null,
         typeof extra === "function" ? extra(() => { helped = true; }) : extra,
         choiceBlock({
           options, answer,
           onAnswer: (correct, picked) => {
             if (after) result.replaceChildren(after(correct));
+            if (audioLater) {
+              result.append(playRow(audio, voice));
+              keys.replay = () => play(audio, voice);
+            }
             if (audio) play(audio, voice);
             answered(card, { correct, ms: elapsed(), helped, fmt, answer: String(picked) }, slot, nextBtn);
           },
@@ -1292,13 +1344,14 @@
       );
       frame({ title, ...counter(), body, actions: [nextBtn],
         ask: { screen: `${title.toLowerCase()} ${card.kind}`, jp: askJp || "", answer } });
-      if (audio) keys.replay = () => play(audio, voice);
+      if (audio && !audioLater) keys.replay = () => play(audio, voice);
     }
     function kanaChoice(card) {
       const k = card.kana;
       const known = today.kana_pool || [];
       const pool = known.filter((x) => x.ro !== k.ro).map((x) => x.ro);
-      choiceCard(card, { big: k.char, bigJp: true, answer: k.ro, audio: k.char, fmt: "kana:choice", askJp: k.char,
+      // Reading test: hearing it first would give the answer away.
+      choiceCard(card, { big: k.char, bigJp: true, answer: k.ro, audio: k.char, audioLater: true, fmt: "kana:choice", askJp: k.char,
         options: choicesFor(k.ro, pool, 4, alikeIn(k, known).map((x) => x.ro)),
         after: (right) => (right ? el("span") : kanaHelp(k, known)) });
     }
@@ -1995,12 +2048,14 @@
 
   // ---------- new phrases ----------
   function runLearn(unit) {
-    let i = 0;
+    const spot = `learn:${unit.id}`;
     const phrases = unit.phrases;
+    let i = Math.min(spotIn(spot), phrases.length - 1);
     prefetch(phrases.map((p) => [p.jp, {}]));
     const spoken = new Set();
 
     function show() {
+      keepSpot(spot, i);
       const p = phrases[i];
       const say = voiceCycler(p.jp);
       const result = el("div", { class: "result" });
@@ -2090,9 +2145,8 @@
       }
       ask();
     }
-    async function finish() {
-      await postJson("/api/course/step", { unit_id: unit.id, step: "learn" });
-      continuePlan();
+    function finish() {
+      return saveThen("/api/course/step", { unit_id: unit.id, step: "learn" }, continuePlan);
     }
     show();
   }
@@ -2104,10 +2158,7 @@
       dialogue: unit.dialogue,
       questions: unit.questions,
       doneLabel: "Continue",
-      onDone: async () => {
-        await postJson("/api/course/step", { unit_id: unit.id, step: "listen" });
-        continuePlan();
-      },
+      onDone: () => saveThen("/api/course/step", { unit_id: unit.id, step: "listen" }, continuePlan),
     });
   }
 
@@ -2153,6 +2204,8 @@
     let playing = false;
     let heard = 0;
     let peeked = false;
+    let slow = false;
+    const lineVoice = (line) => ({ ...voice(line), slow });
     let revealed = 0; // how many bubbles have arrived in the thread
     const answered = new Map();
     const linePlays = d.lines.map(() => 0);
@@ -2224,7 +2277,7 @@
       const since = Date.now();
       linePlays[idx] += 1;
       b.bubble.classList.add("speaking");
-      await play(d.lines[idx].jp, voice(d.lines[idx]));
+      await play(d.lines[idx].jp, lineVoice(d.lines[idx]));
       b.bubble.classList.remove("speaking");
       listened(since);
     }
@@ -2249,7 +2302,7 @@
           b.row.scrollIntoView({ block: "nearest" });
         }
         b.bubble.classList.add("speaking");
-        await play(d.lines[idx].jp, voice(d.lines[idx]));
+        await play(d.lines[idx].jp, lineVoice(d.lines[idx]));
         b.bubble.classList.remove("speaking");
         await wait(350);
       }
@@ -2268,8 +2321,13 @@
 
     const playBtn = el("button", { type: "button", onclick: playAll }, d.form === "story" ? "Play the story" : "Play the conversation", kbd("R"));
     const heardNote = el("span", { class: "heard-note" });
+    const slowBtn = el("button", { type: "button", class: "secondary", "aria-pressed": "false", "data-tip": "Everyone speaks slower. Real speed is the goal, but this helps you catch the shape of it first.",
+      onclick: () => { slow = !slow; slowBtn.setAttribute("aria-pressed", String(slow)); slowBtn.classList.toggle("pressed", slow); } }, "Slower");
 
     const doneBtn = primaryButton(doneLabel, finishListen, { disabled: true });
+    const shadowBtn = el("button", { type: "button", class: "secondary", hidden: true,
+      "data-tip": "Repeat each line right after hearing it. Good for rhythm and for catching words at speed.",
+      onclick: () => runShadow(d.lines, voice, finishListen) }, "Say it with them");
     const byEar = el("p", { class: "by-ear", hidden: true, text: "Caught by ear." });
     const questionsBox = el("div", { class: "questions", hidden: true },
       el("h3", { class: "questions-title", text: "Did you catch it?" }),
@@ -2291,6 +2349,7 @@
               again.hidden = right;
               if (answered.size === qs.length) {
                 doneBtn.disabled = false;
+                shadowBtn.hidden = false;
                 keys.primary = finishListen;
                 byEar.hidden = peeked || [...answered.values()].some((v) => !v);
               }
@@ -2306,14 +2365,55 @@
       ask: { screen: "listening", scene: d.scene, lines: d.lines.map((l) => `${l.who}: ${l.jp} (${l.en})`), questions: qs.map((q) => q.q) },
       body: el("div", { class: "card-body listen" },
         d.scene ? el("p", { class: "prompt", text: d.scene }) : null,
-        el("div", { class: "listen-bar" }, playBtn, heardNote),
+        el("div", { class: "listen-bar" }, playBtn, slowBtn, heardNote),
         thread,
         questionsBox,
       ),
-      actions: [doneBtn],
+      actions: [shadowBtn, doneBtn],
     });
     keys.replay = playAll;
     if (autoplay) playAll();
+  }
+
+  /** Shadowing: hear a line, say it straight back, see which sounds didn't come through. */
+  function runShadow(lines, voice, onDone) {
+    let i = 0;
+    track("shadow", { lines: lines.length });
+    function show() {
+      if (i >= lines.length) return onDone();
+      const line = lines[i];
+      const say = () => play(line.jp, voice(line));
+      const result = el("div", { class: "result" });
+      const next = () => { i += 1; show(); };
+      const hold = holdControl("Hold and say it back", async (blob, ext) => {
+        result.replaceChildren(el("p", { class: "pending", text: "Checking…" }));
+        try {
+          const r = await api("/api/course/check_text", { method: "POST", body: audioForm(blob, ext, { target: line.jp.slice(0, 80) }) });
+          result.replaceChildren(...[verdictLine(r.band), heardLine("Sounded like ", r.heard), diffLine(r.diff)].filter(Boolean));
+          if (r.band !== "good") say();
+        } catch (err) {
+          result.replaceChildren(el("p", { class: "verdict off", text: String(err.message || err) }));
+        }
+      }, showProblem(result));
+      frame({
+        title: "Say it with them", index: i, total: lines.length,
+        ask: { screen: "shadowing", jp: line.jp, en: line.en },
+        body: el("div", { class: "card-body" },
+          el("p", { class: "prompt", text: "Copy the rhythm, not just the words." }),
+          el("p", { class: "phrase-jp", lang: "ja", text: line.jp }),
+          el("p", { class: "phrase-en", text: line.en }),
+          playRow(line.jp, voice(line)),
+          hold, micRow(), result),
+        actions: [
+          el("button", { type: "button", class: "secondary", onclick: onDone }, "Finish now"),
+          primaryButton(i === lines.length - 1 ? "Finish" : "Next line", next)],
+        primary: next,
+        hold,
+      });
+      keys.replay = say;
+      say();
+    }
+    show();
   }
 
   // ---------- talk practice ----------
@@ -2522,9 +2622,11 @@
     prefetch([...items.map((k) => [k.char, {}]), ...lesson.words.map((w) => [w.jp, {}])]);
 
     // 1. Meet each character (a rules-only lesson goes straight to the note).
-    let i = 0;
+    const spot = `kana:${lesson.id}`;
+    let i = Math.min(spotIn(spot), Math.max(0, items.length - 1));
     function intro() {
       if (!items.length) return note();
+      keepSpot(spot, i);
       const k = items[i];
       const last = i === items.length - 1;
       const actions = [];
@@ -2652,8 +2754,10 @@
       ask();
     }
 
-    async function finish() {
-      await postJson("/api/course/kana", { lesson_id: lesson.id });
+    function finish() {
+      return saveThen("/api/course/kana", { lesson_id: lesson.id }, finished);
+    }
+    function finished() {
       const chars = items.map((k) => k.char).join(" ");
       frame({
         title: `${title}: ${lesson.title} done`,
@@ -2685,11 +2789,13 @@
     prefetch(words.map((w) => [w.jp, {}]));
     const batches = [];
     for (let i = 0; i < words.length; i += BATCH) batches.push(words.slice(i, i + BATCH));
-    let b = 0;
+    const spot = `words:${unit.id}:${seen}`;
+    let b = Math.min(spotIn(spot), Math.max(0, batches.length - 1));
     const heading = () => `Words, unit ${unit.number}`;
     const known = () => [...batches.slice(0, b + 1).flat(), ...(today.words_pool || []), ...unit.words];
 
     function intro() {
+      keepSpot(spot, b);
       const slice = batches[b];
       const go = () => quiz();
       const actions = [];
@@ -2749,9 +2855,8 @@
       return finish();
     }
 
-    async function finish() {
-      await postJson("/api/course/step", redo ? { unit_id: unit.id, step: "words" } : { unit_id: unit.id, step: "words", count });
-      continuePlan();
+    function finish() {
+      return saveThen("/api/course/step", redo ? { unit_id: unit.id, step: "words" } : { unit_id: unit.id, step: "words", count }, continuePlan);
     }
     intro();
   }
@@ -2760,10 +2865,12 @@
   function runGrammar(unit) {
     const points = unit.grammar;
     prefetch(points.flatMap((g) => g.examples.map((ex) => [ex.jp, {}])));
-    let gi = 0;
+    const spot = `grammar:${unit.id}`;
+    let gi = Math.min(spotIn(spot), points.length - 1);
 
     // 1. Each point: a short explanation and examples you can play.
     function explain() {
+      keepSpot(spot, gi);
       const g = points[gi];
       const last = gi === points.length - 1;
       const go = () => { if (last) drill(); else { gi += 1; explain(); } };
@@ -2886,8 +2993,10 @@
         }
         show();
       }
-      async function finish() {
-        await postJson("/api/course/step", { unit_id: unit.id, step: "grammar" });
+      function finish() {
+        return saveThen("/api/course/step", { unit_id: unit.id, step: "grammar" }, finished);
+      }
+      function finished() {
         const total = qs.length + Math.min((unit.build || []).length, new Set((unit.build || []).map((b) => b.point)).size * 2);
         frame({
           title: `Grammar, unit ${unit.number}`,
@@ -2905,11 +3014,13 @@
 
   // ---------- speak ----------
   function runSpeak(unit) {
-    let t = 0;
     const tasks = unit.speak;
+    const spot = `speak:${unit.id}`;
+    let t = Math.min(spotIn(spot), tasks.length - 1);
     prefetch(tasks.map((task) => [task.say, {}]));
 
     function show() {
+      keepSpot(spot, t);
       const task = tasks[t];
       const result = el("div", { class: "result" });
       const hint = el("div", { class: "hint", hidden: true },
@@ -2986,13 +3097,12 @@
       keys.replay = () => play(task.say);
       play(task.say);
     }
-    async function next() {
+    function next() {
       if (t < tasks.length - 1) {
         t += 1;
         return show();
       }
-      await postJson("/api/course/step", { unit_id: unit.id, step: "speak" });
-      done(unit);
+      return saveThen("/api/course/step", { unit_id: unit.id, step: "speak" }, () => done(unit));
     }
     show();
   }
@@ -3096,6 +3206,7 @@
     }
     let tab = "phrases";
     const list = el("div", { class: "book-list" });
+    const mineBox = minePanel(async () => { book = await api("/api/course/phrasebook"); tab = "mine"; draw(); }, today && today.has_tutor);
     const search = el("input", { type: "search", class: "book-search", placeholder: "Search in English, kana or romaji", "aria-label": "Search", oninput: draw });
     const tabs = el("div", { class: "book-tabs", role: "tablist" });
     const STRENGTH = { new: "New", growing: "Growing", strong: "Strong" };
@@ -3105,6 +3216,15 @@
         el("span", { class: "book-jp", lang: "ja", text: item.jp }),
         el("span", { class: "book-en" }, item.en, item.note ? el("span", { class: "book-note", text: item.note }) : null),
         el("span", { class: `book-strength ${item.strength}`, title: "How well you remember it", text: STRENGTH[item.strength] }));
+    }
+    function mineRow(item) {
+      const r = row(item);
+      r.append(el("button", { type: "button", class: "grade-change", "aria-label": `Remove ${item.jp}`, onclick: async () => {
+        await api(`/api/course/mine/${encodeURIComponent(item.id)}`, { method: "DELETE" }).catch(() => {});
+        book = await api("/api/course/phrasebook");
+        draw();
+      } }, "Remove"));
+      return r;
     }
     function grammarRow(g) {
       return el("details", { class: "book-grammar" },
@@ -3118,21 +3238,322 @@
     function draw() {
       const q = search.value.trim().toLowerCase();
       const hits = (it) => !q || [it.jp, it.en, it.ro, it.title, it.rule, it.note].some((v) => v && v.toLowerCase().includes(q));
-      const counts = { phrases: book.phrases.filter(hits).length, words: book.words.filter(hits).length, grammar: book.grammar.filter(hits).length };
-      tabs.replaceChildren(...["phrases", "words", "grammar"].map((t) => el("button", {
+      const counts = { mine: book.mine.filter(hits).length, phrases: book.phrases.filter(hits).length, words: book.words.filter(hits).length, grammar: book.grammar.filter(hits).length };
+      mineBox.hidden = tab !== "mine";
+      tabs.replaceChildren(...["phrases", "words", "grammar", "mine"].map((t) => el("button", {
         type: "button", role: "tab", "aria-selected": String(t === tab), class: "pace-chip" + (t === tab ? " on" : ""),
         onclick: () => { tab = t; draw(); } }, `${t[0].toUpperCase()}${t.slice(1)} (${counts[t]})`)));
       const items = book[tab].filter(hits);
       list.replaceChildren(...(items.length
-        ? items.map(tab === "grammar" ? grammarRow : row)
-        : [el("p", { class: "status", text: q ? "Nothing matches." : "Nothing here yet. It fills up as you learn." })]));
+        ? items.map(tab === "grammar" ? grammarRow : tab === "mine" ? mineRow : row)
+        : [el("p", { class: "status", text: q ? "Nothing matches." : tab === "mine" ? "Add the things you actually want to say: your job, your hobby, your dog's name." : "Nothing here yet. It fills up as you learn." })]));
     }
     draw();
     root.replaceChildren(el("div", { class: "home" },
       el("div", { class: "lesson-top" },
         el("button", { class: "secondary lesson-exit", type: "button", onclick: () => showHome() }, "Back"),
         el("h2", { class: "lesson-title", text: "Phrasebook" })),
-      search, tabs, list));
+      search, tabs, mineBox, list));
+  }
+
+  /** "How do I say…?": ask, hear it, keep it. Kept phrases become normal review cards. */
+  function minePanel(onKept, hasTutor) {
+    const out = el("div", { class: "result" });
+    const input = el("input", { type: "text", maxlength: "160", placeholder: "I work in IT. My dog is called Rex.", "aria-label": "What do you want to be able to say?" });
+    const form = el("form", { class: "typed", onsubmit: async (e) => {
+      e.preventDefault();
+      const text = input.value.trim();
+      if (!text) return;
+      out.replaceChildren(el("p", { class: "pending", text: "Working out how you'd say it…" }));
+      try {
+        const r = await postJson("/api/course/mine/suggest", { text });
+        const keep = el("button", { type: "button", onclick: async () => {
+          keep.disabled = true;
+          try {
+            await postJson("/api/course/mine", r);
+            input.value = "";
+            out.replaceChildren(el("p", { class: "verdict good", text: "Kept. It comes up in your next recap." }));
+            onKept();
+          } catch (err) {
+            keep.disabled = false;
+            out.append(el("p", { class: "verdict off", text: String(err.message || err) }));
+          }
+        } }, "Keep it");
+        out.replaceChildren(
+          el("p", { class: "phrase-jp", lang: "ja", text: r.jp }),
+          el("p", { class: "phrase-en", text: r.en }),
+          r.note ? el("p", { class: "phrase-note", text: r.note }) : "",
+          el("div", { class: "lesson-play" },
+            el("button", { class: "secondary", type: "button", onclick: () => play(r.jp) }, "Play"),
+            el("button", { class: "secondary", type: "button", onclick: () => play(r.jp, { slow: true }) }, "Slow"),
+            keep));
+        play(r.jp);
+      } catch (err) {
+        out.replaceChildren(el("p", { class: "verdict off", text: String(err.message || err) }));
+      }
+    } }, input, el("button", { class: "secondary", type: "submit" }, "How do I say it?"));
+    return el("div", { class: "mine-panel", hidden: true },
+      el("p", { class: "lesson-note", text: "What do you want to be able to say? Write it in English." }),
+      hasTutor ? form : el("p", { class: "status", text: "This needs your DeepSeek key (Settings → DeepSeek)." }),
+      out);
+  }
+
+  // ---------- fluency ----------
+  const SPEED_MIN = 12;
+  const SPEED_SECONDS = 60;
+  /**
+   * One minute of known words and phrases: hear it, tap the meaning, next, no pause.
+   * Fluency practice is known material under time pressure, so it never touches the
+   * review schedule, and a miss costs nothing but a moment.
+   */
+  async function runSpeed() {
+    track("drill", { kind: "speed" });
+    const pool = [...(today.words_pool || []), ...(today.phrases_pool || [])].filter((x) => x.jp && x.en);
+    const queue = shuffle(pool);
+    const meanings = pool.map((x) => x.en);
+    prefetch(queue.slice(0, 16).map((x) => [x.jp, {}]));
+    let score = 0;
+    let misses = 0;
+    let at = 0;
+    let endsAt = 0;
+    let ticker = 0;
+    const clock = el("span", { class: "speed-clock", text: String(SPEED_SECONDS) });
+    const tally = el("span", { class: "speed-score", text: "0" });
+    const stage = el("div", { class: "speed-stage" });
+
+    function ask() {
+      if (Date.now() >= endsAt) return end();
+      const item = queue[at % queue.length];
+      at += 1;
+      prefetch(queue.slice(at, at + 3).map((x) => [x.jp, {}]));
+      const here = onThisScreen();
+      const options = choicesFor(item.en, meanings);
+      const buttons = options.map((opt, i) => el("button", { class: "secondary choice", type: "button", onclick: () => pick(i) },
+        el("span", { class: "choice-key", text: String(i + 1) }), opt));
+      let answered = false;
+      async function pick(i) {
+        if (answered || i >= options.length) return;
+        answered = true;
+        const right = options[i] === item.en;
+        buttons[i].classList.add(right ? "right" : "wrong");
+        if (right) {
+          score += 1;
+          tally.textContent = String(score);
+        } else {
+          misses += 1;
+          buttons[options.indexOf(item.en)].classList.add("right");
+        }
+        await wait(right ? 180 : 700);
+        if (here()) ask();
+      }
+      stage.replaceChildren(
+        el("div", { class: "lesson-play" }, el("button", { class: "secondary", type: "button", onclick: () => play(item.jp) }, "Play again", kbd("R"))),
+        el("div", { class: "choice-block" }, el("div", { class: "choices" }, buttons)));
+      keys.choice = pick;
+      keys.replay = () => play(item.jp);
+      play(item.jp);
+    }
+    async function end() {
+      clearInterval(ticker);
+      stopAudio();
+      let result = { best: score, previous: 0 };
+      try { result = await postJson("/api/course/best", { key: "speed", value: score }); } catch (_) {}
+      const again = () => runSpeed();
+      frame({
+        title: "Speed round",
+        body: el("div", { class: "card-body" },
+          el("h3", { class: "end-title", text: `${score} in a minute` }),
+          el("p", { class: "prompt", text: score > result.previous && result.previous
+            ? `A new best, up from ${result.previous}.`
+            : result.previous ? `Your best is ${result.best}.` : "That's your score to beat." }),
+          misses ? el("p", { class: "status", text: `${misses} missed. These don't affect your reviews.` }) : null),
+        actions: [el("button", { type: "button", class: "secondary", onclick: showHome }, "Done"), primaryButton("Again", again)],
+        primary: again,
+      });
+    }
+    function begin() {
+      frame({ title: "Speed round",
+        body: el("div", { class: "card-body" }, el("div", { class: "speed-head" }, clock, tally), stage),
+        actions: [] });
+      endsAt = Date.now() + SPEED_SECONDS * 1000;
+      const here = onThisScreen();
+      ticker = setInterval(() => {
+        if (!here()) return clearInterval(ticker);
+        const left = Math.max(0, Math.ceil((endsAt - Date.now()) / 1000));
+        clock.textContent = String(left);
+        if (left <= 0) { clearInterval(ticker); end(); }
+      }, 250);
+      ask();
+    }
+    frame({
+      title: "Speed round",
+      body: el("div", { class: "card-body" },
+        el("h3", { class: "end-title", text: "One minute, by ear" }),
+        el("p", { class: "prompt", text: "Hear it, tap what it means. Number keys work too. Don't translate word by word; go with your first impression." }),
+        today.bests && today.bests.speed ? el("p", { class: "status", text: `Your best: ${today.bests.speed}` }) : null),
+      actions: [primaryButton("Go", begin)],
+      primary: begin,
+    });
+  }
+
+  /** Prices and times at full speed: hear it, type the number. Gets harder as you get them right. */
+  function runNumbers() {
+    track("drill", { kind: "numbers" });
+    const kinds = Object.entries(today.drills || {}).filter(([, on]) => on).map(([k]) => k);
+    const names = { price: "Prices", time: "Times" };
+    function pick() {
+      frame({
+        title: "Numbers by ear",
+        body: el("div", { class: "card-body" },
+          el("p", { class: "prompt", text: "Ten rounds. Listen and type what you hear. You can replay as often as you need." }),
+          el("div", { class: "lesson-play" }, kinds.map((k) => el("button", { type: "button", class: "secondary", onclick: () => start(k, levelOf(k)) }, names[k])))),
+        actions: [el("button", { type: "button", class: "secondary", onclick: showHome }, "Back")],
+      });
+    }
+    function levelOf(kind) {
+      return Number(readPref(`kaiwa_numbers_${kind}`, "1")) || 1;
+    }
+    async function start(kind, level) {
+      frame({ title: "Numbers by ear", body: el("p", { class: "pending", text: "Getting ready…" }) });
+      let items;
+      try { items = (await api(`/api/course/drill/${kind}?level=${level}`)).items; } catch (err) {
+        return frame({ title: "Numbers by ear", body: el("p", { class: "verdict off", text: String(err.message || err) }), actions: [primaryButton("Back", showHome)], primary: showHome });
+      }
+      prefetch(items.slice(0, 4).map((it) => [it.say, {}]));
+      let n = 0;
+      let right = 0;
+      function ask() {
+        if (n >= items.length) return end();
+        const it = items[n];
+        prefetch(items.slice(n + 1, n + 3).map((x) => [x.say, {}]));
+        const result = el("div", { class: "result" });
+        const nextBtn = primaryButton("Next", () => { n += 1; ask(); });
+        nextBtn.hidden = true;
+        const clean = (v) => v.replace(/[,，¥円\s]/g, "").replace(/[：.]/g, ":").replace(/^(\d{1,2})$/, kind === "time" ? "$1:00" : "$1").replace(/^0(\d):/, "$1:");
+        const input = el("input", { type: "text", class: "produce-input", inputmode: kind === "price" ? "numeric" : "text", autocomplete: "off",
+          placeholder: kind === "price" ? "How much? e.g. 300" : "What time? e.g. 4:30" });
+        const form = el("form", { class: "produce-form", onsubmit: (e) => {
+          e.preventDefault();
+          if (!input.value.trim() || input.disabled) return;
+          input.disabled = true;
+          const ok = clean(input.value.trim()) === it.answer;
+          if (ok) right += 1;
+          result.replaceChildren(
+            el("p", { class: "verdict " + (ok ? "good" : "off"), text: ok ? "Right." : `It was ${it.show}.` }),
+            el("p", { class: "phrase-jp", lang: "ja", text: it.say }));
+          play(it.say);
+          nextBtn.hidden = false;
+          keys.primary = () => nextBtn.click();
+        } }, input, el("button", { type: "submit", class: "secondary" }, "Check"));
+        frame({
+          title: `${names[kind]} by ear`, index: n, total: items.length,
+          ask: { screen: "numbers by ear", jp: it.say, en: it.show },
+          body: el("div", { class: "card-body" },
+            el("div", { class: "lesson-play" },
+              el("button", { type: "button", class: "secondary", onclick: () => play(it.say) }, "Play again", kbd("R")),
+              el("button", { type: "button", class: "secondary", onclick: () => play(it.say, { slow: true }) }, "Slow")),
+            form, result),
+          actions: [nextBtn],
+        });
+        keys.primary = null;
+        keys.replay = () => play(it.say);
+        play(it.say);
+        setTimeout(() => input.focus(), 0);
+      }
+      async function end() {
+        const moved = right >= 9 && level < 3;
+        if (moved) writePref(`kaiwa_numbers_${kind}`, String(level + 1));
+        await postJson("/api/course/best", { key: `numbers_${kind}`, value: right }).catch(() => {});
+        const again = () => start(kind, moved ? level + 1 : level);
+        frame({
+          title: "Numbers by ear",
+          body: el("div", { class: "card-body" },
+            el("h3", { class: "end-title", text: `${right} of ${items.length}` }),
+            el("p", { class: "prompt", text: moved ? "Bigger numbers next time." : right >= 7 ? "Nearly automatic. Numbers come from repetition more than from thinking." : "Numbers take a lot of hearing. A few rounds a week adds up fast." })),
+          actions: [el("button", { type: "button", class: "secondary", onclick: showHome }, "Done"), primaryButton("Again", again)],
+          primary: again,
+        });
+      }
+      ask();
+    }
+    kinds.length === 1 ? start(kinds[0], levelOf(kinds[0])) : pick();
+  }
+
+  /**
+   * Hands-free: the English, a pause to say the Japanese out loud, the Japanese twice in
+   * two voices. Saying it before hearing it is what makes this recall and not just
+   * listening. Ungraded; time counts as listening. English uses the device's own voice.
+   */
+  async function runHandsFree() {
+    track("drill", { kind: "handsfree" });
+    let book;
+    frame({ title: "Hands-free", body: el("p", { class: "pending", text: "Getting ready…" }) });
+    try { book = await api("/api/course/phrasebook"); } catch (err) {
+      return frame({ title: "Hands-free", body: el("p", { class: "verdict off", text: String(err.message || err) }), actions: [primaryButton("Back", showHome)], primary: showHome });
+    }
+    const rank = { new: 0, growing: 1, strong: 2 };
+    const items = [...book.phrases, ...book.mine].sort((a, b) => rank[a.strength] - rank[b.strength]);
+    const list = [...shuffle(items.slice(0, 30)), ...shuffle(items.slice(30))];
+    prefetch(list.slice(0, 6).map((p) => [p.jp, {}]));
+    const canSpeak = "speechSynthesis" in window;
+    let running = false;
+    let at = 0;
+    const en = el("p", { class: "prompt-en", text: "" });
+    const jp = el("p", { class: "phrase-jp", lang: "ja", hidden: true });
+    const status = el("p", { class: "status", text: "" });
+    const toggle = el("button", { type: "button", class: "lesson-primary", onclick: () => (running ? stop() : go()) }, "Start");
+    function sayEnglish(text) {
+      return new Promise((resolve) => {
+        if (!canSpeak) return resolve();
+        const u = new SpeechSynthesisUtterance(text.replace(/\(.*?\)/g, ""));
+        u.lang = "en-US";
+        u.onend = u.onerror = () => resolve();
+        window.speechSynthesis.cancel();
+        window.speechSynthesis.speak(u);
+      });
+    }
+    function stop() {
+      running = false;
+      toggle.textContent = "Resume";
+      if (canSpeak) window.speechSynthesis.cancel();
+      stopAudio();
+    }
+    async function go() {
+      running = true;
+      toggle.textContent = "Pause";
+      const here = onThisScreen();
+      const live = () => running && here();
+      while (live()) {
+        const p = list[at % list.length];
+        prefetch(list.slice(at + 1, at + 3).map((x) => [x.jp, {}]));
+        const since = Date.now();
+        jp.hidden = true;
+        en.textContent = p.en;
+        status.textContent = "Say it out loud…";
+        await sayEnglish(p.en);
+        await wait(Math.min(5000, 1800 + p.jp.length * 200));
+        if (!live()) break;
+        jp.textContent = p.jp;
+        jp.hidden = false;
+        status.textContent = "";
+        await play(p.jp, { voice: "a" });
+        await wait(600);
+        if (!live()) break;
+        await play(p.jp, { voice: "b" });
+        await wait(1000);
+        postJson("/api/course/listened", { seconds: (Date.now() - since) / 1000, scene: "" }).catch(() => {});
+        at += 1;
+      }
+    }
+    frame({
+      title: "Hands-free",
+      body: el("div", { class: "card-body" },
+        el("p", { class: "lesson-note", text: "It says the English. You say the Japanese out loud. Then it says it back, twice. Nothing is graded." }),
+        canSpeak ? null : el("p", { class: "status", text: "This device can't read English aloud, so watch the screen for the prompt." }),
+        en, jp, status,
+        el("div", { class: "home-actions" }, toggle)),
+      actions: [el("button", { type: "button", class: "secondary", onclick: () => { stop(); showHome(); } }, "End")],
+    });
   }
 
   // Settings → Level → Take the placement test: switch to Learn, then open the test

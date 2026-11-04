@@ -2059,6 +2059,27 @@
           const p = document.createElement("p");
           p.className = "leftovers-line";
           p.textContent = text;
+          // Worth keeping? It becomes a review card like any other phrase.
+          const keep = document.createElement("button");
+          keep.type = "button";
+          keep.className = "secondary leftovers-keep";
+          keep.textContent = "Keep";
+          keep.addEventListener("click", async () => {
+            keep.disabled = true;
+            keep.textContent = "Keeping…";
+            try {
+              const asked = await fetch("/api/course/mine/suggest", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) });
+              if (!asked.ok) throw new Error();
+              const row = await asked.json();
+              const kept = await fetch("/api/course/mine", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(row) });
+              if (!kept.ok) throw new Error();
+              keep.textContent = "Kept";
+            } catch (_) {
+              keep.disabled = false;
+              keep.textContent = "Keep";
+            }
+          });
+          p.append(" ", keep);
           leftoversBody.appendChild(p);
         });
       }

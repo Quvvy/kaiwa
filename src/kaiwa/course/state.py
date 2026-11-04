@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any
 
 from kaiwa import jsonio
-from kaiwa.course import build, grader, srs
+from kaiwa.course import build, drills, grader, my_phrases, srs
 from kaiwa.course.kana import KANA_LESSONS, KANA_ROMAJI, LESSON_BY_ID, lesson_chars
 from kaiwa.course.kana_hooks import alike, hook_for
 from kaiwa.course.missions import MISSIONS
@@ -33,7 +33,7 @@ SKILLS = ("listen", "speak")
 STEP_ORDER = ("learn", "words", "grammar", "listen", "speak")
 MAX_DAYS_KEPT = 400
 
-_PHRASES: dict[str, dict[str, Any]] = {}
+_PHRASES: dict[str, dict[str, Any]] = {}  # the course's, plus learners' own as profiles load
 _PHRASE_UNIT: dict[str, str] = {}
 _WORDS: dict[str, dict[str, Any]] = {}
 _WORD_UNIT: dict[str, str] = {}
@@ -50,6 +50,9 @@ for _unit in UNITS:
     for _w in _unit.get("words", []):
         _WORDS[_w["id"]] = dict(_w)
         _WORD_UNIT[_w["id"]] = _unit["id"]
+
+
+COURSE_PHRASES = sum(len(_u["phrases"]) for _u in UNITS)
 
 
 def state_path() -> Path:
@@ -91,7 +94,7 @@ def card_cost(kind: str, skill: str) -> int:
 def _empty() -> dict[str, Any]:
     return {"version": 2, "units": {}, "cards": {}, "days": [], "kana": {}, "questions": [], "reviewed": {}, "timing": {}, "log": [],
             "undo": [], "overrides": [], "daily": {}, "seq": 0, "grades": [], "grader": None,
-            "checks": {}, "listening": {"recent": [], "total_ms": 0}}
+            "checks": {}, "listening": {"recent": [], "total_ms": 0}, "bests": {}, "mine": []}
 
 
 def load_state(path: Path | None = None) -> dict[str, Any]:
@@ -118,6 +121,11 @@ def load_state(path: Path | None = None) -> dict[str, Any]:
         state["placement"] = raw["placement"]
     if raw.get("pace") in PACES:
         state["pace"] = raw["pace"]
+    if isinstance(raw.get("bests"), dict):
+        state["bests"] = {str(k): int(v) for k, v in raw["bests"].items() if str(v).isdigit()}
+    state["mine"] = my_phrases.clean_kept(raw.get("mine"))
+    for row in state["mine"]:
+        _PHRASES[row["id"]] = row
     if isinstance(raw.get("listening"), dict):
         lst = raw["listening"]
         state["listening"] = {"recent": [str(s) for s in lst.get("recent") or []][-LISTEN_RECENT_KEPT:],
@@ -1037,7 +1045,7 @@ def record_talk(*, path: Path | None = None) -> int:
 
 
 def stats(state: dict[str, Any]) -> dict[str, Any]:
-    learned = learned_phrase_ids(state)
+    learned = [p for p in learned_phrase_ids(state) if not p.startswith("my.")]
     strong = {
         cid.partition(":")[0]
         for cid, card in state["cards"].items()
@@ -1047,7 +1055,7 @@ def stats(state: dict[str, Any]) -> dict[str, Any]:
     return {
         "phrases_learned": len(learned),
         "phrases_strong": len([p for p in learned if p in strong]),
-        "phrases_total": len(_PHRASES),
+        "phrases_total": COURSE_PHRASES,
         "words_learned": len(words),
         "units_done": sum(1 for u in UNITS if unit_done(state, u)),
         "units_total": len(UNITS),
@@ -1141,6 +1149,8 @@ def today_payload(*, path: Path | None = None) -> dict[str, Any]:
         "placement_checks": placement_checks(state),
         "unit_titles": [u["title"] for u in UNITS],
         "away": days_away(state) if today not in state["days"] else 0,
+        "drills": drills.available(state["units"]),
+        "bests": state["bests"],
         "day": day_summary(state),
         "milestones": milestones(state),
         "paces": {k: {"label": v["label"], "minutes": v["minutes"]} for k, v in PACES.items()},
@@ -1493,7 +1503,55 @@ def phrasebook(*, path: Path | None = None) -> dict[str, Any]:
             for g in unit.get("grammar", []):
                 grammar.append({"title": g["title"], "rule": g.get("rule", ""), "explain": g["explain"],
                                 "examples": g["examples"], "unit": unit["title"]})
-    return {"phrases": phrases, "words": words, "grammar": grammar}
+    mine = [{**row, "strength": strength_of(min((c for c in (state["cards"].get(f"{row['id']}:{s}") for s in SKILLS) if c), key=srs.stability, default=None))}
+            for row in state["mine"]]
+    return {"phrases": phrases, "words": words, "grammar": grammar, "mine": mine}
+
+
+def keep_my_phrase(jp: str, en: str, note: str = "", *, path: Path | None = None) -> dict[str, Any]:
+    """Add the learner's own phrase; it's taught through the day's recap like anything new."""
+    jp = jp.strip()
+    row = {"id": my_phrases.phrase_id(jp), "jp": jp, "en": en.strip(), "note": note.strip(), "ro": my_phrases.romaji(jp)}
+
+    def apply(state: dict[str, Any]) -> dict[str, Any]:
+        if len(state["mine"]) >= my_phrases.MAX_KEPT:
+            raise ValueError("Your phrase list is full. Remove one first.")
+        if not any(r["id"] == row["id"] for r in state["mine"]):
+            state["mine"].append(row)
+            _PHRASES[row["id"]] = row
+            before = len(state["cards"])
+            for skill in SKILLS:
+                state["cards"].setdefault(f"{row['id']}:{skill}", _new_card())
+            _mark_day(state)
+            _count_new(state, before)
+        return row
+
+    return _with_state(apply, path)
+
+
+def remove_my_phrase(phrase_id: str, *, path: Path | None = None) -> bool:
+    def apply(state: dict[str, Any]) -> bool:
+        kept = [r for r in state["mine"] if r["id"] != phrase_id]
+        if len(kept) == len(state["mine"]):
+            return False
+        state["mine"] = kept
+        for skill in SKILLS:
+            state["cards"].pop(f"{phrase_id}:{skill}", None)
+        return True
+
+    return _with_state(apply, path)
+
+
+def record_best(key: str, value: int, *, path: Path | None = None) -> dict[str, int]:
+    """A drill's score; returns the best so far and whether this beat it."""
+
+    def apply(state: dict[str, Any]) -> dict[str, int]:
+        old = int(state["bests"].get(key) or 0)
+        state["bests"][key] = max(old, value)
+        _mark_day(state)
+        return {"best": state["bests"][key], "previous": old}
+
+    return _with_state(apply, path)
 
 
 def complete_mission(unit_id: str, *, path: Path | None = None) -> str:

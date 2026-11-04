@@ -31,7 +31,7 @@ MISTAKE_TYPES = ("particle", "verb_form", "word_choice", "politeness", "word_ord
                  "missing_word", "pronunciation", "english", "off_topic", "other")
 
 # Events the page may send itself (everything else is logged by the server where it happens).
-CLIENT_KINDS = frozenset({"open", "listen", "talk_end", "talk_hint", "hint", "skip", "lesson_step"})
+CLIENT_KINDS = frozenset({"open", "listen", "talk_end", "talk_hint", "hint", "skip", "lesson_step", "shadow", "drill"})
 
 _lock = threading.Lock()
 _last: dict[str, tuple[float, int]] = {}  # log path → (time of last event, session number)
