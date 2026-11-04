@@ -2226,3 +2226,11 @@ button.secondary.pressed {
   font-size: 15.5px;
   text-align: right;
 }
+
+.home-first {
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-bottom: 12px;
+}

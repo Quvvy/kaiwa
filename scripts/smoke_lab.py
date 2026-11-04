@@ -68,7 +68,7 @@ def pacing_plans() -> None:
     state = cs._empty()
     p = cs.plan_today(state)
     _check(p["plan"][0] == "kana" and "learn" in p["plan"] and p["plan"][-1] == "recap", "day one has kana, phrases and a recap")
-    _check(p["minutes"] >= 1, "the plan says how long today takes")
+    _check(p["minutes"] >= 8, "the plan says how long today takes, the first day's extra included")
     relaxed = {**cs._empty(), "pace": "relaxed"}
     pr = cs.plan_today(relaxed)
     intense = {**cs._empty(), "pace": "intensive"}

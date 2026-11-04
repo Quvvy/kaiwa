@@ -1,7 +1,43 @@
 # HAM LOG
 
-Everything built on the `study-lab` branch during the 8-hour push, one entry per change.
-Newest entries go at the bottom of each section's list; the numbers are stable IDs.
+Everything built on the `study-lab` branch, one entry per change.
+
+## Start here
+
+**To try it** (uses a throwaway profile, so your real progress is safe):
+
+```bash
+git switch study-lab
+```
+
+```bash
+KAIWA_DATA_DIR=/tmp/kaiwa-try .venv/bin/python -m kaiwa.app
+```
+
+**The ten that matter most, if you only look at some:**
+
+| # | What | Why it matters |
+|---|------|----------------|
+| H12 | Grammar comes back as sentences you build | Grammar was taught once and never reviewed |
+| H16 | A real mission at the end of each unit | Where the course turns into actually using Japanese |
+| H03/H49 | Honest daily pace | "15 minutes" was really 19-27 |
+| H06-H09 | Hints, typing, seeing which sounds you missed | Failing a card now teaches you something |
+| H14/H15 | Course map and phrasebook | You could never go back to anything before |
+| H28/H43 | Your own phrases, and keeping corrections | Learn what you actually want to say |
+| H25-H27 | Speed round, numbers by ear, hands-free | Fluency practice was missing entirely |
+| H45/H46 | Free recall, take a part | Recall from memory and real turn-taking |
+| H17/H18 | End-of-day screen, a streak that forgives | How the day ends, and surviving a missed day |
+| H10 | Words understood by ear | The cards were testing reading, not listening |
+
+**Decisions I'd like from you:**
+1. **Default pace** (H49): is Regular at ~6 months right, or should it be faster?
+2. **Recall target 87%** (H05): fewer reviews, slightly more misses.
+3. **Is Chat's nudge OK?** (H29): it steers questions, with nothing on screen.
+4. **Read the hand-written content:** kana hooks, missions, culture notes, word packs.
+
+**What I couldn't test:** real speech. The browser here has no microphone, so everything marked 🎤 had its logic tested, but never with a real voice. Nothing has been tried on real learners either. Please try H24, H45 and H46 out loud first.
+
+The numbers are stable IDs.
 
 **How to read an entry:** what you'd notice, why it should work, how sure I am, and the commit.
 
@@ -18,6 +54,8 @@ Newest entries go at the bottom of each section's list; the numbers are stable I
 - **Not pushed.** The branch is local only.
 - **Each entry is its own commit** (the ID is in the commit subject, e.g. `[H12]`), so changes can be cherry-picked. Later entries may depend on earlier ones; dependencies are listed in the entry.
 - **Tests:** `scripts/smoke_lab.py` covers this branch's logic with no network. Existing `scripts/smoke_course.py`, `smoke_learn.py` and `smoke_state_files.py` must keep passing. `scripts/sim_pacing.py` simulates a learner through the real scheduler.
+- **Suggested order:** H01-H02 and the small fixes first (low risk, little coupling), then H03-H05 with H35 and H49 as one unit (pacing), then H12-H13 (grammar), H14-H19, and the rest. `state.py` and `course.js` are touched by nearly everything, so cherry-picking out of order will conflict; applying in order and dropping what you don't want is easier.
+- **Migration:** existing `course_state.json` loads unchanged. New keys are `pace`, `bests`, `mine`, `comeback` and per-day `new`/`lesson_min`; finished grammar backfills cards on load. `PROMPT_REVISION` is 11.
 - **Review for:** whether it fits Kaiwa's rule ("does this help them understand or speak?"), migration of existing `course_state.json`, and anything marked 🎤 or 🧪.
 
 ---
@@ -236,4 +274,7 @@ Finishing all 20 units now tells you what you can really do and what keeps it al
 **H49. Honest pace numbers, measured while lessons last.** ✅ 🧪 `[H49]`
 My first labels (~12/~17/~25) came from averages that included quiet weeks after the course ended. Measured only while lessons are still coming, Regular was really 20-26 minutes, so I cut its lesson budget and relabelled every pace with minutes and months. The very first day gets a little extra so it includes real phrases and not only five vowels.
 **Open question for you:** the simulator says Intensive costs only about 4 more minutes a day than Regular and finishes in about a quarter of the time (47 vs 171 days). That looks too good, and the likely reason is that the simulator doesn't model overload: 100+ new items a week is assumed to stick as well as 40 do. I left Regular as the default for that reason, but it is a judgment call, and it's the setting real use could settle fastest. The old fixed plan was close to Intensive.
+
+**H50. New learners pick a pace and a time up front.** ✅ `[H50]`
+The first home screen asks how much time you want to give this, with honest minutes and months, and when you'll study. After that, both move under Options. *Why:* a choice you made yourself is easier to stick to, and the pace is a promise worth seeing before you start. Also fixes Start's time estimate on day one.
 

@@ -840,6 +840,7 @@ def plan_today(state: dict[str, Any]) -> dict[str, Any]:
     started = spent > 0
     if not state["days"]:
         minutes_left += FIRST_DAY_EXTRA  # the very first day gets a real phrase, not only five vowels
+    minutes_budget = minutes_left
     row = state["units"].get(unit["id"], {}) if unit else {}
     steps = unit_steps(unit) if unit else []
     day_one = [s for s in steps if s in DAY_ONE_STEPS and not row.get(s)]
@@ -899,7 +900,7 @@ def plan_today(state: dict[str, Any]) -> dict[str, Any]:
     if planned or recap_cards(state):
         # After the new material: a second look at today's new and missed cards.
         plan.append("recap")
-    used = pace["lesson_minutes"] * share - spent - minutes_left
+    used = minutes_budget - minutes_left
     return {"plan": plan, "catching_up": False, "day_two_tomorrow": day_two_tomorrow, "words_today": words_today,
             "pace": _pace_name(state), "slipping": slipping, "minutes": _day_minutes(reviews, state, used)}
 

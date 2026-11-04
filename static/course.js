@@ -782,6 +782,11 @@
               el("button", { type: "button", class: "link-button", onclick: runMap }, "course map"), ".")
           : null,
         fresh ? el("p", { class: "home-note", text: "Each day: a little new, a little review, and everything out loud. Mistakes are part of how it works; they're what tells Kaiwa what to bring back." }) : null,
+        fresh ? el("div", { class: "home-first" },
+          el("p", { class: "can-do-label", text: "How much time do you want to give this? You can change it any time." }),
+          paceRow(),
+          el("p", { class: "can-do-label", text: "And when? People who pick a time are more likely to keep it up." }),
+          reminderRow()) : null,
         weekRow(s),
         el("div", { class: "home-bar", role: "progressbar", "aria-label": "Phrases learned", "aria-valuenow": String(pct), "aria-valuemin": "0", "aria-valuemax": "100" },
           el("span", { style: `width:${pct}%` })),
@@ -830,11 +835,11 @@
             "data-tip": "Retention, what's coming up, your cards, and how scheduling works" }, "Stats") : null),
         el("details", { class: "home-options" },
           el("summary", {}, "Options"),
-          paceRow(),
+          fresh ? null : paceRow(),
           el("label", { class: "home-romaji" },
             el("input", { type: "checkbox", checked: showRomaji, onchange: (e) => { showRomaji = e.target.checked; writePref("kaiwa_course_romaji", showRomaji ? "1" : "0"); } }),
             " Show romaji for kana you haven't learned"),
-          reminderRow(),
+          fresh ? null : reminderRow(),
           unit && !unit.reopenedNote && !Object.values(today.unit_steps || {}).some((v) => v === true)
             ? skipUnitButton(unit)
             : null),
