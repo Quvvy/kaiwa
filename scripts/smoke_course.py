@@ -155,7 +155,7 @@ def spaced_review() -> None:
         _check(not any(pairs), "a phrase's two sides are never back to back")
         todays = course_state.todays_reviews(st)
         cost = sum(course_state.card_cost(c["kind"], c["skill"]) for c in todays)
-        _check(0 < cost <= course_state.DAILY_REVIEW_BUDGET, "today's reviews fit the daily budget")
+        _check(0 < cost <= course_state.PACES[course_state.DEFAULT_PACE]["reviews"], "today's reviews fit the daily budget")
         _check(len(todays) < len(course_state.due_cards(st, limit=100)), "the rest of the backlog waits")
         course_state.grade("kana.あ:read", correct=True, ms=2000, path=path)
         course_state.grade("u1.ohayou:listen", correct=True, ms=2000, path=path)
@@ -484,7 +484,7 @@ def leeches_and_retention() -> None:
         st["log"] = [{"d": today, "k": "word", "ok": i % 10 != 0} for i in range(30)] + [{"d": "2000-01-01", "k": "word", "ok": False}] * 50
         r = course_state.retention(st)
         _check(r is not None and r["percent"] == 90 and r["reviews"] == 30, "retention: 27 of 30 recent reviews = 90% (old ones ignored)")
-        _check(r["by_kind"].get("words") == 90 and r["target"] == 90 and r["leeches"] == 1, "per-kind figures, the target, and the leech count")
+        _check(r["by_kind"].get("words") == 90 and r["target"] == 87 and r["leeches"] == 1, "per-kind figures, the target, and the leech count")
         # Learning-step answers don't count toward retention.
         before = len(course_state.load_state(path)["log"])
         course_state.grade("u1w.hiru:mean", correct=False, path=path)  # still a new card
@@ -727,7 +727,7 @@ def pacing() -> None:
 
             day[0] = real_today() + timedelta(days=1)
             p2 = plan(path)["plan"]
-            _check(p2 == ["kana", "grammar", "listen", "speak", "recap"], "day 2: kana, day two, then the recap")
+            _check(p2 == ["grammar", "listen", "speak", "recap"], "day 2: kana rested yesterday's turn, day two fills the lesson time")
             for s in ("grammar", "listen", "speak"):
                 course_state.complete_step("u1", s, path=path)
             for lid in ("h2", "h3", "h4", "h5", "h6", "h7", "h8", "h9", "h10"):
@@ -741,7 +741,7 @@ def pacing() -> None:
                 st["cards"][cid] = srs.from_legacy({"box": 3, "due": "2099-01-01", "reps": 2})
             course_state.save_state(st, path)
             p3 = plan(path)["plan"]
-            _check(p3 in (["kana", "recap"], ["learn", "words", "recap"]), "a long kana lesson and a unit's day one alternate")
+            _check(p3[0] == "kana" and "learn" not in p3 or p3[0] == "learn" and "kana" not in p3, "a long kana lesson and a unit's day one alternate")
 
             st = course_state.load_state(path)
             for cid in list(st["cards"]):
@@ -750,7 +750,8 @@ def pacing() -> None:
             p4 = plan(path)
             _check(p4["catching_up"] and p4["plan"] == ["review"], "a big backlog means a reviews-only day")
             cost = sum(course_state.card_cost(c["kind"], c["skill"]) for c in course_state.todays_reviews(course_state.load_state(path)))
-            _check(course_state.DAILY_REVIEW_BUDGET < cost <= course_state.DAILY_REVIEW_BUDGET * 2, "catch-up days get a bigger review budget")
+            budget = course_state.PACES[course_state.DEFAULT_PACE]["reviews"]
+            _check(budget < cost <= budget * 2, "catch-up days get a bigger review budget")
     finally:
         course_state._today = real_today
 

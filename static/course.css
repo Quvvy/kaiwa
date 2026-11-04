@@ -1637,3 +1637,40 @@ body:not([data-mode="learn"]) .ask-dock {
   font-size: 14px;
   margin-top: 2px;
 }
+
+/* ---------- daily pace ---------- */
+.pace-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.pace-label {
+  color: var(--ink-2);
+  font-size: 14px;
+  margin-right: 6px;
+}
+
+.pace-chip {
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--ink-2);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13.5px;
+  padding: 4px 11px;
+}
+
+.pace-chip.on {
+  border-color: var(--accent, var(--ink));
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.pace-minutes {
+  color: var(--ink-3);
+  font-weight: 400;
+}

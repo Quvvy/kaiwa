@@ -6,7 +6,7 @@ Card kinds (id = "<item>:<skill>"):
   kana    "kana.あ:read"                  see the character → pick its sound
 
 Scheduling is FSRS (see srs.py): each card's memory is modelled and the next
-review lands where recall is ~90%. Grades come from how the learner answered,
+review lands where recall is ~87%. Grades come from how the learner answered,
 never from buttons. New and missed cards take short learning steps first; the
 day's Recap step gives them their second look.
 
@@ -51,7 +51,7 @@ def state_path() -> Path:
 
 
 def _today() -> date:
-    return date.today()
+    return srs.study_day(srs._now())
 
 
 MAX_QUESTIONS_KEPT = 200
@@ -69,11 +69,10 @@ DAILY_KEPT = 400
 RETENTION_DAYS = 30
 RETENTION_MIN_REVIEWS = 20
 
-# Daily review budget, in rough "seconds/3" units: a kana or word card takes a
-# few seconds, hearing a phrase a little longer, saying one longest. 30 ≈ five
-# minutes. Due cards beyond it wait for later days instead of piling up, so a
+# Daily review budget (see PACES), in rough "seconds/3" units: a kana or word card
+# takes a few seconds, hearing a phrase a little longer, saying one longest. 30 ≈
+# five minutes. Due cards beyond it wait for later days instead of piling up, so a
 # missed week never turns into a wall of reviews.
-DAILY_REVIEW_BUDGET = 30
 CARD_COST = {"kana": 1, "word": 1, "listen": 2, "speak": 3}
 
 
@@ -109,6 +108,8 @@ def load_state(path: Path | None = None) -> dict[str, Any]:
         state["grader"] = raw["grader"]
     if isinstance(raw.get("placement"), dict):
         state["placement"] = raw["placement"]
+    if raw.get("pace") in PACES:
+        state["pace"] = raw["pace"]
     if isinstance(raw.get("listening"), dict):
         lst = raw["listening"]
         state["listening"] = {"recent": [str(s) for s in lst.get("recent") or []][-LISTEN_RECENT_KEPT:],
@@ -206,8 +207,12 @@ def unit_done(state: dict[str, Any], unit: dict[str, Any]) -> bool:
     return all(row.get(s) for s in unit_steps(unit))
 
 
-def complete_step(unit_id: str, step: str, *, path: Path | None = None) -> dict[str, Any]:
-    """Record a finished lesson step. `learn` and `words` schedule their cards."""
+def complete_step(unit_id: str, step: str, *, count: int | None = None, path: Path | None = None) -> dict[str, Any]:
+    """Record a finished lesson step. `learn` and `words` schedule their cards.
+
+    `count` is how many of the unit's next words were taught, when they're split
+    across days; the words step finishes once all of them have been.
+    """
     unit = unit_by_id(unit_id)
     if unit is None:
         raise KeyError(f"unknown unit: {unit_id}")
@@ -216,15 +221,21 @@ def complete_step(unit_id: str, step: str, *, path: Path | None = None) -> dict[
 
     def apply(state: dict[str, Any]) -> dict[str, Any]:
         row = state["units"].setdefault(unit_id, {})
-        row[step] = True
         row[f"{step}_on"] = _today().isoformat()  # day-two steps wait until after this day
+        if step != "words":
+            row[step] = True
         if step == "learn":
             for p in unit["phrases"]:
                 for skill in SKILLS:
                     state["cards"].setdefault(f"{p['id']}:{skill}", _new_card())
         if step == "words":
-            for w in unit.get("words", []):
+            words = unit.get("words", [])
+            seen = int(row.get("words_seen") or 0)
+            upto = len(words) if count is None else min(len(words), seen + max(0, count))
+            for w in words[seen:upto]:
                 state["cards"].setdefault(f"{w['id']}:mean", _new_card())
+            row["words_seen"] = upto
+            row["words"] = upto >= len(words)
         if unit_done(state, unit):
             row.setdefault("done_at", datetime.now(timezone.utc).isoformat())
         _mark_day(state)
@@ -483,7 +494,7 @@ def card_item(card_id: str) -> dict[str, Any] | None:
 def retention(state: dict[str, Any], *, days: int = RETENTION_DAYS) -> dict[str, Any] | None:
     """Share of real reviews (learned cards) still remembered, overall and by kind.
 
-    None until there are enough reviews to mean something. FSRS aims for 90%.
+    None until there are enough reviews to mean something. FSRS aims for 87%.
     """
     since = (_today() - timedelta(days=days)).isoformat()
     rows = [r for r in state["log"] if str(r.get("d")) >= since]
@@ -516,10 +527,17 @@ def _card_row(card_id: str, kind: tuple[str, str, str], card: dict[str, Any]) ->
     }
 
 
+def _answered_today(card: dict[str, Any]) -> bool:
+    last = str(card.get("last") or "")
+    return bool(last) and srs.study_day(datetime.fromisoformat(last)).isoformat() == _today().isoformat()
+
+
 def due_cards(state: dict[str, Any], *, limit: int = 20, budget: int | None = None) -> list[dict[str, Any]]:
     """Due cards, most-forgotten first (lowest box, then oldest), within `budget` if given.
 
-    A phrase's two sides are never back to back.
+    A phrase's two sides are never back to back. In today's share (`budget` given) a
+    phrase comes up on one side per day: hearing おはよう gives away how to say it, so
+    the other side waits for a day when it's a real test.
     """
     today = _today().isoformat()
     rows = []
@@ -543,14 +561,24 @@ def due_cards(state: dict[str, Any], *, limit: int = 20, budget: int | None = No
         rows = mixed
     picked = []
     left = budget
+    sides_taken: set[str] = set()
+    if budget is not None:
+        for card_id, card in state["cards"].items():
+            kind = _card_kind(card_id)
+            if kind and kind[0] == "phrase" and _answered_today(card):
+                sides_taken.add(kind[1])
     for row in rows:
         if len(picked) >= limit:
             break
+        if budget is not None and row[3][0] == "phrase" and row[3][1] in sides_taken:
+            continue
         if left is not None:
             cost = card_cost(row[3][0], row[3][2])
             if cost > left:
                 continue
             left -= cost
+        if row[3][0] == "phrase":
+            sides_taken.add(row[3][1])
         picked.append(row)
     ordered: list[tuple] = []
     pending = list(picked)
@@ -577,14 +605,45 @@ def recap_cards(state: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 # ---------- pacing ----------
-# New review cards a day can add. A unit's day one is 22-26 (6 phrases, 16-20
-# words) and day two adds none, so this averages ~16 a day. Kana lessons of up
-# to 6-10 characters fit beside a day one; longer ones alternate with units.
-NEW_ITEMS_PER_DAY = 32
+# How much a day holds, set by the learner. Reviews come first and get their own
+# budget (rough "seconds/3" units, see CARD_COST); lessons then fill `lesson_minutes`.
+# `minutes` is what scripts/sim_pacing.py measures an average day at, so it's what
+# the pace promises. The old fixed plan said 15 and ran 19-27 for most of the course.
+PACES: dict[str, dict[str, Any]] = {
+    "relaxed": {"label": "Relaxed", "minutes": 12, "lesson_minutes": 6, "reviews": 20, "new_items": 14},
+    "regular": {"label": "Regular", "minutes": 17, "lesson_minutes": 11, "reviews": 30, "new_items": 24},
+    "intensive": {"label": "Intensive", "minutes": 25, "lesson_minutes": 24, "reviews": 50, "new_items": 50},
+}
+DEFAULT_PACE = "regular"
 # When the due backlog is worth more than two days of reviews, that day is a
 # catch-up day: no new material is planned, and the review budget doubles.
-CATCH_UP_COST = DAILY_REVIEW_BUDGET * 2
+CATCH_UP_DAYS = 2
 DAY_ONE_STEPS = ("learn", "words")
+# Below this share remembered, new material halves until recall recovers: piling
+# more on top of what's slipping only makes both worse.
+SLOW_DOWN_BELOW = 80
+SLOW_DOWN_DAYS = 14
+SLOW_DOWN_MIN_REVIEWS = 30
+MIN_WORD_BATCH = 5
+# Rough minutes a lesson step takes, including its share of the same-day recap.
+WORD_MINUTES = 0.3
+STEP_MINUTES = {"grammar": 4.0, "listen": 3.5, "speak": 3.5}
+REVIEW_SECONDS = {"kana": 4, "word": 5, "listen": 8, "speak": 12}
+
+
+def pace_of(state: dict[str, Any]) -> dict[str, Any]:
+    return PACES.get(str(state.get("pace") or ""), PACES[DEFAULT_PACE])
+
+
+def set_pace(pace: str, *, path: Path | None = None) -> str:
+    if pace not in PACES:
+        raise ValueError(f"unknown pace: {pace}")
+
+    def apply(state: dict[str, Any]) -> str:
+        state["pace"] = pace
+        return pace
+
+    return _with_state(apply, path)
 
 
 def due_cost(state: dict[str, Any]) -> int:
@@ -592,73 +651,147 @@ def due_cost(state: dict[str, Any]) -> int:
 
 
 def catching_up(state: dict[str, Any]) -> bool:
-    return due_cost(state) > CATCH_UP_COST
+    return due_cost(state) > pace_of(state)["reviews"] * CATCH_UP_DAYS
 
 
 def todays_reviews(state: dict[str, Any]) -> list[dict[str, Any]]:
     """Today's share of due cards: what fits in the budget left after today's reviews."""
     spent = state["reviewed"].get(_today().isoformat(), 0)
-    budget = DAILY_REVIEW_BUDGET * (2 if catching_up(state) else 1)
+    budget = pace_of(state)["reviews"] * (2 if catching_up(state) else 1)
     return due_cards(state, limit=80, budget=max(0, budget - spent))
 
 
-def _new_items(unit: dict[str, Any], step: str) -> int:
-    return {"learn": len(unit["phrases"]), "words": len(unit.get("words", []))}.get(step, 0)
+def recall_slipping(state: dict[str, Any]) -> int | None:
+    """Recent recall as a percent when it's low enough to slow new material, else None."""
+    since = (_today() - timedelta(days=SLOW_DOWN_DAYS)).isoformat()
+    rows = [r for r in state["log"] if str(r.get("d")) >= since]
+    if len(rows) < SLOW_DOWN_MIN_REVIEWS:
+        return None
+    percent = round(100 * sum(1 for r in rows if r.get("ok")) / len(rows))
+    return percent if percent < SLOW_DOWN_BELOW else None
+
+
+def _words_left(unit: dict[str, Any], row: dict[str, Any]) -> int:
+    return 0 if row.get("words") else max(0, len(unit.get("words", [])) - int(row.get("words_seen") or 0))
+
+
+def _kana_minutes(lesson: dict[str, Any]) -> float:
+    return 0.5 * len(lesson["kana"]) + 1 if lesson["kana"] else 2.0
+
+
+def _step_minutes(step: str, unit: dict[str, Any]) -> float:
+    if step == "learn":
+        return 0.9 * len(unit["phrases"])
+    return STEP_MINUTES.get(step, 3.0)
+
+
+def _review_minutes(cards: list[dict[str, Any]]) -> float:
+    return sum(REVIEW_SECONDS.get(c["skill"] if c["kind"] == "phrase" else c["kind"], 8) for c in cards) / 60
 
 
 def plan_today(state: dict[str, Any]) -> dict[str, Any]:
     """Which steps today's lesson should run, in order, and why some are held back.
 
-    Rules: reviews first; a unit's day-one steps (phrases, words) and day-two
-    steps (grammar, listening, speaking) fall on different days; new items stay
-    under NEW_ITEMS_PER_DAY, alternating with the kana lesson when both don't fit;
-    on a catch-up day only reviews are planned. Nothing here locks anything: the
-    home screen can still open any step.
+    Rules: reviews first; a unit's day-one steps (phrases, words) and day-two steps
+    (grammar, listening, speaking) fall on different days, with sleep in between;
+    lessons fill the pace's minutes and new-item cap, and a unit's words split across
+    days when they don't fit; kana and the unit take turns going first. On a catch-up
+    day only reviews are planned. Nothing here locks anything: the home screen can
+    still open any step.
     """
     today = _today()
     iso = today.isoformat()
     yesterday = (today - timedelta(days=1)).isoformat()
+    pace = pace_of(state)
+    reviews = todays_reviews(state)
     unit = next_unit(state)
     kana = next_kana_lesson(state)
     plan: list[str] = []
-    if todays_reviews(state):
+    if reviews:
         plan.append("review")
     if catching_up(state):
         if recap_cards(state):
             plan.append("recap")
-        return {"plan": plan, "catching_up": True, "day_two_tomorrow": False}
+        return {"plan": plan, "catching_up": True, "day_two_tomorrow": False, "words_today": 0, "pace": _pace_name(state),
+                "slipping": None, "minutes": _day_minutes(reviews, state, 0.0)}
 
-    kana_wanted = bool(kana) and iso not in state["kana"].values()
-    kana_new = len(kana["kana"]) if kana else 0
+    slipping = recall_slipping(state)
+    share = 0.5 if slipping is not None else 1.0
+    minutes_left = pace["lesson_minutes"] * share
+    new_left = pace["new_items"] * share
     row = state["units"].get(unit["id"], {}) if unit else {}
     steps = unit_steps(unit) if unit else []
     day_one = [s for s in steps if s in DAY_ONE_STEPS and not row.get(s)]
     day_two = [s for s in steps if s not in DAY_ONE_STEPS and not row.get(s)]
     day_one_today = any(row.get(f"{s}_on") == iso for s in DAY_ONE_STEPS if s in steps)
-    unit_new = sum(_new_items(unit, s) for s in day_one) if unit else 0
+    unit_queue = day_one or ([] if day_one_today else day_two)
+    day_two_tomorrow = not day_one and bool(day_two) and day_one_today
 
-    unit_plan: list[str] = []
-    day_two_tomorrow = False
-    if day_one:
-        unit_plan = day_one
-    elif day_two and not day_one_today:
-        unit_plan = day_two
-    elif day_two:
-        day_two_tomorrow = True
+    planned: list[str] = []
+    words_today = 0
 
-    if kana_wanted and unit_plan and unit_new and kana_new + unit_new > NEW_ITEMS_PER_DAY:
-        # Both don't fit: alternate, starting with whichever didn't happen yesterday.
-        if yesterday in state["kana"].values():
-            kana_wanted = False
-        else:
-            unit_plan = []
-    if kana_wanted:
-        plan.append("kana")
-    plan.extend(unit_plan)
-    if unit_plan or kana_wanted or recap_cards(state):
+    def try_kana() -> None:
+        nonlocal minutes_left, new_left
+        need = _kana_minutes(kana)
+        if not planned or (need <= minutes_left and len(kana["kana"]) <= new_left):
+            planned.append("kana")
+            minutes_left -= need
+            new_left -= len(kana["kana"])
+
+    def try_unit() -> None:
+        nonlocal minutes_left, new_left, words_today
+        for step in unit_queue:
+            if step == "words":
+                left = _words_left(unit, row)
+                fits = int(min(left, max(0.0, minutes_left) / WORD_MINUTES, max(0.0, new_left)))
+                if fits < left:
+                    fits -= fits % MIN_WORD_BATCH  # whole teach-and-test batches
+                if fits < MIN_WORD_BATCH and fits < left:
+                    if planned:
+                        return
+                    fits = min(left, MIN_WORD_BATCH)
+                planned.append("words")
+                words_today = fits
+                minutes_left -= fits * WORD_MINUTES
+                new_left -= fits
+                if fits < left:
+                    return
+                continue
+            need = _step_minutes(step, unit)
+            new = len(unit["phrases"]) if step == "learn" else 0
+            if planned and (need > minutes_left or new > new_left):
+                return
+            planned.append(step)
+            minutes_left -= need
+            new_left -= new
+
+    kana_wanted = bool(kana) and iso not in state["kana"].values()
+    if kana_wanted and yesterday not in state["kana"].values():
+        try_kana()
+        try_unit()
+    else:
+        try_unit()
+        if kana_wanted:
+            try_kana()
+    planned.sort(key=lambda s: 0 if s == "kana" else 1)  # kana first: it's what the rest gets read with
+    plan.extend(planned)
+    if planned or recap_cards(state):
         # After the new material: a second look at today's new and missed cards.
         plan.append("recap")
-    return {"plan": plan, "catching_up": False, "day_two_tomorrow": day_two_tomorrow}
+    used = pace["lesson_minutes"] * share - minutes_left
+    return {"plan": plan, "catching_up": False, "day_two_tomorrow": day_two_tomorrow, "words_today": words_today,
+            "pace": _pace_name(state), "slipping": slipping, "minutes": _day_minutes(reviews, state, used)}
+
+
+def _pace_name(state: dict[str, Any]) -> str:
+    name = str(state.get("pace") or "")
+    return name if name in PACES else DEFAULT_PACE
+
+
+def _day_minutes(reviews: list[dict[str, Any]], state: dict[str, Any], lessons: float) -> int:
+    """About how long the rest of today takes (the home screen's promise)."""
+    recap = recap_cards(state)
+    return max(1, round(_review_minutes(reviews) + _review_minutes(recap) + lessons))
 
 
 def next_unit(state: dict[str, Any]) -> dict[str, Any] | None:
@@ -836,6 +969,7 @@ def today_payload(*, path: Path | None = None) -> dict[str, Any]:
         "placement": state.get("placement"),
         "placement_checks": placement_checks(state),
         "unit_titles": [u["title"] for u in UNITS],
+        "paces": {k: {"label": v["label"], "minutes": v["minutes"]} for k, v in PACES.items()},
         **plan_today(state),
     }
 

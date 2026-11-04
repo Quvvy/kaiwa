@@ -622,7 +622,9 @@
     if (unit) {
       const details = {
         learn: `${unit.phrases.length} phrases to learn`,
-        words: `${unit.words.length} words`,
+        words: done.words || !today.words_today || today.words_today >= unit.words.length - (done.words_seen || 0)
+          ? `${done.words || !done.words_seen ? unit.words.length : unit.words.length - done.words_seen} words`
+          : `${today.words_today} of ${unit.words.length - (done.words_seen || 0)} words left`,
         grammar: `${unit.grammar.length} grammar point${unit.grammar.length === 1 ? "" : "s"}, ${unit.drill.length} questions`,
         listen: "A short conversation",
         speak: `Answer ${unit.speak.length} questions out loud`,
@@ -638,7 +640,7 @@
     const kanaText = kp ? ` Hiragana ${kp.hiragana[0]}/${kp.hiragana[1]}, katakana ${kp.katakana[0]}/${kp.katakana[1]}.` : "";
     const progressText = s.phrases_learned
       ? `${s.phrases_learned} phrases and ${s.words_learned} words learned, ${s.phrases_strong} phrases remembered well.${kanaText} ${s.streak} day${s.streak === 1 ? "" : "s"} in a row.`
-      : "About 15 minutes a day.";
+      : "";
 
     if (placementAfterHome) {
       placementAfterHome = false;
@@ -656,14 +658,14 @@
               el("h1", { class: "home-title", text: `You've finished all ${s.units_total} units` }),
               el("p", { class: "home-goal", text: "Reviews continue daily. Use Extra listening and Chat for more practice." })),
         unit && unit.reopenedNote ? el("p", { class: "home-note", text: unit.reopenedNote }) : null,
-        el("p", { class: "home-progress", text: progressText }),
+        progressText ? el("p", { class: "home-progress", text: progressText }) : null,
         el("div", { class: "home-bar", role: "progressbar", "aria-valuenow": String(pct), "aria-valuemin": "0", "aria-valuemax": "100" },
           el("span", { style: `width:${pct}%` })),
         rows.length ? el("ol", { class: "plan" }, rows) : null,
         steps.length
           ? el("div", { class: "home-actions" },
               el("button", { type: "button", class: "lesson-primary", onclick: runNext },
-                s.studied_today ? "Continue" : "Start today's lesson", kbd("Enter")))
+                `${s.studied_today ? "Continue" : "Start today's lesson"} · about ${today.minutes} min`, kbd("Enter")))
           : el("p", { class: "home-done", text: "Done for today. More tomorrow." }),
         !today.placement && !s.phrases_learned && !(today.kana_progress && today.kana_progress.lessons_done)
           ? el("div", { class: "home-placement" },
@@ -677,6 +679,9 @@
         today.retention ? retentionLine(today.retention) : null,
         today.catching_up
           ? el("p", { class: "home-note", text: "Reviews only today: there's a backlog to clear first. New lessons are still one click away below." })
+          : null,
+        today.slipping != null
+          ? el("p", { class: "home-note", text: `You've been remembering ${today.slipping}% lately, so new material is slowed down until that recovers. This usually only takes a few days.` })
           : null,
         s.phrases_learned || (today.kana_progress && today.kana_progress.lessons_done)
           ? el("div", { class: "home-more" },
@@ -694,11 +699,25 @@
               el("button", { type: "button", class: "secondary home-stats", onclick: runStats,
                 "data-tip": "Retention, what's coming up, your cards, and how scheduling works" }, "Stats"))
           : null,
+        paceRow(),
         el("label", { class: "home-romaji" },
           el("input", { type: "checkbox", checked: showRomaji, onchange: (e) => { showRomaji = e.target.checked; writePref("kaiwa_course_romaji", showRomaji ? "1" : "0"); } }),
           " Show romaji for kana you haven't learned"),
       ),
     );
+  }
+  /** How much a day holds. Takes effect straight away, on today's plan too. */
+  function paceRow() {
+    return el("div", { class: "pace-row", role: "group", "aria-label": "Daily pace" },
+      el("span", { class: "pace-label", text: "Daily pace" }),
+      Object.entries(today.paces || {}).map(([key, p]) => el("button", {
+        type: "button", class: "pace-chip" + (key === today.pace ? " on" : ""), "aria-pressed": String(key === today.pace),
+        onclick: async () => {
+          if (key === today.pace) return;
+          await postJson("/api/course/pace", { pace: key }).catch(() => {});
+          showHome();
+        },
+      }, p.label, el("span", { class: "pace-minutes", text: ` ~${p.minutes} min` }))));
   }
   /** One extra-practice mode on the home screen: its button and what it's for. */
   function practiceRow(label, onclick, what) {
@@ -1437,7 +1456,7 @@
       el("p", { class: "stats-caption", text: s.grading.basis + (s.grading.tuned ? "" : " Changing a grade with 1–4 teaches it.") }));
 
     const how = section("How scheduling works",
-      el("p", { class: "stats-text", text: "Kaiwa estimates how long you'll remember each card and brings it back just before you'd forget, aiming for 90% recall." }),
+      el("p", { class: "stats-text", text: "Kaiwa estimates how long you'll remember each card and brings it back just before you'd forget, aiming for 87% recall." }),
       el("p", { class: "stats-text", text: "New and missed cards come back within minutes, then the next day, then further apart each time you get them right. That's why you see some cards twice in a session." }),
       el("p", { class: "stats-text", text: "The grade after each answer comes from how you did: wrong is Again; right but slow, close, or with help is Hard; right at your usual speed is Good; much faster than usual is Easy. Press 1–4 to change it, Ctrl+Z to undo an answer." }));
 
@@ -2320,23 +2339,34 @@
   }
 
   // ---------- words ----------
+  /**
+   * Teach a few, test those, teach a few more: retrieval right after first exposure
+   * beats reading twenty and being quizzed on all of them. The day's recap then
+   * mixes them up. Long word lists can split across days (see state.plan_today).
+   */
   function runWords(unit) {
-    const words = unit.words;
-    const PAGE = 5;
+    const row = today.unit_steps || {};
+    const redo = !!row.words;
+    const seen = redo ? 0 : row.words_seen || 0;
+    const left = unit.words.length - seen;
+    const count = redo ? left : Math.min(left, today.words_today || Math.min(left, 10));
+    const words = unit.words.slice(seen, seen + count);
+    const BATCH = 5;
     prefetch(words.map((w) => [w.jp, {}]));
-    let page = 0;
-    const pages = Math.ceil(words.length / PAGE);
+    const batches = [];
+    for (let i = 0; i < words.length; i += BATCH) batches.push(words.slice(i, i + BATCH));
+    let b = 0;
+    const heading = () => `Words, unit ${unit.number}`;
+    const known = () => [...batches.slice(0, b + 1).flat(), ...(today.words_pool || []), ...unit.words];
 
-    // 1. Meet the words, five per screen.
     function intro() {
-      const slice = words.slice(page * PAGE, page * PAGE + PAGE);
-      const last = page === pages - 1;
-      const go = () => { if (last) quiz(); else { page += 1; intro(); } };
+      const slice = batches[b];
+      const go = () => quiz();
       const actions = [];
-      if (page > 0) actions.push(el("button", { type: "button", class: "secondary", onclick: () => { page -= 1; intro(); } }, "Back"));
-      actions.push(primaryButton(last ? "Practice" : "Next", go));
+      if (b > 0) actions.push(el("button", { type: "button", class: "secondary", onclick: () => { b -= 1; intro(); } }, "Back"));
+      actions.push(primaryButton("Test these", go));
       frame({
-        title: `Words, unit ${unit.number}`, index: page, total: pages,
+        title: heading(), index: b, total: batches.length,
         ask: { screen: "word list", words: slice.map((w) => `${w.jp} = ${w.en}`) },
         body: el("div", { class: "card-body" },
           el("table", { class: "word-table" },
@@ -2349,29 +2379,28 @@
       });
     }
 
-    // 2. Hear + see each word, pick its meaning. Misses come back once.
+    // Hear + see each word, pick its meaning. Misses come back once.
     function quiz() {
-      const queue = shuffle(words).map((w) => ({ w, retried: false }));
+      const queue = shuffle(batches[b]).map((w) => ({ w, retried: false }));
       let n = 0;
-      const total = queue.length;
       function ask() {
-        if (n >= queue.length) return finish();
+        if (n >= queue.length) return afterBatch();
         const { w, retried } = queue[n];
         const shown = performance.now();
         const nextBtn = primaryButton("Next", advance);
         nextBtn.hidden = true;
         function advance() { n += 1; ask(); }
         frame({
-          title: `Words, unit ${unit.number}`, index: Math.min(n, total - 1), total,
+          title: heading(), index: b, total: batches.length,
           ask: { screen: "word quiz", jp: w.jp, en: w.en },
           body: el("div", { class: "card-body" },
             el("p", { class: "kana-big kana-word", lang: "ja", text: w.jp }),
             needsRomaji(w.jp) ? el("p", { class: "phrase-ro", text: w.ro }) : null,
             playRow(w.jp),
             choiceBlock({
-              ...meaningChoices(w, words),
+              ...meaningChoices(w, known()),
               onAnswer: async (right) => {
-                if (!retried) lessonGrade(`${w.id}:mean`, { correct: right, ms: Math.round(performance.now() - shown), fmt: "word:choice" });
+                if (!retried && w.id) lessonGrade(`${w.id}:mean`, { correct: right, ms: Math.round(performance.now() - shown), fmt: "word:choice" });
                 if (!right && !queue[n].retried) queue.push({ w, retried: true });
                 if (right) { const here = onThisScreen(); await wait(600); if (here()) advance(); }
                 else { nextBtn.hidden = false; keys.primary = advance; }
@@ -2385,9 +2414,13 @@
       }
       ask();
     }
+    function afterBatch() {
+      if (b < batches.length - 1) { b += 1; return intro(); }
+      return finish();
+    }
 
     async function finish() {
-      await postJson("/api/course/step", { unit_id: unit.id, step: "words" });
+      await postJson("/api/course/step", redo ? { unit_id: unit.id, step: "words" } : { unit_id: unit.id, step: "words", count });
       continuePlan();
     }
     intro();

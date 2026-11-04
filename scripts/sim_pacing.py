@@ -40,11 +40,12 @@ class Clock:
     now = datetime(2027, 1, 4, 18, 0, tzinfo=timezone.utc)
 
 
-def run(days: int, skip: float, seed: int, quiet: bool = True) -> dict:
+def run(days: int, skip: float, seed: int, pace: str = cs.DEFAULT_PACE) -> dict:
     rng = random.Random(seed)
     srs._now = lambda: Clock.now
     cs._today = lambda: Clock.now.date()
     state = cs._empty()
+    state["pace"] = pace
     log = []
 
     def answer(cid: str) -> bool:
@@ -90,17 +91,23 @@ def run(days: int, skip: float, seed: int, quiet: bool = True) -> dict:
                 continue  # below, after everything new
             else:
                 row = state["units"].setdefault(unit["id"], {})
-                row[step] = True
                 row[f"{step}_on"] = cs._today().isoformat()
+                if step != "words":
+                    row[step] = True
                 if step == "learn":
                     Clock.now += timedelta(seconds=PHRASE_INTRO * len(unit["phrases"]))
                     for p in unit["phrases"]:
                         for skill in cs.SKILLS:
                             state["cards"].setdefault(f"{p['id']}:{skill}", cs._new_card())
                 elif step == "words":
-                    Clock.now += timedelta(seconds=WORD_INTRO * len(unit.get("words", [])))
-                    for w in unit.get("words", []):
+                    words = unit.get("words", [])
+                    seen = int(row.get("words_seen") or 0)
+                    upto = min(len(words), seen + plan["words_today"])
+                    Clock.now += timedelta(seconds=WORD_INTRO * (upto - seen))
+                    for w in words[seen:upto]:
                         state["cards"].setdefault(f"{w['id']}:mean", cs._new_card())
+                    row["words_seen"] = upto
+                    row["words"] = upto >= len(words)
                 else:
                     Clock.now += timedelta(seconds=STEP_SECONDS.get(step, 120))
                 if cs.unit_done(state, unit):
@@ -135,9 +142,10 @@ def main() -> None:
     ap.add_argument("--skip", type=float, default=0.15)
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--weekly", action="store_true")
+    ap.add_argument("--pace", default=cs.DEFAULT_PACE, choices=sorted(cs.PACES))
     args = ap.parse_args()
-    r = run(args.days, args.skip, args.seed)
-    print(f"{args.days} days, {args.skip:.0%} skipped: units {r['units']}/20, kana lessons {r['kana']}, cards {r['cards']}, "
+    r = run(args.days, args.skip, args.seed, args.pace)
+    print(f"{args.pace}, {args.days} days, {args.skip:.0%} skipped: units {r['units']}/20, kana lessons {r['kana']}, cards {r['cards']}, "
           f"recall in reviews {r['retention']}%")
     print(f"studied {r['studied']} days: avg {r['avg_min']} min, 90th pct {r['p90_min']} min, "
           f"catch-up days {r['catch_up_days']}, due at the end {r['due_end']}")

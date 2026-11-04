@@ -1,7 +1,7 @@
 """Spaced repetition on FSRS, with grades worked out from how the learner answered.
 
 FSRS models each card's memory (stability: how long it lasts; difficulty: how
-hard it is for this learner) and schedules the next review for ~90% recall.
+hard it is for this learner) and schedules the next review for ~87% recall.
 New and missed cards go through short learning steps (1 and 10 minutes), which
 is what gives a new item its second look the same day.
 
@@ -21,7 +21,9 @@ from typing import Any
 from fsrs import Card, Rating, Scheduler, State
 
 SCHEDULER = Scheduler(
-    desired_retention=0.9,
+    # 90% costs far more reviews for little extra memory: in scripts/sim_pacing.py,
+    # 87% has ~40% fewer days stuck on reviews only, which is what lets new lessons keep coming.
+    desired_retention=0.87,
     learning_steps=(timedelta(minutes=1), timedelta(minutes=10)),
     relearning_steps=(timedelta(minutes=10),),
     # No random spread: the interval shown on each grade button is exactly what
@@ -41,13 +43,22 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+# A study day ends at 4 a.m. local time: a session at 1 a.m. still belongs to the
+# evening it started in, for the streak, the review budget and what's due.
+DAY_ROLLOVER = timedelta(hours=4)
+
+
+def study_day(moment: datetime) -> date:
+    return (moment.astimezone() - DAY_ROLLOVER).date()
+
+
 def new_card() -> dict[str, Any]:
     """A card that has never been reviewed: due now, in the first learning step."""
     return _store(Card(due=_now()), reps=0, lapses=0)
 
 
 def _store(card: Card, *, reps: int, lapses: int) -> dict[str, Any]:
-    due_local = card.due.astimezone().date().isoformat()
+    due_local = study_day(card.due).isoformat()
     return {
         "fsrs": card.to_dict(),
         "due": due_local,  # local date: what "due today" is decided on
@@ -72,7 +83,7 @@ def from_legacy(old: dict[str, Any]) -> dict[str, Any]:
     try:
         due_day = date.fromisoformat(str(old.get("due"))[:10])
     except ValueError:
-        due_day = date.today()
+        due_day = study_day(_now())
     due = datetime.combine(due_day, time(4, 0)).astimezone().astimezone(timezone.utc)
     stability = float(box_days.get(box, 1))
     card = Card(

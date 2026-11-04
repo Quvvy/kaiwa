@@ -35,6 +35,11 @@ class TtsBody(BaseModel):
 class StepBody(BaseModel):
     unit_id: str
     step: str
+    count: int | None = Field(default=None, ge=1, le=100)  # words taught, when split across days
+
+
+class PaceBody(BaseModel):
+    pace: str
 
 
 class GradeBody(BaseModel):
@@ -359,12 +364,20 @@ async def talk_turn(
 @router.post("/step")
 def step(body: StepBody) -> dict[str, Any]:
     try:
-        row = state.complete_step(body.unit_id, body.step)
+        row = state.complete_step(body.unit_id, body.step, count=body.count)
     except (KeyError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     learner_log.log("lesson_step", unit=body.unit_id, step=body.step)
     prerender.start(get_settings())  # the "next lesson" window may have moved
     return {"unit": row, "stats": state.stats(state.load_state())}
+
+
+@router.post("/pace")
+def set_pace(body: PaceBody) -> dict[str, Any]:
+    try:
+        return {"pace": state.set_pace(body.pace)}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 class SkipBody(BaseModel):
