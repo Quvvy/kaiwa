@@ -19,7 +19,7 @@ from kaiwa.config import get_settings
 from kaiwa.course import ask, coach, hooks, kana_judge, placement, prerender, roleplay, sentences, state, stories
 from kaiwa.course import learner_log
 from kaiwa.course.kana import KANA_ROMAJI
-from kaiwa.course.speech_check import check_phrase, normalize
+from kaiwa.course.speech_check import check_phrase, normalize, spot_differences
 from kaiwa.secrets_store import user_data_dir
 
 router = APIRouter(prefix="/api/course")
@@ -183,7 +183,20 @@ async def check(audio: UploadFile = File(...), phrase_id: str = Form(...)) -> di
     _keep_clip(audio, phrase_id, phrase["jp"], heard, band)
     learner_log.log("say", phrase=phrase_id, target=phrase["jp"], whisper=heard, sounded=shown, band=band,
                     score=result.score, tip=tip, kana_band=verdict.band if verdict else None)
-    return {"heard": shown, "whisper": heard, "score": result.score, "band": band, "tip": tip}
+    diff = spot_differences(phrase["jp"], shown) if band != "good" else []
+    return {"heard": shown, "whisper": heard, "score": result.score, "band": band, "tip": tip, "diff": diff}
+
+
+@router.post("/check_typed")
+def check_typed(phrase_id: str = Form(...), text: str = Form(..., max_length=120)) -> dict[str, Any]:
+    """The typed version of /check, for a learner without a microphone at hand."""
+    phrase = state.phrase(phrase_id)
+    if phrase is None:
+        raise HTTPException(status_code=404, detail="Unknown phrase")
+    result = check_phrase(phrase["jp"], text, phrase.get("accept"))
+    learner_log.log("say", phrase=phrase_id, target=phrase["jp"], typed=text, band=result.band, score=result.score)
+    diff = spot_differences(phrase["jp"], text) if result.band != "good" else []
+    return {"heard": text, "score": result.score, "band": result.band, "tip": "", "diff": diff}
 
 
 def _judge(
@@ -250,7 +263,8 @@ async def check_text(
         # correct あ, し and ん were each rejected in some runs). Speech may confirm
         # a single kana but never fail it; the learner is asked to type it instead.
         band = "unsure"
-    return {"heard": shown or heard, "band": band, "tip": tip}
+    diff = spot_differences(target, shown or heard) if band in ("close", "off") and not short else []
+    return {"heard": shown or heard, "band": band, "tip": tip, "diff": diff}
 
 
 @router.post("/speak")

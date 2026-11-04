@@ -454,7 +454,7 @@ def _card_payload(kind: str, item: str) -> dict[str, Any]:
 def answer_format(kind: str, skill: str, card: dict[str, Any]) -> str:
     """How the card is answered: recognise while new, produce once it's known.
 
-    choice   pick from options (new kana and words; hearing a phrase)
+    choice   pick from options (new kana and words; every other review of a known word; hearing a phrase)
     produce  say or type the answer (known kana: its sound; known words: the Japanese)
     speak    say the phrase (the speaking side of a phrase)
     """
@@ -462,7 +462,12 @@ def answer_format(kind: str, skill: str, card: dict[str, Any]) -> str:
         return "speak" if skill == "speak" else "choice"
     if is_leech(card) and srs.stability(card) < LEECH_STABLE_DAYS:
         return "choice"  # a leech goes back to recognition until it holds again
-    return "produce" if srs.known(card) else "choice"
+    if not srs.known(card):
+        return "choice"
+    # Known words take turns: say it, then understand it by ear, so neither skill fades.
+    if kind == "word" and int(card.get("reps") or 0) % 2:
+        return "choice"
+    return "produce"
 
 
 def is_leech(card: dict[str, Any]) -> bool:
@@ -521,6 +526,7 @@ def _card_row(card_id: str, kind: tuple[str, str, str], card: dict[str, Any]) ->
         "card_id": card_id, "kind": kind[0], "skill": kind[2],
         "format": answer_format(kind[0], kind[2], card),
         "stability": round(srs.stability(card), 1),
+        "reps": int(card.get("reps") or 0),
         "leech": is_leech(card),
         "hook": card.get("hook"),
         **_card_payload(kind[0], kind[1]),

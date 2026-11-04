@@ -11,6 +11,7 @@ from __future__ import annotations
 import re
 import unicodedata
 from dataclasses import dataclass
+from difflib import SequenceMatcher
 from functools import lru_cache
 
 from pykakasi import kakasi
@@ -130,3 +131,25 @@ def matches_any(patterns: list[str], heard: str) -> bool:
         elif similarity(pat, heard) >= GOOD:
             return True
     return False
+
+
+def spot_differences(target: str, heard: str) -> list[dict[str, object]]:
+    """The target's sounds in order, in runs, each marked heard or not.
+
+    Showing exactly which sounds went missing tells the learner what to listen for
+    next time, where a score only tells them it wasn't right.
+    """
+    t, h = normalize(target), normalize(heard)
+    if not t:
+        return []
+    heard_at = [False] * len(t)
+    for block in SequenceMatcher(None, t, h, autojunk=False).get_matching_blocks():
+        for i in range(block.a, block.a + block.size):
+            heard_at[i] = True
+    runs: list[dict[str, object]] = []
+    for ch, ok in zip(t, heard_at):
+        if runs and runs[-1]["ok"] == ok:
+            runs[-1]["text"] = str(runs[-1]["text"]) + ch
+        else:
+            runs.append({"text": ch, "ok": ok})
+    return runs

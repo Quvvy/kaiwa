@@ -12,7 +12,7 @@
   let placementAfterHome = false; // Settings asked to open the placement test
   let showRomaji = readPref("kaiwa_course_romaji", "1") === "1";
   const keys = { primary: null, hold: null, replay: null, choice: null, meanings: null, text: null, tab: null,
-    grade: null, space: null, undo: null };
+    grade: null, space: null, undo: null, hint: null };
 
   // ---------- helpers ----------
   function readPref(key, fallback) {
@@ -92,6 +92,9 @@
     } else if (e.key === "Tab" && keys.tab && !e.shiftKey) {
       e.preventDefault();
       keys.tab();
+    } else if ((e.key === "h" || e.key === "H") && keys.hint && !e.repeat) {
+      e.preventDefault();
+      keys.hint();
     } else if ((e.key === "t" || e.key === "T") && keys.text && !e.repeat) {
       e.preventDefault();
       keys.text();
@@ -211,6 +214,21 @@
       el("button", { class: "secondary", type: "button", onclick: () => play(text, opts) }, "Play", kbd("R")),
       el("button", { class: "secondary", type: "button", onclick: () => play(text, { ...opts, slow: true }) }, "Slow"),
     );
+  }
+  // Hearing a phrase from different speakers makes it easier to catch from anyone
+  // (talker variability: Logan et al. 1991, Barcroft & Sommers 2005). A replay
+  // brings the next voice; a review card gets one of them.
+  const VOICES = ["a", "b", "c"];
+  function voiceCycler(text) {
+    let turn = 0;
+    return () => {
+      const voice = VOICES[turn % VOICES.length];
+      turn += 1;
+      return play(text, { voice });
+    };
+  }
+  function reviewVoice(card) {
+    return { voice: VOICES[(card.reps || 0) % VOICES.length] };
   }
 
   // ---------- hold to speak (shared warm mic, live level) ----------
@@ -401,6 +419,12 @@
     if (band === "close") return el("p", { class: "verdict close", text: "Close. Listen again and try once more." });
     return el("p", { class: "verdict off", text: "Not quite. Play it slowly, then try again." });
   }
+  /** The target's sounds with the ones that didn't come through marked. */
+  function diffLine(diff) {
+    if (!diff || !diff.length || diff.every((r) => r.ok)) return null;
+    return el("p", { class: "diff-line" }, "Listen for ",
+      el("span", { lang: "ja", class: "diff-target" }, diff.map((r) => (r.ok ? r.text : el("mark", { text: r.text })))));
+  }
   function heardLine(prefix, heard, extra) {
     return el("p", { class: "heard-line" }, prefix, el("span", { lang: "ja", text: heard }), extra || null);
   }
@@ -509,6 +533,7 @@
     keys.grade = null;
     keys.space = null;
     keys.undo = null;
+    keys.hint = null;
     keys.choice = pendingChoice;
     pendingChoice = null;
     const top = el("div", { class: "lesson-top" },
@@ -888,9 +913,16 @@
     const hold = holdControl("Hold and say it", onAudio, onProblem);
     const box = el("div", { class: "produce" }, typing ? [form, hold] : [hold, form]);
     box.focusTyping = () => input.focus();
+    box.reopen = () => { input.disabled = false; input.value = ""; preview.textContent = ""; };
     box.hold = hold;
     if (typing) setTimeout(() => input.focus(), 0);
     return box;
+  }
+  /** The first sounds and a blank per sound left: enough to jog the memory, not give it away. */
+  function cueFor(jp) {
+    const sounds = [...jp.replace(/[、。！？!?\s]/g, "")];
+    const show = Math.max(1, Math.min(2, Math.ceil(sounds.length / 4)));
+    return sounds.slice(0, show).join("") + "＿".repeat(Math.max(1, sounds.length - show));
   }
   function answerMode() {
     return readPref("kaiwa_answer_mode", "speak") === "type" ? "type" : "speak";
@@ -1078,7 +1110,7 @@
     const repeatTag = (card) => (card.repeat ? el("span", { class: "repeat-tag", text: card.repeat === 1 ? "2nd look" : "3rd look" }) : null);
 
     /** Multiple choice: answer, see the grade and when it's back, Enter to go on. */
-    function choiceCard(card, { big, bigJp, answer, options, audio, after, extra = null, fmt, askJp }) {
+    function choiceCard(card, { big, bigJp, answer, options, audio, voice = {}, after, extra = null, fmt, askJp }) {
       const result = el("div", { class: "result" });
       const slot = el("div", { class: "grade-slot" });
       let helped = false;
@@ -1087,13 +1119,13 @@
       const body = el("div", { class: "card-body" },
         repeatTag(card),
         big ? el("p", { class: bigJp ? "kana-big" : "prompt-en", lang: bigJp ? "ja" : null, text: big }) : null,
-        audio ? playRow(audio) : null,
+        audio ? playRow(audio, voice) : null,
         typeof extra === "function" ? extra(() => { helped = true; }) : extra,
         choiceBlock({
           options, answer,
           onAnswer: (correct, picked) => {
             if (after) result.replaceChildren(after(correct));
-            if (audio) play(audio);
+            if (audio) play(audio, voice);
             answered(card, { correct, ms: elapsed(), helped, fmt, answer: String(picked) }, slot, nextBtn);
           },
         }),
@@ -1102,7 +1134,7 @@
       );
       frame({ title, ...counter(), body, actions: [nextBtn],
         ask: { screen: `${title.toLowerCase()} ${card.kind}`, jp: askJp || "", answer } });
-      if (audio) keys.replay = () => play(audio);
+      if (audio) keys.replay = () => play(audio, voice);
     }
     function kanaChoice(card) {
       const k = card.kana;
@@ -1112,19 +1144,31 @@
         options: choicesFor(k.ro, pool, 4, alikeIn(k, known).map((x) => x.ro)),
         after: (right) => (right ? el("span") : kanaHelp(k, known)) });
     }
+    /** A word already seen once is understood by ear: its text is one click away, as help. */
     function wordChoice(card) {
       const w = card.word;
       const m = meaningChoices(w, today.words_pool || []);
-      choiceCard(card, { big: w.jp, bigJp: true, answer: m.answer, options: m.options, audio: w.jp, fmt: "word:choice", askJp: w.jp,
-        after: () => needsRomaji(w.jp) ? el("p", { class: "phrase-ro", text: w.ro }) : el("span") });
-      play(w.jp);
+      const voice = reviewVoice(card);
+      const byEar = (card.reps || 0) >= 1 && !card.leech;
+      const text = el("p", { class: "kana-big kana-word", lang: "ja", hidden: byEar, text: w.jp });
+      choiceCard(card, { answer: m.answer, options: m.options, audio: w.jp, voice, fmt: byEar ? "word:ear" : "word:choice", askJp: w.jp,
+        extra: (markHelped) => {
+          if (!byEar) return text;
+          const showText = el("button", { class: "secondary", type: "button", onclick: () => {
+            markHelped(); text.hidden = false; showText.hidden = true; } }, "Show text", kbd("T"));
+          keys.text = () => showText.click();
+          return [el("div", { class: "lesson-play" }, showText), text];
+        },
+        after: () => { text.hidden = false; return needsRomaji(w.jp) ? el("p", { class: "phrase-ro", text: w.ro }) : el("span"); } });
+      play(w.jp, voice);
     }
     function listenCard(card) {
       const p = card.phrase;
       const pool = (today.phrases_pool || []).map((x) => x.en);
-      choiceCard(card, { answer: p.en, options: choicesFor(p.en, pool), audio: p.jp, fmt: "phrase:listen", askJp: p.jp,
+      const voice = reviewVoice(card);
+      choiceCard(card, { answer: p.en, options: choicesFor(p.en, pool), audio: p.jp, voice, fmt: "phrase:listen", askJp: p.jp,
         after: () => phraseBlock(p) });
-      play(p.jp);
+      play(p.jp, voice);
     }
     function sentenceCard(card) {
       const s = card.sentence;
@@ -1174,6 +1218,14 @@
           isKana && !correct ? kanaHelp(card.kana, today.kana_pool || []) : null,
         ].filter(Boolean);
       }
+      let helped = false;
+      const cue = el("p", { class: "cue", hidden: true });
+      const hintBtn = isKana ? null : el("button", { type: "button", class: "secondary", onclick: () => {
+        helped = true;
+        cue.hidden = false;
+        cue.replaceChildren(el("span", { lang: "ja", text: cueFor(target) }));
+        hintBtn.hidden = true;
+      } }, "Hint", kbd("H"));
       const box = produceBox({
         placeholder: isKana ? "Type its sound (romaji)" : "Type it (romaji becomes kana)",
         romajiOnly: isKana,
@@ -1184,7 +1236,7 @@
             ? kanaKey(kana) === kanaKey(target) || text.toLowerCase().replace(/[^a-z]/g, "") === card.kana.ro.replace(/ \(.*\)/, "")
               || (target === "を" && text.toLowerCase() === "o")
             : kanaKey(kana) === kanaKey(target);
-          settle({ correct, ms, answer: kana || text }, reveal(correct, ""));
+          settle({ correct, ms, helped, answer: kana || text }, reveal(correct, ""));
         },
         onAudio: async (blob, ext) => {
           const ms = Math.round(startedAt - shownAt);
@@ -1198,8 +1250,8 @@
             }
             const correct = r.band !== "off";
             noteResult({ said: r.heard, band: r.band, tip: r.tip });
-            settle({ correct, ms, band: r.band, spoken: true, answer: r.heard },
-              [...reveal(correct, r.band), heardLine("Sounded like ", r.heard), r.tip ? el("p", { class: "tip", text: r.tip }) : null].filter(Boolean));
+            settle({ correct, ms, helped, band: r.band, spoken: true, answer: r.heard },
+              [...reveal(correct, r.band), heardLine("Sounded like ", r.heard), diffLine(r.diff), r.tip ? el("p", { class: "tip", text: r.tip }) : null].filter(Boolean));
           } catch (err) {
             result.replaceChildren(el("p", { class: "verdict off", text: String(err.message || err) }));
           }
@@ -1219,14 +1271,16 @@
             ? el("p", { class: "kana-big", lang: "ja", text: target })
             : el("p", { class: "prompt-en", text: card.word.en }),
           el("p", { class: "prompt", text: isKana ? "Say or type its sound." : "Say it in Japanese, or type it." }),
-          box, micRow(), result, slot),
-        actions: [dontKnow, nextBtn],
+          cue, box, micRow(), result, slot),
+        actions: [hintBtn, dontKnow, nextBtn].filter(Boolean),
         hold: box.hold,
         ask: { screen: `${title.toLowerCase()} produce ${card.kind}`, jp: isKana ? target : "", en: isKana ? "" : card.word.en },
       });
       keys.tab = () => box.focusTyping();
+      if (hintBtn) keys.hint = () => hintBtn.click();
     }
 
+    /** Say a phrase from its English: by voice or typed, with a hint before giving up. */
     function speakCard(card) {
       const p = card.phrase;
       const result = el("div", { class: "result" });
@@ -1235,30 +1289,68 @@
       const nextBtn = primaryButton("Next", () => advance());
       nextBtn.hidden = true;
       let startedAt = 0;
+      let helped = false;
       function settle(o) {
         if (current.answered) return;
         answer.hidden = false;
         answer.replaceChildren(phraseBlock(p), playRow(p.jp));
         keys.replay = () => play(p.jp);
         giveUp.hidden = true;
-        answered(card, { ...o, fmt: "phrase:speak" }, slot, nextBtn);
-      }
-      const hold = holdControl("Hold to say it", async (blob, ext) => {
-        const ms = Math.round(startedAt - shownAt);
-        result.replaceChildren(el("p", { class: "pending", text: "Checking…" }));
-        try {
-          const r = await api("/api/course/check", { method: "POST", body: audioForm(blob, ext, { phrase_id: p.id }) });
-          result.replaceChildren(verdictLine(r.band), heardLine("Sounded like ", r.heard), r.tip ? el("p", { class: "tip", text: r.tip }) : null);
-          noteResult({ said: r.heard, band: r.band, tip: r.tip });
-          settle({ correct: r.band !== "off", ms, band: r.band, answer: r.heard });
-          if (r.band !== "good") play(p.jp);
-        } catch (err) {
-          result.replaceChildren(el("p", { class: "verdict off", text: String(err.message || err) }));
+        hintBtn.hidden = true;
+        answered(card, { ...o, helped, fmt: "phrase:speak" }, slot, nextBtn);
+        if (!o.correct || o.band === "close") {
+          // Saying it again right after hearing it is what fixes it. The grade stands.
+          again.hidden = false;
+          keys.hold = box.hold.holdApi;
+          keys.space = null;
         }
-      }, showProblem(result));
+      }
+      function checked(r, ms) {
+        result.replaceChildren(...[verdictLine(r.band), heardLine(r.typed ? "You typed " : "Sounded like ", r.heard), diffLine(r.diff),
+          r.tip ? el("p", { class: "tip", text: r.tip }) : null].filter(Boolean));
+        noteResult({ said: r.heard, band: r.band, tip: r.tip });
+        if (current.answered) return; // a retry after the model: no new grade
+        settle({ correct: r.band !== "off", ms, band: r.band, answer: r.heard });
+        if (r.band !== "good") play(p.jp);
+      }
+      const cue = el("p", { class: "cue", hidden: true });
+      const again = el("p", { class: "lesson-note", hidden: true, text: "Now say it once more, copying what you heard." });
+      const box = produceBox({
+        placeholder: "Or type it (romaji becomes kana)",
+        onTyped: async ({ kana }) => {
+          const ms = elapsed();
+          const form = new FormData();
+          form.append("phrase_id", p.id);
+          form.append("text", kana);
+          try {
+            const r = await api("/api/course/check_typed", { method: "POST", body: form });
+            checked({ ...r, typed: true }, ms);
+          } catch (err) {
+            result.replaceChildren(el("p", { class: "verdict off", text: String(err.message || err) }));
+          }
+          box.reopen();
+        },
+        onAudio: async (blob, ext) => {
+          const ms = Math.round(startedAt - shownAt);
+          result.replaceChildren(el("p", { class: "pending", text: "Checking…" }));
+          try {
+            checked(await api("/api/course/check", { method: "POST", body: audioForm(blob, ext, { phrase_id: p.id }) }), ms);
+          } catch (err) {
+            result.replaceChildren(el("p", { class: "verdict off", text: String(err.message || err) }));
+          }
+        },
+        onProblem: showProblem(result),
+      });
+      const hold = box.hold;
       hold.addEventListener("pointerdown", () => { startedAt = performance.now(); }, true);
       const holdStart = hold.holdApi.start;
       hold.holdApi.start = () => { startedAt = performance.now(); return holdStart(); };
+      const hintBtn = el("button", { type: "button", class: "secondary", onclick: () => {
+        helped = true;
+        cue.hidden = false;
+        cue.replaceChildren(el("span", { lang: "ja", text: cueFor(p.jp) }));
+        hintBtn.hidden = true;
+      } }, "Hint", kbd("H"));
       const giveUp = el("button", { type: "button", class: "secondary", onclick: () => {
         settle({ correct: false, ms: elapsed(), gave_up: true }); play(p.jp); } }, "Show me");
       frame({ title, ...counter(),
@@ -1266,9 +1358,11 @@
           repeatTag(card),
           el("p", { class: "prompt", text: "Say this in Japanese" }),
           el("p", { class: "prompt-en", text: p.en }),
-          hold, micRow(), result, answer, slot),
-        actions: [giveUp, nextBtn], hold,
+          cue, box, micRow(), result, again, answer, slot),
+        actions: [hintBtn, giveUp, nextBtn], hold,
         ask: { screen: `${title.toLowerCase()} speak`, jp: p.jp, en: p.en, note: p.note } });
+      keys.tab = () => box.focusTyping();
+      keys.hint = () => hintBtn.click();
     }
 
     /**
@@ -1728,12 +1822,14 @@
 
     function show() {
       const p = phrases[i];
+      const say = voiceCycler(p.jp);
       const result = el("div", { class: "result" });
       const hold = holdControl("Hold and say it", async (blob, ext) => {
         result.replaceChildren(el("p", { class: "pending", text: "Checking…" }));
         try {
           const r = await api("/api/course/check", { method: "POST", body: audioForm(blob, ext, { phrase_id: p.id }) });
-          result.replaceChildren(verdictLine(r.band), heardLine("Sounded like ", r.heard), r.tip ? el("p", { class: "tip", text: r.tip }) : null);
+          result.replaceChildren(...[verdictLine(r.band), heardLine("Sounded like ", r.heard), diffLine(r.diff),
+            r.tip ? el("p", { class: "tip", text: r.tip }) : null].filter(Boolean));
           noteResult({ said: r.heard, band: r.band, tip: r.tip });
           if (!spoken.has(p.id)) {
             spoken.add(p.id); // repeating right after hearing it: no timing, just whether it came out
@@ -1747,25 +1843,74 @@
       const last = i === phrases.length - 1;
       const actions = [];
       if (i > 0) actions.push(el("button", { type: "button", class: "secondary", onclick: () => { i -= 1; show(); } }, "Back"));
-      actions.push(primaryButton(last ? "Finish" : "Next", next));
+      actions.push(primaryButton(last ? "Quick check" : "Next", next));
       frame({
         title: `New phrases, unit ${unit.number}`,
         index: i,
         total: phrases.length,
-        body: el("div", { class: "card-body" }, phraseBlock(p), playRow(p.jp), hold, micRow(), result),
+        body: el("div", { class: "card-body" }, phraseBlock(p),
+          el("div", { class: "lesson-play" },
+            el("button", { class: "secondary", type: "button", onclick: say, "data-tip": "Each play is a different voice, so you get used to more than one speaker" }, "Play", kbd("R")),
+            el("button", { class: "secondary", type: "button", onclick: () => play(p.jp, { slow: true }) }, "Slow")),
+          hold, micRow(), result),
         actions,
         primary: next,
         hold,
         ask: { screen: "new phrase", jp: p.jp, en: p.en, note: p.note },
       });
-      keys.replay = () => play(p.jp);
-      play(p.jp);
+      keys.replay = say;
+      say();
     }
-    async function next() {
+    function next() {
       if (i < phrases.length - 1) {
         i += 1;
         return show();
       }
+      return check();
+    }
+
+    // Straight after meeting them: can you catch each one by ear? Misses come back once.
+    function check() {
+      const queue = shuffle(phrases).map((p) => ({ p, retried: false }));
+      let n = 0;
+      function ask() {
+        if (n >= queue.length) return finish();
+        const { p, retried } = queue[n];
+        const shown = performance.now();
+        const nextBtn = primaryButton("Next", advance);
+        nextBtn.hidden = true;
+        const after = el("div", { class: "result" });
+        function advance() { n += 1; ask(); }
+        frame({
+          title: `Quick check, unit ${unit.number}`, index: Math.min(n, phrases.length - 1), total: phrases.length,
+          ask: { screen: "phrase check", jp: p.jp, en: p.en, note: p.note },
+          body: el("div", { class: "card-body" },
+            el("p", { class: "prompt", text: "What did you hear?" }),
+            el("div", { class: "lesson-play" },
+              el("button", { class: "secondary", type: "button", onclick: () => play(p.jp) }, "Play again", kbd("R"))),
+            choiceBlock({
+              options: shuffle(phrases.map((x) => x.en)), answer: p.en,
+              onAnswer: async (right) => {
+                if (!retried) lessonGrade(`${p.id}:listen`, { correct: right, ms: Math.round(performance.now() - shown), fmt: "phrase:listen" });
+                if (!right && !queue[n].retried) queue.push({ p, retried: true });
+                if (right) { const here = onThisScreen(); await wait(600); if (here()) advance(); }
+                else {
+                  after.replaceChildren(phraseBlock(p));
+                  nextBtn.hidden = false;
+                  keys.primary = advance;
+                }
+              },
+            }),
+            after),
+          actions: [nextBtn],
+        });
+        keys.primary = null;
+        keys.replay = () => play(p.jp);
+        play(p.jp);
+      }
+      ask();
+    }
+    async function finish() {
       await postJson("/api/course/step", { unit_id: unit.id, step: "learn" });
       continuePlan();
     }

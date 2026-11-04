@@ -95,7 +95,27 @@ def pacing_plans() -> None:
     _check(slowed["slipping"] == 50 and len(slowed["plan"]) <= len(baseline["plan"]), "slipping recall slows new material")
 
 
+def sound_diff() -> None:
+    from kaiwa.course.speech_check import spot_differences
+    runs = spot_differences("おはようございます", "おはございます")
+    missed = "".join(str(r["text"]) for r in runs if not r["ok"])
+    _check(missed == "よう", "the sounds that didn't come through are marked")
+    _check(all(r["ok"] for r in spot_differences("すみません", "すみません")), "a perfect line marks nothing")
+    _check(spot_differences("", "x") == [], "no target, nothing to mark")
+
+
+def word_formats() -> None:
+    card = srs.new_card()
+    _check(cs.answer_format("word", "mean", card) == "choice", "a new word is recognised")
+    known = srs.from_legacy({"box": 3, "due": "2099-01-01", "reps": 4})
+    _check(cs.answer_format("word", "mean", known) == "produce", "a known word is produced on even reviews")
+    _check(cs.answer_format("word", "mean", {**known, "reps": 5}) == "choice", "and understood by ear on odd ones")
+    _check(cs.answer_format("kana", "read", {**known, "reps": 5}) == "produce", "kana always asks for the sound")
+
+
 def main() -> None:
+    sound_diff()
+    word_formats()
     pacing_plans()
     kana_pictures()
     day_boundary()

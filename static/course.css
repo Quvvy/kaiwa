@@ -1674,3 +1674,30 @@ body:not([data-mode="learn"]) .ask-dock {
   color: var(--ink-3);
   font-weight: 400;
 }
+
+/* ---------- which sounds didn't come through ---------- */
+.diff-line {
+  color: var(--ink-2);
+  font-size: 14.5px;
+  margin-top: 4px;
+}
+
+.diff-target {
+  color: var(--ink);
+  font-size: 17px;
+  margin-left: 4px;
+}
+
+.diff-target mark {
+  background: transparent;
+  border-bottom: 2px solid var(--bad, #c0564b);
+  color: var(--bad, #c0564b);
+  font-weight: 600;
+}
+
+/* A hint before giving up: the first sounds, blanks for the rest. */
+.cue {
+  font-size: 22px;
+  letter-spacing: 0.04em;
+  margin-top: 2px;
+}
