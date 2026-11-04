@@ -12,7 +12,7 @@
   let placementAfterHome = false; // Settings asked to open the placement test
   let showRomaji = readPref("kaiwa_course_romaji", "1") === "1";
   const keys = { primary: null, hold: null, replay: null, choice: null, meanings: null, text: null, tab: null,
-    grade: null, space: null, undo: null, hint: null };
+    grade: null, space: null, undo: null, hint: null, back: null };
 
   // ---------- helpers ----------
   function readPref(key, fallback) {
@@ -92,6 +92,9 @@
     } else if (e.key === "Tab" && keys.tab && !e.shiftKey) {
       e.preventDefault();
       keys.tab();
+    } else if (e.key === "Backspace" && keys.back) {
+      e.preventDefault();
+      keys.back();
     } else if ((e.key === "h" || e.key === "H") && keys.hint && !e.repeat) {
       e.preventDefault();
       keys.hint();
@@ -534,6 +537,7 @@
     keys.space = null;
     keys.undo = null;
     keys.hint = null;
+    keys.back = null;
     keys.choice = pendingChoice;
     pendingChoice = null;
     const top = el("div", { class: "lesson-top" },
@@ -809,7 +813,7 @@
     try {
       const r = await postJson("/api/course/undo", {});
       await showHome();
-      const what = r.card.word ? r.card.word.jp : r.card.phrase ? r.card.phrase.jp : r.card.kana ? r.card.kana.char : "";
+      const what = r.card.word ? r.card.word.jp : r.card.phrase ? r.card.phrase.jp : r.card.kana ? r.card.kana.char : r.card.grammar ? r.card.grammar.title : "";
       root.querySelector(".home")?.prepend(el("p", { class: "undo-toast", text: `Undid your last answer${what ? ` (${what})` : ""}. It's due again.` }));
     } catch (err) {
       root.querySelector(".home")?.prepend(el("p", { class: "undo-toast", text: String(err.message || err) }));
@@ -928,6 +932,86 @@
     return readPref("kaiwa_answer_mode", "speak") === "type" ? "type" : "speak";
   }
 
+  // ---------- sentence building ----------
+  /**
+   * English prompt, a pile of tiles, one of them a wrong particle or ending. Number
+   * keys or clicks move a tile up, Backspace takes the last one back, Enter checks.
+   * `onResult` gets { right, helped, answer } once. `keys()` wires the keyboard, after frame().
+   */
+  function buildExercise(item, onResult) {
+    const pile = shuffle([...item.tiles, ...(item.decoy ? [item.decoy] : [])]).map((text) => ({ text, used: false }));
+    const picked = [];
+    let finished = false;
+    let helped = false;
+    const answerLine = el("div", { class: "build-answer", "aria-label": "Your sentence" });
+    const bank = el("div", { class: "build-bank" });
+    const feedback = el("div", { class: "result" });
+    const checkBtn = el("button", { type: "button", class: "secondary", onclick: check }, "Check", kbd("Enter"));
+    const hintBtn = el("button", { type: "button", class: "secondary", onclick: hint }, "Hint", kbd("H"));
+    const accepted = [item.jp, ...(item.also || [])];
+
+    function draw() {
+      answerLine.replaceChildren(...(picked.length ? picked.map((t) => el("button", { type: "button", class: "tile", lang: "ja",
+        disabled: finished, onclick: () => giveBack(t) }, t.text)) : [el("span", { class: "build-empty", text: "Pick the pieces in order" })]));
+      bank.replaceChildren(...pile.map((t, i) => el("button", { type: "button", class: "tile", lang: "ja",
+        disabled: finished || t.used, onclick: () => take(i) }, el("span", { class: "choice-key", text: String(i + 1) }), t.text)));
+      checkBtn.disabled = finished || !picked.length;
+    }
+    function take(i) {
+      const t = pile[i];
+      if (finished || !t || t.used) return;
+      t.used = true;
+      picked.push(t);
+      draw();
+    }
+    function giveBack(t) {
+      if (finished) return;
+      t.used = false;
+      picked.splice(picked.indexOf(t), 1);
+      draw();
+    }
+    function hint() {
+      if (finished) return;
+      // Lay the first piece that's still wrong: clear what's after it, then place it.
+      helped = true;
+      let at = 0;
+      while (at < picked.length && picked[at].text === item.tiles[at]) at += 1;
+      for (const t of picked.splice(at)) t.used = false;
+      const wanted = pile.find((t) => !t.used && t.text === item.tiles[at]);
+      if (wanted) { wanted.used = true; picked.push(wanted); }
+      draw();
+    }
+    function check() {
+      if (finished || !picked.length) return;
+      finished = true;
+      const answer = picked.map((t) => t.text).join("");
+      const right = accepted.includes(answer);
+      draw();
+      checkBtn.hidden = hintBtn.hidden = true;
+      feedback.replaceChildren(...[
+        el("p", { class: "verdict " + (right ? "good" : "off"), text: right ? "Right." : "Not quite." }),
+        el("p", { class: "build-model", lang: "ja", text: item.tiles.join(" ") }),
+        el("div", { class: "lesson-play" }, el("button", { class: "secondary", type: "button", onclick: () => play(item.jp) }, "Play", kbd("R"))),
+      ]);
+      keys.replay = () => play(item.jp);
+      noteResult({ picked: answer, correct: item.jp, right });
+      play(item.jp);
+      onResult({ right, helped, answer });
+    }
+    draw();
+    return {
+      node: el("div", { class: "build" },
+        el("p", { class: "prompt-en", text: item.en }), answerLine, bank,
+        el("div", { class: "lesson-play" }, checkBtn, hintBtn), feedback),
+      keys() {
+        keys.choice = take;
+        keys.primary = check;
+        keys.hint = hint;
+        keys.back = () => { if (picked.length) giveBack(picked[picked.length - 1]); };
+      },
+    };
+  }
+
   // ---------- review ----------
   const GRADE_NAMES = { 1: "Again", 2: "Hard", 3: "Good", 4: "Easy" };
   function fmtInterval(seconds) {
@@ -965,7 +1049,7 @@
     const firstTry = new Map(); // queue item → right on first try?
     const history = [];         // answered items, for Ctrl+Z
     const MAX_REPEATS = 2;
-    prefetch(queue.map((c) => [c.phrase ? c.phrase.jp : c.word ? c.word.jp : c.kana.char, {}]));
+    prefetch(queue.filter((c) => !c.grammar).map((c) => [c.phrase ? c.phrase.jp : c.word ? c.word.jp : c.kana.char, {}]));
 
     // Upcoming recognition word cards get swapped for short listening sentences.
     const wordIds = queue.filter((c) => c.kind === "word" && c.format === "choice").map((c) => c.card_id);
@@ -990,6 +1074,7 @@
       current = { item: card, answered: false, responses: [] };
       shownAt = performance.now();
       if (card.kind === "sentence") sentenceCard(card);
+      else if (card.kind === "grammar") buildCard(card);
       else if (card.kind === "phrase" && card.skill === "speak") speakCard(card);
       else if (card.kind === "phrase") listenCard(card);
       else if (card.format === "produce") produceCard(card);
@@ -1280,6 +1365,28 @@
       if (hintBtn) keys.hint = () => hintBtn.click();
     }
 
+    /** A grammar point comes back as a different sentence to put together each time. */
+    function buildCard(card) {
+      const g = card.grammar;
+      const item = g.items[(card.reps || 0) % g.items.length];
+      const slot = el("div", { class: "grade-slot" });
+      const nextBtn = primaryButton("Next", () => advance());
+      nextBtn.hidden = true;
+      const ex = buildExercise(item, ({ right, helped, answer }) => {
+        keys.primary = null;
+        answered(card, { correct: right, ms: elapsed(), helped, fmt: "grammar:build", answer }, slot, nextBtn);
+      });
+      frame({ title, ...counter(),
+        body: el("div", { class: "card-body" },
+          repeatTag(card),
+          el("p", { class: "prompt", text: "Put it together" }),
+          ex.node,
+          slot),
+        actions: [nextBtn],
+        ask: { screen: "grammar review", jp: item.jp, en: item.en, rule: g.rule, title: g.title } });
+      ex.keys();
+    }
+
     /** Say a phrase from its English: by voice or typed, with a hint before giving up. */
     function speakCard(card) {
       const p = card.phrase;
@@ -1370,7 +1477,7 @@
      * memory hook, written once by Flash and kept), then on with the review.
      */
     async function leechHelp(card) {
-      const item = card.word || card.phrase || (card.kana && { jp: card.kana.char, en: card.kana.ro });
+      const item = card.word || card.phrase || (card.grammar && card.grammar.items[0]) || (card.kana && { jp: card.kana.char, en: card.kana.ro });
       const hookBox = el("div", { class: "leech-hook" }, el("p", { class: "pending", text: "Writing a memory hook…" }));
       current = null;
       frame({
@@ -1534,7 +1641,7 @@
     const tricky = section("Tricky cards",
       s.leeches.length
         ? [el("ul", { class: "leech-list" }, s.leeches.map((c) => {
-            const item = c.word || c.phrase || { jp: c.kana.char, en: c.kana.ro };
+            const item = c.word || c.phrase || (c.grammar && c.grammar.items[0]) || { jp: c.kana.char, en: c.kana.ro };
             return el("li", {},
               el("span", { class: "leech-jp", lang: "ja", text: item.jp }),
               el("span", { class: "leech-en", text: item.en }),
@@ -2627,15 +2734,17 @@
 
     }
 
-    // 2. Practice questions with a one-line reason after each answer.
+    // 2. Practice questions with a one-line reason after each answer. A few from
+    // earlier units are mixed in: patterns only stay apart if you keep telling them apart.
     function drill() {
-      const qs = unit.drill;
+      const earlier = shuffle(unit.earlier_drill || []).slice(0, 3);
+      const qs = earlier.length ? shuffle([...unit.drill, ...earlier]) : unit.drill;
       let n = 0;
       let right = 0;
       function ask() {
-        if (n >= qs.length) return finish();
+        if (n >= qs.length) return buildRound();
         const q = qs[n];
-        const nextBtn = primaryButton(n === qs.length - 1 ? "Finish" : "Next", advance);
+        const nextBtn = primaryButton("Next", advance);
         nextBtn.hidden = true;
         function advance() { n += 1; ask(); }
         const answer = q.choices[q.answer];
@@ -2661,12 +2770,52 @@
         keys.primary = null;
         if (q.say) { keys.replay = () => play(q.say); play(q.say); }
       }
+
+      // 3. Put sentences together yourself. One per point counts as its first review.
+      function buildRound() {
+        const items = unit.build || [];
+        if (!items.length) return finish();
+        const perPoint = new Map();
+        for (const item of shuffle(items)) {
+          const got = perPoint.get(item.point) || [];
+          if (got.length < 2) perPoint.set(item.point, [...got, item]);
+        }
+        const round = shuffle([...perPoint.values()].flat());
+        const graded = new Set();
+        let at = 0;
+        function show() {
+          if (at >= round.length) return finish();
+          const item = round[at];
+          const shown = performance.now();
+          const nextBtn = primaryButton(at === round.length - 1 ? "Finish" : "Next", () => { at += 1; show(); });
+          nextBtn.hidden = true;
+          const ex = buildExercise(item, ({ right: ok, helped, answer }) => {
+            if (ok) right += 1;
+            if (!graded.has(item.point)) {
+              graded.add(item.point);
+              lessonGrade(item.card_id, { correct: ok, helped, ms: Math.round(performance.now() - shown), fmt: "grammar:build", answer });
+            }
+            nextBtn.hidden = false;
+            keys.primary = () => nextBtn.click();
+          });
+          frame({
+            title: `Put it together, unit ${unit.number}`, index: at, total: round.length,
+            ask: { screen: "grammar build", jp: item.jp, en: item.en },
+            body: el("div", { class: "card-body" }, ex.node),
+            actions: [nextBtn],
+          });
+          ex.keys();
+        }
+        show();
+      }
       async function finish() {
         await postJson("/api/course/step", { unit_id: unit.id, step: "grammar" });
+        const total = qs.length + Math.min((unit.build || []).length, new Set((unit.build || []).map((b) => b.point)).size * 2);
         frame({
           title: `Grammar, unit ${unit.number}`,
           body: el("div", { class: "card-body" },
-            el("h3", { class: "end-title", text: `${right} of ${qs.length} right` })),
+            el("h3", { class: "end-title", text: `${right} of ${total} right` }),
+            el("p", { class: "prompt", text: "These patterns come back in your reviews, as new sentences to put together." })),
           actions: [primaryButton("Continue", continuePlan)],
           primary: continuePlan,
         });

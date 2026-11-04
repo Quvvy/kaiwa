@@ -4,6 +4,7 @@ Card kinds (id = "<item>:<skill>"):
   phrase  "u1.ohayou:listen" / ":speak"  hear → meaning, English → say it
   word    "u1w.asa:mean"                 see/hear the word → pick its meaning
   kana    "kana.あ:read"                  see the character → pick its sound
+  grammar "u4g.ga:build"                 English → put the Japanese together (see build.py)
 
 Scheduling is FSRS (see srs.py): each card's memory is modelled and the next
 review lands where recall is ~87%. Grades come from how the learner answered,
@@ -21,7 +22,7 @@ from pathlib import Path
 from typing import Any
 
 from kaiwa import jsonio
-from kaiwa.course import grader, srs
+from kaiwa.course import build, grader, srs
 from kaiwa.course.kana import KANA_LESSONS, KANA_ROMAJI, LESSON_BY_ID, lesson_chars
 from kaiwa.course.kana_hooks import alike, hook_for
 from kaiwa.course.units import ROMAJI, UNITS
@@ -35,6 +36,12 @@ _PHRASES: dict[str, dict[str, Any]] = {}
 _PHRASE_UNIT: dict[str, str] = {}
 _WORDS: dict[str, dict[str, Any]] = {}
 _WORD_UNIT: dict[str, str] = {}
+_GRAMMAR: dict[str, dict[str, Any]] = {}
+for _unit in UNITS:
+    for _g in _unit.get("grammar", []):
+        if build.items_for(_g["id"]):
+            _GRAMMAR[_g["id"]] = {"id": _g["id"], "title": _g["title"], "rule": _g.get("rule", ""), "unit": _unit["id"],
+                                  "items": build.items_for(_g["id"])}
 for _unit in UNITS:
     for _p in _unit["phrases"]:
         _PHRASES[_p["id"]] = {**_p, "ro": ROMAJI.get(_p["id"], "")}
@@ -73,7 +80,7 @@ RETENTION_MIN_REVIEWS = 20
 # takes a few seconds, hearing a phrase a little longer, saying one longest. 30 ≈
 # five minutes. Due cards beyond it wait for later days instead of piling up, so a
 # missed week never turns into a wall of reviews.
-CARD_COST = {"kana": 1, "word": 1, "listen": 2, "speak": 3}
+CARD_COST = {"kana": 1, "word": 1, "listen": 2, "speak": 3, "grammar": 2}
 
 
 def card_cost(kind: str, skill: str) -> int:
@@ -128,7 +135,27 @@ def load_state(path: Path | None = None) -> dict[str, Any]:
         state["reviewed"] = {str(k): int(v) for k, v in raw["reviewed"].items() if str(v).isdigit()}
     if isinstance(raw.get("questions"), list):
         state["questions"] = [q for q in raw["questions"] if isinstance(q, dict)][-MAX_QUESTIONS_KEPT:]
+    _backfill_grammar(state)
     return state
+
+
+GRAMMAR_BACKFILL_STABILITY = 7.0
+GRAMMAR_BACKFILL_SPREAD = 14
+
+
+def _backfill_grammar(state: dict[str, Any]) -> None:
+    """Grammar taught before grammar had reviews joins the schedule, spread over two weeks."""
+    today = _today()
+    n = 0
+    for unit in UNITS:
+        if not state["units"].get(unit["id"], {}).get("grammar"):
+            continue
+        for g in unit.get("grammar", []):
+            cid = f"{g['id']}:build"
+            if g["id"] in _GRAMMAR and cid not in state["cards"]:
+                due = today + timedelta(days=1 + n % GRAMMAR_BACKFILL_SPREAD)
+                state["cards"][cid] = srs.placed_card(GRAMMAR_BACKFILL_STABILITY, due)
+                n += 1
 
 
 def log_question(question: str, context: dict[str, Any], *, path: Path | None = None) -> None:
@@ -178,6 +205,10 @@ def public_unit(unit: dict[str, Any]) -> dict[str, Any]:
         "words": unit.get("words", []),
         "grammar": unit.get("grammar", []),
         "drill": unit.get("drill", []),
+        "build": [{**item, "card_id": f"{g['id']}:build", "point": g["id"]} for g in unit.get("grammar", [])
+                  for item in build.items_for(g["id"])],
+        # Questions from the units before, mixed into this unit's drill.
+        "earlier_drill": [q for u in UNITS[max(0, index - 3):index] for q in u.get("drill", [])],
         "steps": unit_steps(unit),
         "number": index + 1,
         "phrases": [phrase(p["id"]) for p in unit["phrases"]],
@@ -236,6 +267,10 @@ def complete_step(unit_id: str, step: str, *, count: int | None = None, path: Pa
                 state["cards"].setdefault(f"{w['id']}:mean", _new_card())
             row["words_seen"] = upto
             row["words"] = upto >= len(words)
+        if step == "grammar":
+            for g in unit.get("grammar", []):
+                if g["id"] in _GRAMMAR:
+                    state["cards"].setdefault(f"{g['id']}:build", _new_card())
         if unit_done(state, unit):
             row.setdefault("done_at", datetime.now(timezone.utc).isoformat())
         _mark_day(state)
@@ -269,6 +304,8 @@ def _card_kind(card_id: str) -> tuple[str, str, str] | None:
         return "word", item, skill
     if item.startswith("kana.") and item[5:] in KANA_ROMAJI and skill == "read":
         return "kana", item[5:], skill
+    if item in _GRAMMAR and skill == "build":
+        return "grammar", item, skill
     return None
 
 
@@ -448,6 +485,8 @@ def _card_payload(kind: str, item: str) -> dict[str, Any]:
         return {"phrase": phrase(item)}
     if kind == "word":
         return {"word": dict(_WORDS[item])}
+    if kind == "grammar":
+        return {"grammar": _GRAMMAR[item]}
     return {"kana": _kana_item(item, KANA_ROMAJI[item])}
 
 
@@ -460,6 +499,8 @@ def answer_format(kind: str, skill: str, card: dict[str, Any]) -> str:
     """
     if kind == "phrase":
         return "speak" if skill == "speak" else "choice"
+    if kind == "grammar":
+        return "build"
     if is_leech(card) and srs.stability(card) < LEECH_STABLE_DAYS:
         return "choice"  # a leech goes back to recognition until it holds again
     if not srs.known(card):
@@ -492,6 +533,9 @@ def card_item(card_id: str) -> dict[str, Any] | None:
     payload = _card_payload(kind[0], kind[1])
     if kind[0] == "kana":
         return {"kind": "kana", "jp": payload["kana"]["char"], "en": payload["kana"]["ro"]}
+    if kind[0] == "grammar":
+        g = payload["grammar"]
+        return {"kind": "grammar", "jp": g["items"][0]["jp"], "en": g["items"][0]["en"], "note": g["rule"]}
     item = payload.get("phrase") or payload.get("word")
     return {"kind": kind[0], "jp": item["jp"], "en": item["en"], "note": item.get("note", "")}
 
@@ -505,7 +549,7 @@ def retention(state: dict[str, Any], *, days: int = RETENTION_DAYS) -> dict[str,
     rows = [r for r in state["log"] if str(r.get("d")) >= since]
     if len(rows) < RETENTION_MIN_REVIEWS:
         return None
-    groups = {"kana": "kana", "word": "words", "phrase:listen": "phrases heard", "phrase:speak": "phrases said"}
+    groups = {"kana": "kana", "word": "words", "phrase:listen": "phrases heard", "phrase:speak": "phrases said", "grammar": "grammar"}
     by_kind = {}
     for key, label in groups.items():
         part = [r for r in rows if r.get("k") == key]
@@ -616,8 +660,8 @@ def recap_cards(state: dict[str, Any]) -> list[dict[str, Any]]:
 # `minutes` is what scripts/sim_pacing.py measures an average day at, so it's what
 # the pace promises. The old fixed plan said 15 and ran 19-27 for most of the course.
 PACES: dict[str, dict[str, Any]] = {
-    "relaxed": {"label": "Relaxed", "minutes": 12, "lesson_minutes": 6, "reviews": 20, "new_items": 14},
-    "regular": {"label": "Regular", "minutes": 17, "lesson_minutes": 11, "reviews": 30, "new_items": 24},
+    "relaxed": {"label": "Relaxed", "minutes": 14, "lesson_minutes": 6, "reviews": 22, "new_items": 14},
+    "regular": {"label": "Regular", "minutes": 18, "lesson_minutes": 11, "reviews": 34, "new_items": 24},
     "intensive": {"label": "Intensive", "minutes": 25, "lesson_minutes": 24, "reviews": 50, "new_items": 50},
 }
 DEFAULT_PACE = "regular"
@@ -634,7 +678,7 @@ MIN_WORD_BATCH = 5
 # Rough minutes a lesson step takes, including its share of the same-day recap.
 WORD_MINUTES = 0.3
 STEP_MINUTES = {"grammar": 4.0, "listen": 3.5, "speak": 3.5}
-REVIEW_SECONDS = {"kana": 4, "word": 5, "listen": 8, "speak": 12}
+REVIEW_SECONDS = {"kana": 4, "word": 5, "listen": 8, "speak": 12, "grammar": 15}
 
 
 def pace_of(state: dict[str, Any]) -> dict[str, Any]:
@@ -1023,7 +1067,7 @@ def course_stats(*, path: Path | None = None) -> dict[str, Any]:
             forecast[max(0, offset)] += 1
 
     # Your cards, by kind and stage.
-    kinds = {"kana": "Kana", "word": "Words", "phrase": "Phrases"}
+    kinds = {"kana": "Kana", "word": "Words", "phrase": "Phrases", "grammar": "Grammar"}
     stages = {k: {"new": 0, "learning": 0, "young": 0, "mature": 0} for k in kinds}
     intervals = [0] * len(INTERVAL_BUCKETS)
     for cid, card in state["cards"].items():

@@ -109,6 +109,10 @@ def run(days: int, skip: float, seed: int, pace: str = cs.DEFAULT_PACE) -> dict:
                     row["words_seen"] = upto
                     row["words"] = upto >= len(words)
                 else:
+                    if step == "grammar":
+                        for g in unit.get("grammar", []):
+                            if g["id"] in cs._GRAMMAR:
+                                state["cards"].setdefault(f"{g['id']}:build", cs._new_card())
                     Clock.now += timedelta(seconds=STEP_SECONDS.get(step, 120))
                 if cs.unit_done(state, unit):
                     row.setdefault("done_at", Clock.now.isoformat())

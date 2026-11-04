@@ -74,3 +74,14 @@ Word recognition cards no longer show the kana after the first exposure (a Show 
 Each replay of a new phrase uses a different voice, and reviews rotate voices. After the phrase list, a short "What did you hear?" check runs, and it counts as those cards' first review.
 *Why:* many speakers makes words easier to catch from anyone (Logan et al. 1991, Barcroft & Sommers 2005). Testing straight after exposure beats restudying (Roediger & Karpicke 2006).
 
+### Grammar
+
+**H12. Grammar now gets spaced reviews, as sentences you build.** ✅ 🧪 `[H12,H13]`
+This was the biggest gap in the course: grammar was taught once, drilled with multiple choice, and never came back. Each grammar point is now a review card. Given the English, you put the Japanese together from tiles, one of which is a wrong particle or ending ("ユキさん は がくせい です", with が in the pile). It uses a different sentence each review, so you practise the pattern and not one line. Number keys pick tiles, Backspace undoes, H hints.
+Grammar you already finished joins the schedule automatically, spread over two weeks. 140+ sentences hand-cut from the units' own examples (`course/build.py`).
+*Why:* producing a form yourself (Swain), spaced (Cepeda et al. 2006). A hand-picked wrong tile makes you decide between the forms that really get confused.
+*Tradeoff:* adds about 40 cards. I raised the review budget slightly so the simulated catch-up load stayed about the same.
+
+**H13. Grammar lessons mix in older questions and end by building.** ✅ `[H12,H13]`
+The drill now includes up to 3 questions from the previous 3 units, then finishes with a short build-it round. *Why:* mixed practice beat blocked practice for L2 grammar a week later (Nakata & Suzuki 2019).
+

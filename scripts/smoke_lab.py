@@ -113,7 +113,48 @@ def word_formats() -> None:
     _check(cs.answer_format("kana", "read", {**known, "reps": 5}) == "produce", "kana always asks for the sound")
 
 
+def grammar_cards() -> None:
+    from kaiwa.course import build
+    from kaiwa.course.speech_check import normalize
+    from kaiwa.course.units import UNITS
+    examples = {u["id"]: [normalize(e["jp"]) for g in u["grammar"] for e in g["examples"]] for u in UNITS}
+    points = {g["id"]: u["id"] for u in UNITS for g in u["grammar"]}
+    _check(set(build.BUILD) <= set(points), "build items belong to real grammar points")
+    thin = [g["id"] for u in UNITS for g in u["grammar"] if g["id"] not in build.BUILD]
+    _check(thin == ["u1g.polite"], "every grammar point but polite-vs-casual has sentences to build")
+    for pid, items in build.BUILD.items():
+        for it in items:
+            if it["decoy"] and it["decoy"] in it["tiles"]:
+                _check(False, f"{pid}: decoy {it['decoy']} is needed in {it['jp']}")
+            if not any(normalize(it["jp"]) in ex for ex in examples[points[pid]]) and pid != "u1g.desu":
+                _check(False, f"{pid}: {it['jp']} isn't one of the unit's examples")
+            for alt in it["also"]:
+                if sorted(alt) != sorted(it["jp"]):
+                    _check(False, f"{pid}: other order of {it['jp']} has different tiles")
+    _check(True, "build sentences match the unit's examples, decoys are spare, other orders use the same tiles")
+    _check(sum(len(v) for v in build.BUILD.values()) >= 120, "plenty of sentences")
+    with tempfile.TemporaryDirectory() as d:
+        path = Path(d) / "s.json"
+        cs.complete_step("u4", "grammar", path=path)
+        st = cs.load_state(path)
+        _check("u4g.ga:build" in st["cards"] and "u4g.janai:build" in st["cards"], "finishing the grammar step schedules its cards")
+        kind = cs._card_kind("u4g.ga:build")
+        _check(kind == ("grammar", "u4g.ga", "build"), "grammar cards are a real card kind")
+        row = cs._card_row("u4g.ga:build", kind, st["cards"]["u4g.ga:build"])
+        _check(row["format"] == "build" and row["grammar"]["items"], "a review row carries its sentences")
+        cs.grade("u4g.ga:build", correct=True, path=path)
+        _check(cs.course_stats(path=path)["stages"]["Grammar"], "the stats page counts grammar cards")
+        _check(cs.undo(path=path) is not None, "a grammar answer can be undone")
+        old = {**cs._empty(), "units": {"u1": {"grammar": True}, "u2": {"grammar": True}}}
+        cs.save_state(old, path)
+        st = cs.load_state(path)
+        added = [c for c in st["cards"] if c.endswith(":build")]
+        _check(len(added) == 3 and not any(srs.is_learning(st["cards"][c]) for c in added),
+               "grammar done before this update joins the schedule as reviews")
+
+
 def main() -> None:
+    grammar_cards()
     sound_diff()
     word_formats()
     pacing_plans()

@@ -1701,3 +1701,56 @@ body:not([data-mode="learn"]) .ask-dock {
   letter-spacing: 0.04em;
   margin-top: 2px;
 }
+
+/* ---------- sentence building ---------- */
+.build-answer {
+  align-items: center;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 10px 0 12px;
+  min-height: 52px;
+  padding-bottom: 8px;
+}
+
+.build-empty {
+  color: var(--ink-3);
+  font-size: 14px;
+}
+
+.build-bank {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.tile {
+  align-items: center;
+  background: var(--surface-raised, transparent);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 18px;
+  gap: 8px;
+  min-height: 44px;
+  padding: 6px 12px;
+}
+
+.tile:disabled {
+  cursor: default;
+  opacity: 0.35;
+}
+
+.build-answer .tile:disabled {
+  opacity: 1;
+}
+
+.build-model {
+  font-size: 18px;
+  margin: 4px 0;
+}

@@ -112,7 +112,7 @@ def spaced_review() -> None:
             course_state.complete_step("u1", step, path=path)
         st = course_state.load_state(path)
         _check(bool(st["units"]["u1"].get("done_at")), "all five steps finish the unit")
-        _check(len(st["cards"]) == 12 + len(UNITS[0]["words"]), "words step schedules a card per word")
+        _check(sum(not c.endswith(":build") for c in st["cards"]) == 12 + len(UNITS[0]["words"]), "words step schedules a card per word")
         course_state.complete_kana("h1", path=path)
         st = course_state.load_state(path)
         _check("kana.あ:read" in st["cards"], "a kana lesson schedules its characters")
@@ -150,7 +150,7 @@ def spaced_review() -> None:
         due = [c for c in course_state.due_cards(st, limit=100) if c["kind"] == "phrase"]
         _check(len(due) == 12, "all 12 phrase cards due")
         kinds = {c["kind"] for c in course_state.due_cards(st, limit=100)}
-        _check(kinds == {"phrase", "word", "kana"}, "word and kana cards come up in review")
+        _check(kinds >= {"phrase", "word", "kana"}, "word and kana cards come up in review")
         pairs = [due[i]["phrase"]["id"] == due[i + 1]["phrase"]["id"] for i in range(len(due) - 1)]
         _check(not any(pairs), "a phrase's two sides are never back to back")
         todays = course_state.todays_reviews(st)
