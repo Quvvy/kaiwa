@@ -87,6 +87,17 @@ def pacing_plans() -> None:
         _check(st["units"]["u1"]["words"] and sum(c.startswith("u1w.") for c in st["cards"]) == 20, "the last part finishes it")
         cs.set_pace("relaxed", path=path)
         _check(cs.load_state(path)["pace"] == "relaxed", "pace is saved")
+    with tempfile.TemporaryDirectory() as d:
+        path = Path(d) / "s.json"
+        first = cs.plan_today(cs.load_state(path))
+        cs.complete_kana("h1", path=path)
+        cs.complete_step("u1", "learn", path=path)
+        cs.complete_step("u1", "words", count=first["words_today"], path=path)
+        again = cs.plan_today(cs.load_state(path))
+        _check("words" not in again["plan"] and "learn" not in again["plan"], "a day's lessons don't restart when the plan is worked out again")
+        _check(again["plan"] == ["recap"], "after today's lessons only the recap is left")
+        cs.complete_step("u1", "learn", path=path)
+        _check(abs(cs.load_state(path)["daily"][cs._today().isoformat()]["lesson_min"] - cs.load_state(path)["daily"][cs._today().isoformat()]["lesson_min"]) == 0 and cs.plan_today(cs.load_state(path))["plan"] == ["recap"], "redoing a step spends nothing new")
     low = cs._empty()
     low["log"] = [{"d": cs._today().isoformat(), "ok": i % 2 == 0} for i in range(40)]
     _check(cs.recall_slipping(low) == 50, "recall below the line is reported")

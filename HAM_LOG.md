@@ -166,3 +166,6 @@ Results are announced to screen readers, focus moves to each new screen, reduced
 **H34. Other voices and build sentences are prerendered.** ✅ `[H29-H34]`
 So a replay in a new voice doesn't wait on the engine.
 
+**H35. Bug fix in my own H03: the day's budget now remembers what's already done.** ✅ `[H35]`
+The plan is worked out again after each step, so without this the lesson budget refilled every time and a day never ended. Found by reasoning, with a test added. Redoing an old step costs nothing.
+

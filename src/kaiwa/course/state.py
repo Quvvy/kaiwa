@@ -263,6 +263,8 @@ def complete_step(unit_id: str, step: str, *, count: int | None = None, path: Pa
     def apply(state: dict[str, Any]) -> dict[str, Any]:
         before = len(state["cards"])
         row = state["units"].setdefault(unit_id, {})
+        fresh = not row.get(step)  # redoing a finished step isn't new work for today's budget
+        seen_before = int(row.get("words_seen") or 0)
         row[f"{step}_on"] = _today().isoformat()  # day-two steps wait until after this day
         if step != "words":
             row[step] = True
@@ -282,6 +284,9 @@ def complete_step(unit_id: str, step: str, *, count: int | None = None, path: Pa
             for g in unit.get("grammar", []):
                 if g["id"] in _GRAMMAR:
                     state["cards"].setdefault(f"{g['id']}:build", _new_card())
+        if fresh:
+            minutes = WORD_MINUTES * (int(row.get("words_seen") or 0) - seen_before) if step == "words" else _step_minutes(step, unit)
+            _spend_minutes(state, minutes)
         if unit_done(state, unit):
             row.setdefault("done_at", datetime.now(timezone.utc).isoformat())
         _mark_day(state)
@@ -289,6 +294,12 @@ def complete_step(unit_id: str, step: str, *, count: int | None = None, path: Pa
         return row
 
     return _with_state(apply, path)
+
+
+def _spend_minutes(state: dict[str, Any], minutes: float) -> None:
+    """Lesson time used today, so the rest of today's plan fits in what's left."""
+    day = state["daily"].setdefault(_today().isoformat(), {"answers": 0, "right": 0, "ms": 0})
+    day["lesson_min"] = round(float(day.get("lesson_min") or 0) + minutes, 2)
 
 
 def _count_new(state: dict[str, Any], before: int) -> None:
@@ -306,6 +317,8 @@ def complete_kana(lesson_id: str, *, path: Path | None = None) -> dict[str, Any]
         raise KeyError(f"unknown kana lesson: {lesson_id}")
 
     def apply(state: dict[str, Any]) -> dict[str, Any]:
+        if lesson_id not in state["kana"]:
+            _spend_minutes(state, _kana_minutes(lesson))
         state["kana"].setdefault(lesson_id, _today().isoformat())
         before = len(state["cards"])
         for ch, _ in lesson["kana"]:
@@ -792,8 +805,12 @@ def plan_today(state: dict[str, Any]) -> dict[str, Any]:
 
     slipping = recall_slipping(state)
     share = 0.5 if slipping is not None else 1.0
-    minutes_left = pace["lesson_minutes"] * share
-    new_left = pace["new_items"] * share
+    # What's already been done today counts: the plan is worked out again after every step.
+    day = state["daily"].get(iso, {})
+    spent = float(day.get("lesson_min") or 0)
+    minutes_left = pace["lesson_minutes"] * share - spent
+    new_left = pace["new_items"] * share - int(day.get("new") or 0)
+    started = spent > 0
     row = state["units"].get(unit["id"], {}) if unit else {}
     steps = unit_steps(unit) if unit else []
     day_one = [s for s in steps if s in DAY_ONE_STEPS and not row.get(s)]
@@ -808,7 +825,7 @@ def plan_today(state: dict[str, Any]) -> dict[str, Any]:
     def try_kana() -> None:
         nonlocal minutes_left, new_left
         need = _kana_minutes(kana)
-        if not planned or (need <= minutes_left and len(kana["kana"]) <= new_left):
+        if (not planned and not started) or (need <= minutes_left and len(kana["kana"]) <= new_left):
             planned.append("kana")
             minutes_left -= need
             new_left -= len(kana["kana"])
@@ -822,7 +839,7 @@ def plan_today(state: dict[str, Any]) -> dict[str, Any]:
                 if fits < left:
                     fits -= fits % MIN_WORD_BATCH  # whole teach-and-test batches
                 if fits < MIN_WORD_BATCH and fits < left:
-                    if planned:
+                    if planned or started:
                         return
                     fits = min(left, MIN_WORD_BATCH)
                 planned.append("words")
@@ -834,7 +851,7 @@ def plan_today(state: dict[str, Any]) -> dict[str, Any]:
                 continue
             need = _step_minutes(step, unit)
             new = len(unit["phrases"]) if step == "learn" else 0
-            if planned and (need > minutes_left or new > new_left):
+            if (planned or started) and (need > minutes_left or new > new_left):
                 return
             planned.append(step)
             minutes_left -= need
@@ -853,7 +870,7 @@ def plan_today(state: dict[str, Any]) -> dict[str, Any]:
     if planned or recap_cards(state):
         # After the new material: a second look at today's new and missed cards.
         plan.append("recap")
-    used = pace["lesson_minutes"] * share - minutes_left
+    used = pace["lesson_minutes"] * share - spent - minutes_left
     return {"plan": plan, "catching_up": False, "day_two_tomorrow": day_two_tomorrow, "words_today": words_today,
             "pace": _pace_name(state), "slipping": slipping, "minutes": _day_minutes(reviews, state, used)}
 
