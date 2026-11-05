@@ -71,6 +71,11 @@ def pacing_plans() -> None:
     _check(p["minutes"] >= 8, "the plan says how long today takes, the first day's extra included")
     relaxed = {**cs._empty(), "pace": "relaxed"}
     pr = cs.plan_today(relaxed)
+    _check(cs.DEFAULT_PACE == "intensive" and cs.plan_today(cs._empty())["pace"] == "intensive", "Intensive is the default pace")
+    with tempfile.TemporaryDirectory() as d:
+        path = Path(d) / "s.json"
+        cs.set_pace("relaxed", path=path)
+        _check(cs.plan_today(cs.load_state(path))["pace"] == "relaxed", "a pace the learner chose outlasts the default")
     intense = {**cs._empty(), "pace": "intensive"}
     pi = cs.plan_today(intense)
     _check(pi["words_today"] == 20 and "words" in pi["plan"], "intensive takes all of a unit's words in a day")
@@ -322,7 +327,7 @@ def fixes() -> None:
         cs.save_state(st, path)
         cs.complete_step("u1", "learn", path=path)
         _check(cs.load_state(path)["units"]["u1"]["learn_on"] == "2020-01-01", "redoing a step doesn't make it new again")
-    st = cs._empty()
+    st = {**cs._empty(), "pace": "regular"}
     st["days"] = [(cs._today() - timedelta(days=9)).isoformat()]
     for i in range(30):
         due = srs.placed_card(5.0, (cs._today() - timedelta(days=2)))

@@ -30,10 +30,9 @@ KAIWA_DATA_DIR=/tmp/kaiwa-try .venv/bin/python -m kaiwa.app
 | H10 | Words understood by ear | The cards were testing reading, not listening |
 
 **Decisions I'd like from you:**
-1. **Default pace** (H49): is Regular at ~6 months right, or should it be faster?
-2. **Recall target 87%** (H05): fewer reviews, slightly more misses.
-3. **Is Chat's nudge OK?** (H29): it steers questions, with nothing on screen.
-4. **Read the hand-written content:** kana hooks, missions, culture notes, word packs.
+1. **Recall target 87%** (H05): fewer reviews, slightly more misses.
+2. **Is Chat's nudge OK?** (H29): it steers questions, with nothing on screen.
+3. **Read the hand-written content:** kana hooks, missions, culture notes, word packs.
 
 **What I couldn't test:** real speech. The browser here has no microphone, so everything marked 🎤 had its logic tested, but never with a real voice. Nothing has been tried on real learners either. Please try H24, H45 and H46 out loud first.
 
@@ -88,9 +87,9 @@ Wrong options now favour what a kana really gets mistaken for (ね/れ/わ, シ/
 ### Pacing
 
 **H03. Choose a daily pace; lessons fit a time budget.** ✅ 🧪 `[H03,H04,H05]`
-Relaxed (~15 min a day, course in ~8 months), Regular (~19 min, ~6 months, default), Intensive (~23 min, ~2 months) under Options. See H49 for how these numbers were corrected. The Start button says how long today takes ("about 10 min").
+Relaxed (~15 min a day, course in ~8 months), Regular (~19 min, ~6 months), Intensive (~23 min, ~2 months, default since H51) under Options. See H49 for how these numbers were corrected. The Start button says how long today takes ("about 10 min").
 *Why:* I built `scripts/sim_pacing.py`, which runs a virtual learner through the real planner and FSRS. It showed "about 15 minutes" was really 19-27 for weeks 2-8 and that the day-two plan stacked kana on top of three lessons. A promise that's wrong by half is a reason to quit.
-*Tradeoff:* the course takes much longer at Regular. See the open question in H49.
+*Tradeoff:* the slower paces take much longer. See H49 and H51.
 
 **H04. A unit's words can split across days.** ✅ `[H03,H04,H05]`
 If 20 words don't fit today, you get 5 or 10 now and the rest tomorrow. Existing progress isn't affected.
@@ -273,10 +272,15 @@ Finishing all 20 units now tells you what you can really do and what keeps it al
 
 **H49. Honest pace numbers, measured while lessons last.** ✅ 🧪 `[H49]`
 My first labels (~12/~17/~25) came from averages that included quiet weeks after the course ended. Measured only while lessons are still coming, Regular was really 20-26 minutes, so I cut its lesson budget and relabelled every pace with minutes and months. The very first day gets a little extra so it includes real phrases and not only five vowels.
-**Open question for you:** the simulator says Intensive costs only about 4 more minutes a day than Regular and finishes in about a quarter of the time (47 vs 171 days). That looks too good, and the likely reason is that the simulator doesn't model overload: 100+ new items a week is assumed to stick as well as 40 do. I left Regular as the default for that reason, but it is a judgment call, and it's the setting real use could settle fastest. The old fixed plan was close to Intensive.
+**Decided in H51.** The simulator says Intensive costs only about 4 more minutes a day than Regular and finishes in about a quarter of the time (47 vs 171 days). That looks too good, and the likely reason is that the simulator doesn't model overload: 100+ new items a week is assumed to stick as well as 40 do. I first left Regular as the default for that reason; you chose Intensive. The old fixed plan was close to Intensive.
 
 **H50. New learners pick a pace and a time up front.** ✅ `[H50]`
 The first home screen asks how much time you want to give this, with honest minutes and months, and when you'll study. After that, both move under Options. *Why:* a choice you made yourself is easier to stick to, and the pace is a promise worth seeing before you start. Also fixes Start's time estimate on day one.
+
+**H51. Intensive is the default pace.** ✅ 🧪 `[H51]`
+Your decision. New learners see Intensive already selected on the first home screen and can change it there or under Options. Anyone who already chose a pace keeps it; a save with no pace on it moves to Intensive, which is close to the old fixed plan.
+*Simulated, 200 days with 15% skipped:* Intensive finishes lessons in 47 days at 22.8 min a day, with 10 catch-up days; Regular takes 171 days at 18.6 min, with 56 catch-up days. Day one is 15 minutes and 20 words at Intensive, against 10 minutes and 5 words at Regular. One day in ten runs 27 minutes or more.
+*Watch for:* the simulator doesn't model overload, so the real risk is 100+ new items a week not sticking. If recent recall falls under 80%, new material already halves until it recovers. Check real recall and drop-off after the first few weeks; if either looks bad, go back to Regular by changing `DEFAULT_PACE`.
 
 *Later fix to H49:* the first-day allowance vanished once the kana lesson finished, so day one stopped before any phrases. A full first-day walkthrough caught it, and a test now covers it.
 

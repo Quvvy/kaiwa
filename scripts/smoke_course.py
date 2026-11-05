@@ -718,6 +718,7 @@ def pacing() -> None:
     try:
         with tempfile.TemporaryDirectory() as raw:
             path = Path(raw) / "course_state.json"
+            course_state.set_pace("regular", path=path)  # the tightest budget that still fits a day's steps
             _check(plan(path)["plan"][:2] == ["kana", "learn"] and plan(path)["plan"][-1] == "recap", "day 1: a short kana lesson fits beside the first phrases")
             course_state.complete_kana("h1", path=path)
             for s in ("learn", "words"):

@@ -725,7 +725,10 @@ PACES: dict[str, dict[str, Any]] = {
     "regular": {"label": "Regular", "minutes": 19, "months": 6, "lesson_minutes": 8, "reviews": 30, "new_items": 18},
     "intensive": {"label": "Intensive", "minutes": 23, "months": 2, "lesson_minutes": 24, "reviews": 50, "new_items": 50},
 }
-DEFAULT_PACE = "regular"
+# Intensive by the owner's choice: about 4 more minutes a day than Regular for about
+# a quarter of the calendar. The simulator doesn't model overload, so this is the
+# number to recheck against real use; SLOW_DOWN_BELOW is the guard if it's too much.
+DEFAULT_PACE = "intensive"
 # When the due backlog is worth more than two days of reviews, that day is a
 # catch-up day: no new material is planned, and the review budget doubles.
 CATCH_UP_DAYS = 2
