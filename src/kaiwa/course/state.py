@@ -719,10 +719,11 @@ def recap_cards(state: dict[str, Any]) -> list[dict[str, Any]]:
 # budget (rough "seconds/3" units, see CARD_COST); lessons then fill `lesson_minutes`.
 # `minutes` and `months` are what scripts/sim_pacing.py measures while lessons last
 # (with 15% of days skipped), so they're what the pace promises. The old fixed plan
-# said 15 minutes and ran 19-27 for most of the course.
+# said 15 minutes and ran 19-27 for most of the course. Reviews set the floor: going
+# much under Relaxed's minutes only adds months, so a slower pace mainly means less new at once.
 PACES: dict[str, dict[str, Any]] = {
-    "relaxed": {"label": "Relaxed", "minutes": 15, "months": 8, "lesson_minutes": 6, "reviews": 26, "new_items": 14},
-    "regular": {"label": "Regular", "minutes": 19, "months": 6, "lesson_minutes": 8, "reviews": 30, "new_items": 18},
+    "relaxed": {"label": "Relaxed", "minutes": 17, "months": 7, "lesson_minutes": 9, "reviews": 24, "new_items": 18},
+    "regular": {"label": "Regular", "minutes": 21, "months": 5, "lesson_minutes": 10, "reviews": 36, "new_items": 24},
     "intensive": {"label": "Intensive", "minutes": 23, "months": 2, "lesson_minutes": 24, "reviews": 50, "new_items": 50},
 }
 # Intensive by the owner's choice: about 4 more minutes a day than Regular for about

@@ -87,7 +87,7 @@ Wrong options now favour what a kana really gets mistaken for (ね/れ/わ, シ/
 ### Pacing
 
 **H03. Choose a daily pace; lessons fit a time budget.** ✅ 🧪 `[H03,H04,H05]`
-Relaxed (~15 min a day, course in ~8 months), Regular (~19 min, ~6 months), Intensive (~23 min, ~2 months, default since H51) under Options. See H49 for how these numbers were corrected. The Start button says how long today takes ("about 10 min").
+Relaxed (~17 min a day, course in ~7 months), Regular (~21 min, ~5 months), Intensive (~23 min, ~2 months, default since H51) under Options. See H49 and H52 for how these numbers were corrected. The Start button says how long today takes ("about 10 min").
 *Why:* I built `scripts/sim_pacing.py`, which runs a virtual learner through the real planner and FSRS. It showed "about 15 minutes" was really 19-27 for weeks 2-8 and that the day-two plan stacked kana on top of three lessons. A promise that's wrong by half is a reason to quit.
 *Tradeoff:* the slower paces take much longer. See H49 and H51.
 
@@ -279,8 +279,21 @@ The first home screen asks how much time you want to give this, with honest minu
 
 **H51. Intensive is the default pace.** ✅ 🧪 `[H51]`
 Your decision. New learners see Intensive already selected on the first home screen and can change it there or under Options. Anyone who already chose a pace keeps it; a save with no pace on it moves to Intensive, which is close to the old fixed plan.
-*Simulated, 200 days with 15% skipped:* Intensive finishes lessons in 47 days at 22.8 min a day, with 10 catch-up days; Regular takes 171 days at 18.6 min, with 56 catch-up days. Day one is 15 minutes and 20 words at Intensive, against 10 minutes and 5 words at Regular. One day in ten runs 27 minutes or more.
+*Simulated, 200 days with 15% skipped, before H52 retuned Regular:* Intensive finishes lessons in 47 days at 22.8 min a day, with 10 catch-up days; Regular takes 171 days at 18.6 min, with 56 catch-up days. Day one is 15 minutes and 20 words at Intensive, against 10 minutes and 5 words at Regular. One day in ten runs 27 minutes or more.
 *Watch for:* the simulator doesn't model overload, so the real risk is 100+ new items a week not sticking. If recent recall falls under 80%, new material already halves until it recovers. Check real recall and drop-off after the first few weeks; if either looks bad, go back to Regular by changing `DEFAULT_PACE`.
+
+**H52. Regular and Relaxed no longer crawl.** ✅ 🧪 `[H52]`
+At the old settings, Relaxed taught 52 words and 18 phrases in a month, which is the "might as well not bother" pacing Kaiwa should avoid. I gave both more lesson room and more new items, and gave Regular a bigger review budget so it stalls less. Simulated medians over 5 runs, with 15% of days skipped:
+
+| | Days until lessons finish | Minutes a day | Reviews-only days | Words by day 30 |
+|---|---|---|---|---|
+| Relaxed, before | 218 | 15.1 | 69 | 52 |
+| Relaxed, now | 190 | 16.7 | 96 | 84 |
+| Regular, before | 153 | 18.3 | 56 | 73 |
+| Regular, now | 127 | 20.8 | 34 | 100 |
+| Intensive, unchanged | 49 | 22.5 | 9 | 212 |
+
+*Tradeoff:* both cost about 2 more minutes a day, and Relaxed now has more reviews-only days: about half of its days while lessons last. *What the scan showed:* reviews set the floor. Nothing tested stayed near 15 minutes and finished faster than about 7 months, and raising the catch-up threshold didn't help. Mid-speed settings were no bargain either: finishing in about 3 months took 24-25 minutes a day, more than Intensive. So a slower pace buys less new material at once, and only a little daily time. *Measured in the simulator only:* it can't show whether the lighter load helps real learners remember more, which is the whole case for these two paces.
 
 *Later fix to H49:* the first-day allowance vanished once the kana lesson finished, so day one stopped before any phrases. A full first-day walkthrough caught it, and a test now covers it.
 

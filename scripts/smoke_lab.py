@@ -76,6 +76,9 @@ def pacing_plans() -> None:
         path = Path(d) / "s.json"
         cs.set_pace("relaxed", path=path)
         _check(cs.plan_today(cs.load_state(path))["pace"] == "relaxed", "a pace the learner chose outlasts the default")
+    for name in ("relaxed", "regular"):
+        plan = cs.plan_today({**cs._empty(), "pace": name})
+        _check("words" in plan["plan"] and plan["words_today"] >= 5, f"{name} reaches words on day one")
     intense = {**cs._empty(), "pace": "intensive"}
     pi = cs.plan_today(intense)
     _check(pi["words_today"] == 20 and "words" in pi["plan"], "intensive takes all of a unit's words in a day")
