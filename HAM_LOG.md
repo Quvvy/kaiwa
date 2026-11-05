@@ -239,7 +239,7 @@ Options → "Study at 7:00 PM · Add to my calendar" downloads a daily repeating
 ### Vocabulary gaps
 
 **H40. Word packs.** ✅ `[H40]`
-I checked the 324 course words against everyday N5 vocabulary and found real holes: the numbers 1-10 as words (though Time and Shopping lean on them), basic food, the body and feeling ill, colours, common verbs. Rather than reorder a course you're part-way through, nine optional packs (75 words) now live on the course map, taught with the same teach-then-test loop. Once learned, they're ordinary cards that Chat and stories can use. Units 8 and 11 point at the Numbers pack if you haven't done it.
+I checked the 324 course words against everyday N5 vocabulary and found real holes: the numbers 1-10 as words (though Time and Shopping lean on them), basic food, the body and feeling ill, colours, common verbs. Rather than reorder a course you're part-way through, nine optional packs (73 words) now live on the course map, taught with the same teach-then-test loop. Once learned, they're ordinary cards that Chat and stories can use. Units 8 and 11 point at the Numbers pack if you haven't done it.
 *Why:* it fixes the gap without disturbing anyone's progress, and choosing what to learn is motivating in itself (Deci & Ryan). *For you to check:* meanings and romaji are hand-written; `course/packs.py` is short and worth a read.
 
 ### More real use
@@ -279,21 +279,21 @@ The first home screen asks how much time you want to give this, with honest minu
 
 **H51. Intensive is the default pace.** ✅ 🧪 `[H51]`
 Your decision. New learners see Intensive already selected on the first home screen and can change it there or under Options. Anyone who already chose a pace keeps it; a save with no pace on it moves to Intensive, which is close to the old fixed plan.
-*Simulated, 200 days with 15% skipped, before H52 retuned Regular:* Intensive finishes lessons in 47 days at 22.8 min a day, with 10 catch-up days; Regular takes 171 days at 18.6 min, with 56 catch-up days. Day one is 15 minutes and 20 words at Intensive, against 10 minutes and 5 words at Regular. One day in ten runs 27 minutes or more.
+*Simulated, 200 days with 15% skipped, before H52 retuned Regular:* Intensive finishes lessons in 47 days at 22.8 min a day, with 10 catch-up days across the whole 200-day run; Regular takes 171 days at 18.6 min, with 56 catch-up days across the run. Day one is 15 minutes and 20 words at Intensive, against 10 minutes and 5 words at Regular. One day in ten runs 27 minutes or more.
 *Watch for:* the simulator doesn't model overload, so the real risk is 100+ new items a week not sticking. If recent recall falls under 80%, new material already halves until it recovers. Check real recall and drop-off after the first few weeks; if either looks bad, go back to Regular by changing `DEFAULT_PACE`.
 
 **H52. Regular and Relaxed no longer crawl.** ✅ 🧪 `[H52]`
 At the old settings, Relaxed taught 52 words and 18 phrases in a month, which is the "might as well not bother" pacing Kaiwa should avoid. I gave both more lesson room and more new items, and gave Regular a bigger review budget so it stalls less. Simulated medians over 5 runs, with 15% of days skipped:
 
-| | Days until lessons finish | Minutes a day | Reviews-only days | Words by day 30 |
+| | Days until lessons finish | Minutes a day | Reviews-only days while lessons last | Words by day 30 |
 |---|---|---|---|---|
-| Relaxed, before | 218 | 15.1 | 69 | 52 |
-| Relaxed, now | 190 | 16.7 | 96 | 84 |
-| Regular, before | 153 | 18.3 | 56 | 73 |
-| Regular, now | 127 | 20.8 | 34 | 100 |
-| Intensive, unchanged | 49 | 22.5 | 9 | 212 |
+| Relaxed, before | 218 | 15.1 | 53 | 52 |
+| Relaxed, now | 190 | 16.7 | 78 | 84 |
+| Regular, before | 153 | 18.3 | 45 | 73 |
+| Regular, now | 127 | 20.8 | 27 | 100 |
+| Intensive, unchanged | 49 | 22.5 | 0 | 212 |
 
-*Tradeoff:* both cost about 2 more minutes a day, and Relaxed now has more reviews-only days: about half of its days while lessons last. *What the scan showed:* reviews set the floor. Nothing tested stayed near 15 minutes and finished faster than about 7 months, and raising the catch-up threshold didn't help. Mid-speed settings were no bargain either: finishing in about 3 months took 24-25 minutes a day, more than Intensive. So a slower pace buys less new material at once, and only a little daily time. *Measured in the simulator only:* it can't show whether the lighter load helps real learners remember more, which is the whole case for these two paces.
+*Tradeoff:* both cost about 2 more minutes a day, and Relaxed now has more reviews-only days: 78 of the roughly 160 days studied while lessons last, about half. Regular's fall to about a quarter. (This table first counted a whole 300-day run, including days after lessons end: 69, 96, 56, 34 and 9.) *What the scan showed:* reviews set the floor. Nothing tested stayed near 15 minutes and finished faster than about 7 months, and raising the catch-up threshold didn't help. Mid-speed settings were no bargain either: finishing in about 3 months took 24-25 minutes a day, more than Intensive. So a slower pace buys less new material at once, and only a little daily time. *Measured in the simulator only:* it can't show whether the lighter load helps real learners remember more, which is the whole case for these two paces.
 
 *Later fix to H49:* the first-day allowance vanished once the kana lesson finished, so day one stopped before any phrases. A full first-day walkthrough caught it, and a test now covers it.
 
