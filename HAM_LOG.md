@@ -2,16 +2,48 @@
 
 Everything built on the `study-lab` branch, one entry per change.
 
+## After the review (2026-11-06)
+
+Every entry was reviewed against the code, and what passed was applied on `study-lab-apply`, branched from `phase-9-10-wip` at `2e6269f`. Nothing has been pushed or merged. `study-lab` keeps the original work, including everything held below.
+
+**Held for real-use testing, not on this branch:**
+- **H25 Speed round:** a score to beat is the closest thing here to gamification.
+- **H27 Hands-free:** ungraded, adds a mode, and its voice path is untested.
+- **H29 Chat steering:** in a small test neither reply asked about the recent phrases. `PROMPT_REVISION` stays 10 until a test shows it changes what Chat asks.
+
+**Removed:** the Relaxed pace. It saved little time and stalled often, so Regular and Intensive remain.
+
+**Decided:** the recall target stays at 87%. Go back to 90% if real recall stays under about 82% for four weeks.
+
+**Pace numbers.** The figures in the entries below came from a simulator that planned once a day and added a 2-minute wait after each missed review, and they're kept only as a record. It now works the plan out again after every step, as the app does. Catch-up days also stay reviews-only now, which they didn't before. Medians of 5 runs over 300 days, with 15% of days skipped, while lessons last:
+
+| | Days until lessons finish | Minutes a day | Slowest 10% of days | Reviews-only days | Words by day 30 |
+|---|---|---|---|---|---|
+| Regular | 124 | 11.4 | 15+ | 36 of 106 | 84 |
+| Intensive | 53 | 21.3 | 30+ | 14 of 45 | 164 |
+
+These are still estimates. The seconds per card are guesses, and nothing models overload. Other simulated runs:
+
+| | Regular | Intensive |
+|---|---|---|
+| Recall target 90% instead of 87% | 157 days, 58 of 130 reviews-only, 22% more reviews | 76 days, 32 of 63 reviews-only, 30% more reviews |
+| Forgets faster, recall about 83% | 178 days, 81 of 152 reviews-only | 60 days, 18 of 49 reviews-only |
+| Forgets faster, recall about 78% | 295 days, 175 of 251 reviews-only | 56 days, none reviews-only, new material halved on 30 of 51 days |
+
+The slowdown guard doesn't fire at about 83% recall, so it won't catch a moderate slip. Check real recall and session lengths after the first few weeks.
+
+**Still untested:** a real voice, microphone or Whisper (H08, H09, H24, H45, H46), audio playback, iPhone, the desktop webview, screen readers, and any real learner.
+
+**Needs a native speaker before any release:** 141 build sentences and their wrong tiles (`build.py`), 73 pack words (`packs.py`), 20 missions and 20 culture notes (`missions.py`). The missions for u5, u7 and u18 have openers that look odd for the scene. Kana hooks are English only and just need a read.
+
+---
+
 ## Start here
 
-**To try it** (uses a throwaway profile, so your real progress is safe):
+**To try it**, use a throwaway profile and a separate checkout, because a running Kaiwa serves `static/` straight from its own folder. If your key is in `.env`, the app copies it into the throwaway folder, so delete that folder afterwards.
 
 ```bash
-git switch study-lab
-```
-
-```bash
-KAIWA_DATA_DIR=/tmp/kaiwa-try .venv/bin/python -m kaiwa.app
+PORT=8799 KAIWA_DATA_DIR=/tmp/kaiwa-try .venv/bin/python -m kaiwa.app
 ```
 
 **The ten that matter most, if you only look at some:**
@@ -24,15 +56,10 @@ KAIWA_DATA_DIR=/tmp/kaiwa-try .venv/bin/python -m kaiwa.app
 | H06-H09 | Hints, typing, seeing which sounds you missed | Failing a card now teaches you something |
 | H14/H15 | Course map and phrasebook | You could never go back to anything before |
 | H28/H43 | Your own phrases, and keeping corrections | Learn what you actually want to say |
-| H25-H27 | Speed round, numbers by ear, hands-free | Fluency practice was missing entirely |
+| H26 | Numbers by ear | Fluency practice was missing entirely |
 | H45/H46 | Free recall, take a part | Recall from memory and real turn-taking |
 | H17/H18 | End-of-day screen, a streak that forgives | How the day ends, and surviving a missed day |
 | H10 | Words understood by ear | The cards were testing reading, not listening |
-
-**Decisions I'd like from you:**
-1. **Recall target 87%** (H05): fewer reviews, slightly more misses.
-2. **Is Chat's nudge OK?** (H29): it steers questions, with nothing on screen.
-3. **Read the hand-written content:** kana hooks, missions, culture notes, word packs.
 
 **What I couldn't test:** real speech. The browser here has no microphone, so everything marked 🎤 had its logic tested, but never with a real voice. Nothing has been tried on real learners either. Please try H24, H45 and H46 out loud first.
 
@@ -47,15 +74,12 @@ The numbers are stable IDs.
 
 ---
 
-## For the agent reviewing this after the reset
+## How this branch is built
 
-- **Base:** `study-lab` branches from `phase-9-10-wip` at `2e6269f` (Kaiwa 2.1.0). Local `master` is 55 commits *behind* that, so `phase-9-10-wip` is the real trunk. Check with the owner which branch "main" means before applying anything.
-- **Not pushed.** The branch is local only.
-- **Each entry is its own commit** (the ID is in the commit subject, e.g. `[H12]`), so changes can be cherry-picked. Later entries may depend on earlier ones; dependencies are listed in the entry.
-- **Tests:** `scripts/smoke_lab.py` covers this branch's logic with no network. Existing `scripts/smoke_course.py`, `smoke_learn.py` and `smoke_state_files.py` must keep passing. `scripts/sim_pacing.py` simulates a learner through the real scheduler.
-- **Suggested order:** H01-H02 and the small fixes first (low risk, little coupling), then H03-H05 with H35 and H49 as one unit (pacing), then H12-H13 (grammar), H14-H19, and the rest. `state.py` and `course.js` are touched by nearly everything, so cherry-picking out of order will conflict; applying in order and dropping what you don't want is easier.
-- **Migration:** existing `course_state.json` loads unchanged. New keys are `pace`, `bests`, `mine`, `comeback` and per-day `new`/`lesson_min`; finished grammar backfills cards on load. `PROMPT_REVISION` is 11.
-- **Review for:** whether it fits Kaiwa's rule ("does this help them understand or speak?"), migration of existing `course_state.json`, and anything marked 🎤 or 🧪.
+- **Base:** `phase-9-10-wip` at `2e6269f` (Kaiwa 2.1.0). Local `master` is 3 commits behind that and can fast-forward.
+- **Commits:** many hold several entries, such as `[H20-H24,H26,H28]`, and some entries have later fixes (H49, H52, and the `Fix` commits). An entry can't always be cherry-picked alone.
+- **Tests:** `scripts/smoke_lab.py` covers this branch's logic with no network. `smoke_course.py`, `smoke_learn.py` and `smoke_state_files.py` must keep passing. Run them with a throwaway `KAIWA_DATA_DIR`.
+- **Migration:** existing `course_state.json` loads unchanged. New keys are `pace`, `mine`, `comeback` and per-day `new`/`lesson_min`; finished grammar backfills cards on load. Going back to 2.1.0 works, but its first save drops `pace` and `mine`.
 
 ---
 
@@ -87,7 +111,7 @@ Wrong options now favour what a kana really gets mistaken for (ね/れ/わ, シ/
 ### Pacing
 
 **H03. Choose a daily pace; lessons fit a time budget.** ✅ 🧪 `[H03,H04,H05]`
-Relaxed (~17 min a day, course in ~7 months), Regular (~21 min, ~5 months), Intensive (~23 min, ~2 months, default since H51) under Options. See H49 and H52 for how these numbers were corrected. The Start button says how long today takes ("about 10 min").
+Regular and Intensive (default since H51) under Options, with Relaxed removed after review. See "After the review" for current numbers. The Start button says how long today takes ("about 10 min").
 *Why:* I built `scripts/sim_pacing.py`, which runs a virtual learner through the real planner and FSRS. It showed "about 15 minutes" was really 19-27 for weeks 2-8 and that the day-two plan stacked kana on top of three lessons. A promise that's wrong by half is a reason to quit.
 *Tradeoff:* the slower paces take much longer. See H49 and H51.
 
@@ -180,13 +204,13 @@ Conversations get a **Slower** toggle. After the questions, **Say it with them**
 
 Nation's "four strands" say a course should split time between input, output, language study and fluency. Kaiwa had the first three.
 
-**H25. Speed round.** ✅ `[H20-H28]`
+**H25. Speed round.** Held, not on `study-lab-apply`. ✅ `[H20-H28]`
 One minute of known words by ear: hear it, tap the meaning, with your best score to beat. It never touches the review schedule. *Why:* fluency practice is known material under time pressure. It's also the closest thing here to a game, and the game is real recall.
 
 **H26. Numbers by ear.** ✅ `[H20-H28]`
 Hear a price or time at full speed and type it. Gets harder when you get 9/10. Unlocks with the Time and Shopping units. No LLM, works offline. *Why:* numbers are what everyone loses in a real shop, even when they "know" them.
 
-**H27. Hands-free.** ✅ `[H20-H28]`
+**H27. Hands-free.** Held, not on `study-lab-apply`. ✅ `[H20-H28]`
 For walking or dishes: the device reads the English, you say the Japanese aloud, it says it back in two voices. Weakest phrases first, ungraded, counts as listening time. *Why:* trying to recall before hearing makes this retrieval and not passive audio. It adds practice time that a screen can't reach.
 
 ### Your own Japanese
@@ -196,7 +220,7 @@ Phrasebook → Mine: write what you want to say ("I work in IT"), hear the simpl
 
 ### Chat, polish and resilience
 
-**H29. Chat aims at what you just learned.** ✅ 🧪 `[H29-H34]`
+**H29. Chat aims at what you just learned.** Held, not on `study-lab-apply`. ✅ 🧪 `[H29-H34]`
 The tutor now knows which phrases you learned in the last 3 days, and prefers questions you can answer with them, without saying the answer first. `PROMPT_REVISION` goes 10→11. *Why:* using a phrase soon after learning it is what makes it yours, and this keeps your "no Try saying… in Chat" rule intact because the nudge lives in the question being asked. I chose this over on-screen "try to use these" chips for that reason.
 
 **H30. Why each step is the way it is.** ✅ 🧪 `[H29-H34]`
