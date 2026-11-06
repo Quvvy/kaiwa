@@ -59,20 +59,20 @@ _LINES: dict[str, list[str]] = {
     "u13g.hoshii": ["あたらしい かばん が ほしい です | I want a new bag.", "くるま が ほしい です | I want a car.", "なに が ほしい です か | What do you want?", "いきたくない です | I don't want to go."],
     "u14g.te": ["これ を みて ください | Please look at this.", "すこし まって ください | Please wait a moment.", "ここ に すわって ください | Please sit here.", "まど を あけて ください | Please open the window."],
     "u14g.naide": ["たべないで ください | Please don't eat it.", "みないで ください | Please don't look.", "ここ で たべないで ください | Please don't eat here."],
-    "u15g.masenka": ["いっしょに しょくじ を しません か | Shall we have a meal together?", "カラオケ に いきません か | Want to go to karaoke?",
+    "u15g.masenka": ["いっしょに しょくじ を しません か | Shall we have a meal together? | しょくじ を いっしょに しません か", "カラオケ に いきません か | Want to go to karaoke?",
                      "なんじ に あいましょう か | What time shall we meet?"],
     "u15g.chotto": ["あした は ちょっと | Tomorrow is a bit…", "すみません ようじ が あります | Sorry, I have something on."],
-    "u16g.ni": ["つくえ の うえ に ほん が あります | There's a book on the desk.", "いす の した に ねこ が います | There's a cat under the chair.",
-                "へや に ともだち が います | My friend is in the room.", "れいぞうこ に ケーキ が あります | There's cake in the fridge."],
+    "u16g.ni": ["つくえ の うえ に ほん が あります | There's a book on the desk. | ほん が つくえ の うえ に あります", "いす の した に ねこ が います | There's a cat under the chair. | ねこ が いす の した に います",
+                "へや に ともだち が います | My friend is in the room. | ともだち が へや に います", "れいぞうこ に ケーキ が あります | There's cake in the fridge. | ケーキ が れいぞうこ に あります"],
     "u16g.position": ["かばん の なか です | It's in the bag.", "えき の まえ です | It's in front of the station.", "ぎんこう の となり です | It's next to the bank.",
-                      "ドア の うしろ に いぬ が います | There's a dog behind the door."],
+                      "ドア の うしろ に いぬ が います | There's a dog behind the door. | いぬ が ドア の うしろ に います"],
     "u17g.ni": ["しちじ に おきます | I get up at seven.", "じゅうじ に ねます | I go to bed at ten.", "なんじ に ねます か | What time do you go to bed?",
                 "まいあさ はちじ に うち を でます | I leave home at eight every morning. | まいあさ うち を はちじ に でます"],
-    "u17g.karamade": ["くじ から ごじ まで はたらきます | I work from nine to five.", "いつも しちじ に おきます | I always get up at seven.",
-                      "ときどき ジム に いきます | Sometimes I go to the gym.", "ぜんぜん テレビ を みません | I never watch TV. | テレビ を ぜんぜん みません"],
+    "u17g.karamade": ["くじ から ごじ まで はたらきます | I work from nine to five.", "いつも しちじ に おきます | I always get up at seven. | しちじ に いつも おきます",
+                      "ときどき ジム に いきます | Sometimes I go to the gym. | ジム に ときどき いきます", "ぜんぜん テレビ を みません | I never watch TV. | テレビ を ぜんぜん みません"],
     "u18g.de": ["でんしゃ で がっこう に いきます | I go to school by train. | がっこう に でんしゃ で いきます", "バス で かえります | I go home by bus.",
                 "ひこうき で にほん に いきます | I'll go to Japan by plane. | にほん に ひこうき で いきます"],
-    "u18g.kakaru": ["どのくらい かかります か | How long does it take?", "じゅっぷん ぐらい です | About ten minutes.", "でんしゃ で いちじかん ぐらい かかります | It takes about an hour by train.",
+    "u18g.kakaru": ["どのくらい かかります か | How long does it take?", "じゅっぷん ぐらい です | About ten minutes.", "でんしゃ で いちじかん ぐらい かかります | It takes about an hour by train. | いちじかん ぐらい でんしゃ で かかります",
                     "ごふん ぐらい です | About five minutes."],
     "u19g.deshita": ["きのう は あめ でした | It rained yesterday.", "いい てんき でした | The weather was nice.", "ゆき じゃなかった です | It didn't snow."],
     "u19g.neyo": ["いい てんき です ね | Nice weather, isn't it.", "あつい です ね | Hot, isn't it.", "あした は あめ です よ | It's going to rain tomorrow, you know.",
@@ -83,9 +83,10 @@ _LINES: dict[str, list[str]] = {
                       "こうえん で まちます | I'll wait at the park."],
 }
 
-# The wrong tile in the pile: the mistake a learner of this point actually makes.
+# The wrong tile in the pile: the mistake a learner of this point actually makes, as long
+# as it really is wrong. が for は is left out: ユキさんが がくせいです is good Japanese.
 _DECOYS = {
-    "が": "を", "を": "が", "は": "が", "に": "で", "で": "に", "から": "まで", "まで": "から", "の": "は", "と": "を",
+    "が": "を", "を": "が", "は": "を", "に": "で", "で": "に", "から": "まで", "まで": "から", "の": "は", "と": "を",
     "か": "よ", "ね": "か", "よ": "か", "です": "ます", "でした": "です", "じゃない": "くない", "ください": "します",
     "も": "は", "だけ": "も", "います": "あります", "あります": "います", "ぐらい": "から",
 }

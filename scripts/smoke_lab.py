@@ -449,7 +449,16 @@ def damaged_saves_load() -> None:
             _check(bool(cs.today_payload(path=path)["plan"]), f"a damaged save still opens: {list(bad)[0]}")
 
 
+def build_accepts_good_japanese() -> None:
+    from kaiwa.course import build
+    item = next(i for i in build.items_for("u16g.ni") if "ねこ" in i["jp"])
+    _check("ねこがいすのしたにいます" in item["also"], "a second natural word order is accepted")
+    _check(all(sorted(a) == sorted(i["jp"]) for p in build.BUILD.values() for i in p for a in i["also"]), "other orders use the same tiles")
+    _check(all(i["decoy"] != "が" for i in build.items_for("u2g.wa")), "は doesn't offer が, which would also be grammatical")
+
+
 def main() -> None:
+    build_accepts_good_japanese()
     damaged_saves_load()
     tomorrow_counts_settling_cards()
     finished_unit_in_the_evening()
