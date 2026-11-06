@@ -3311,7 +3311,7 @@
       tries += 1;
       typed.value = "";
       if (r.verdict !== "great" && r.model && normalizeKana(r.model) !== normalizeKana(r.heard) && !fixes.some((f) => f.jp === r.model)) {
-        fixes.push({ jp: r.model, en: r.said_en || "", tip: r.tip });
+        fixes.push({ jp: r.model, en: r.model_en || "", tip: r.tip });  // what the corrected line says, not what was said
       }
       myLine(r.heard, r.verdict);
       renderFeedback(r);

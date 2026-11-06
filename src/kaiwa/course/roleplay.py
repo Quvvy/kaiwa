@@ -76,7 +76,7 @@ listener would have heard.
 
 """ + KNOWN_RULES + """
 Return JSON only:
-{"verdict": "great"|"ok"|"retry", "said_en": "...", "model": "...", "tip": "...",
+{"verdict": "great"|"ok"|"retry", "said_en": "...", "model": "...", "model_en": "exact English translation of model", "tip": "...",
  "reply": "...", "reply_en": "exact English translation of reply", "done": false, "suggest": "..."}
 
 """ + MISTAKES_PROMPT
@@ -164,7 +164,8 @@ def turn(settings: Settings, *, scene: dict[str, Any], history: list[dict[str, s
     done = bool(data.get("done")) or (learner_turns >= TURNS and data["verdict"] != "retry")
     return {
         "verdict": str(data["verdict"]), "heard": heard,
-        "said_en": _s(data, "said_en").strip("\"'“”"), "model": _s(data, "model"), "tip": _s(data, "tip"),
+        "said_en": _s(data, "said_en").strip("\"'“”"), "model": _s(data, "model"),
+        "model_en": _s(data, "model_en"), "tip": _s(data, "tip"),
         "mistakes": mistakes(data.get("mistakes")),
         "reply": _s(data, "reply"), "reply_en": _s(data, "reply_en"),
         "done": done, "suggest": "" if done else _s(data, "suggest"),

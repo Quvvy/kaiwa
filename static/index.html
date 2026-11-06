@@ -2079,7 +2079,8 @@
               const row = await asked.json();
               const kept = await fetch("/api/course/mine", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(row) });
               if (!kept.ok) throw new Error();
-              keep.textContent = "Kept";
+              // The kept line is kana and may be reworded, so show what was really saved.
+              keep.textContent = `Kept: ${row.jp}${row.en ? ` (${row.en})` : ""}`;
             } catch (_) {
               keep.disabled = false;
               keep.textContent = "Keep";
