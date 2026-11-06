@@ -1044,7 +1044,7 @@
         figures.length ? el("div", { class: "stats-figures" }, figures) : null,
         recallBox(),
         el("p", { class: "prompt", text: d.due_tomorrow
-          ? `Tomorrow: ${d.due_tomorrow} review${d.due_tomorrow === 1 ? "" : "s"} waiting, then the next lesson. Sleep is part of this: what you did today sets overnight.`
+          ? `Tomorrow: ${d.due_tomorrow} review${d.due_tomorrow === 1 ? "" : "s"} waiting${today.catching_up ? "" : ", then the next lesson"}. Sleep is part of this: what you did today sets overnight.`
           : "Sleep is part of this: what you did today sets overnight." }),
         el("p", { class: "lesson-note", text: "Got two more minutes? Try what you just learned in a real exchange." })),
       actions: [
