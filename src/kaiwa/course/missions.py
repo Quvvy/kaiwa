@@ -104,10 +104,10 @@ def mission_for(unit_id: str) -> dict[str, Any] | None:
 # One small true thing about Japan per unit, shown when the unit is finished. Real
 # people using the language is why most learners started; it's worth a line.
 CULTURE: dict[str, str] = {
-    "u1": "いただきます literally means something close to \"I humbly receive\". Saying it before a meal is a small thank-you, and most people in Japan do it even when eating alone.",
+    "u1": "いただきます literally means something close to \"I humbly receive\". Saying it before a meal is a small thank-you.",
     "u2": "In Japan you usually give your family name first, and people call each other by family name plus さん until invited not to. Never add さん to your own name.",
     "u3": "Japanese people often assume foreigners can't speak any Japanese, so even a slow もういちど、おねがいします tends to get a delighted reaction.",
-    "u4": "すき is softer than the English \"love\" or \"like\": 「すきです」 said to a person is a real confession, so it's safest used about things until you know what you mean.",
+    "u4": "すき covers both \"like\" and \"love\", so 「すきです」 said to a person is a real confession. It's safest used about things until you know what you mean.",
     "u5": "Tipping isn't done in Japan and can cause confusion. In many small restaurants you pay at the register on your way out, not at the table.",
     "u6": "Breakfast at home can still be rice, miso soup and fish, though toast and coffee are just as common now. Convenience stores sell a good breakfast too.",
     "u7": "Most streets in Japan have no names. Addresses work by district and block, so people give directions by landmarks: the station, a convenience store, a bank.",

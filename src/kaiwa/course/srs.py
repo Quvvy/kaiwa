@@ -21,8 +21,9 @@ from typing import Any
 from fsrs import Card, Rating, Scheduler, State
 
 SCHEDULER = Scheduler(
-    # 90% costs far more reviews for little extra memory: in scripts/sim_pacing.py,
-    # 87% has ~40% fewer days stuck on reviews only, which is what lets new lessons keep coming.
+    # In scripts/sim_pacing.py 87% means about 20% fewer reviews than 90%, and far fewer
+    # days stuck on reviews only at slower paces. It costs 3 points of recall by design.
+    # Simulated only: go back to 90% if real recall stays under about 82% for four weeks.
     desired_retention=0.87,
     learning_steps=(timedelta(minutes=1), timedelta(minutes=10)),
     relearning_steps=(timedelta(minutes=10),),

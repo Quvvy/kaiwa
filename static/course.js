@@ -856,7 +856,7 @@
     if (steps.length) keys.primary = runNext;
     root.replaceChildren(
       el("div", { class: "home" },
-        today.away >= 3 ? el("p", { class: "home-note home-welcome", text: `Welcome back. It's been ${today.away} days, and that's fine: you keep more than it feels like. Today is a normal-sized day, not a pile.` }) : null,
+        today.away >= 3 ? el("p", { class: "home-note home-welcome", text: `Welcome back. It's been ${today.away} days, and that's fine. Today is a normal-sized day, not a pile.` }) : null,
         newMilestones().map((m) => el("p", { class: "milestone", text: m.text })),
         unit
           ? el("div", { class: "home-unit" },
@@ -866,7 +866,7 @@
               el("p", { class: "home-goal", text: unit.goal }))
           : el("div", { class: "home-unit" },
               el("h1", { class: "home-title", text: `You've finished all ${s.units_total} units` }),
-              el("p", { class: "home-goal", text: "That's real: you can greet, order, shop, plan a day and hold a short conversation in Japanese. What keeps it now is using it. Reviews continue daily, and Chat, missions and the word packs are all yours." }),
+              el("p", { class: "home-goal", text: "You've worked through greeting, ordering, shopping and planning a day in Japanese. What keeps it now is using it. Reviews continue daily, and Chat, missions and the word packs are all yours." }),
               courseNextSteps()),
         unit && unit.reopenedNote ? el("p", { class: "home-note", text: unit.reopenedNote }) : null,
         unit && ["u8", "u11"].includes(unit.id) && !(today.words_pool || []).some((w) => w.jp === "きゅう")
@@ -877,7 +877,7 @@
         fresh ? el("div", { class: "home-first" },
           el("p", { class: "can-do-label", text: "How much time do you want to give this? You can change it any time." }),
           paceRow(),
-          el("p", { class: "can-do-label", text: "And when? People who pick a time are more likely to keep it up." }),
+          el("p", { class: "can-do-label", text: "And when would suit you?" }),
           reminderRow()) : null,
         weekRow(s),
         pct > 0
@@ -897,7 +897,7 @@
           ? el("p", { class: "home-note", text: "Reviews only today: there's a backlog to clear first. New lessons are still one click away below." })
           : null,
         today.slipping != null
-          ? el("p", { class: "home-note", text: `You've been remembering ${today.slipping}% lately, so new material is slowed down until that recovers. This usually only takes a few days.` })
+          ? el("p", { class: "home-note", text: `You've been remembering ${today.slipping}% lately, so new material is slowed down until that recovers.` })
           : null,
         rows.length ? el("ol", { class: "plan" }, rows) : null,
         fresh
@@ -1047,7 +1047,7 @@
         el("p", { class: "prompt", text: d.due_tomorrow
           ? `Tomorrow: ${d.due_tomorrow} review${d.due_tomorrow === 1 ? "" : "s"} waiting, then the next lesson. Sleep is part of this: what you did today sets overnight.`
           : "Sleep is part of this: what you did today sets overnight." }),
-        el("p", { class: "lesson-note", text: "Got two more minutes? Using what you just learned in a real exchange is the fastest way to keep it." })),
+        el("p", { class: "lesson-note", text: "Got two more minutes? Try what you just learned in a real exchange." })),
       actions: [
         el("button", { type: "button", class: "secondary", onclick: goChat }, "Say something in Chat"),
         primaryButton("Done", showHome)],
@@ -4109,7 +4109,7 @@
       }
     } }, input, el("button", { class: "secondary", type: "submit" }, "How do I say it?"));
     return el("div", { class: "mine-panel", hidden: true },
-      el("p", { class: "lesson-note", text: "What do you want to be able to say? Write it in English." }),
+      el("p", { class: "lesson-note", text: "What do you want to be able to say? Write it in English. The Japanese is written by AI and not checked by a person." }),
       hasTutor ? form : el("p", { class: "status", text: "This needs your DeepSeek key (Settings → DeepSeek)." }),
       out);
   }
