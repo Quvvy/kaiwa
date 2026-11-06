@@ -398,9 +398,13 @@ def grade(
     band: str = "",
     fmt: str = "",
     rating: int | None = None,
+    lesson: bool = False,
     path: Path | None = None,
 ) -> dict[str, Any]:
     """Apply one answer. The grade is worked out here unless `rating` is given.
+
+    A `lesson` answer is a card's first looks while it's being taught. Redoing an old
+    step is practice, with the answer just shown, so a learned card's schedule stays put.
 
     Returns the card, the `rating` used, `intervals` (seconds until the next
     review for each grade, for the grade buttons), `learning` and `again_soon`.
@@ -413,6 +417,9 @@ def grade(
     outcome = {"correct": correct, "ms": ms, "helped": helped, "guessed": guessed, "band": band, "fmt": fmt}
 
     def apply(state: dict[str, Any]) -> dict[str, Any]:
+        card = state["cards"].get(card_id)
+        if lesson and card and not srs.is_learning(card):
+            return {**card, "card_id": card_id, "skipped": True}
         return _apply_grade(state, card_id, kind, outcome, rating)
 
     return _with_state(apply, path)

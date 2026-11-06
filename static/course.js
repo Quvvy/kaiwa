@@ -444,7 +444,7 @@
 
   /** First answers inside lessons count as each new card's first review. */
   function lessonGrade(cardId, outcome) {
-    postJson("/api/course/grade", { card_id: cardId, ...outcome }).catch(() => {});
+    postJson("/api/course/grade", { card_id: cardId, ...outcome, lesson: true }).catch(() => {});
   }
 
   let pendingChoice = null;

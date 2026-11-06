@@ -367,7 +367,24 @@ def slips_and_counts() -> None:
         _check(cs.load_state(path)["daily"][today]["new"] == 6, "undoing the first answer takes it back")
 
 
+def redo_keeps_schedule() -> None:
+    with tempfile.TemporaryDirectory() as d:
+        path = Path(d) / "s.json"
+        st = cs._empty()
+        cid = cs.UNITS[0]["words"][0]["id"] + ":mean"
+        card = srs.placed_card(60.0, cs._today() + timedelta(days=40))
+        st["cards"][cid] = card
+        cs.save_state(st, path)
+        r = cs.grade(cid, correct=False, ms=4000, fmt="word:choice", lesson=True, path=path)
+        after = cs.load_state(path)
+        _check(r["skipped"] and after["cards"][cid] == card and not after["log"], "a miss while redoing a step leaves a learned card's schedule alone")
+        new_id = cs.UNITS[0]["words"][1]["id"] + ":mean"
+        _check(not cs.grade(new_id, correct=True, ms=4000, lesson=True, path=path).get("skipped"), "a card being taught still counts its first look")
+        _check(not cs.grade(cid, correct=True, ms=4000, path=path).get("skipped"), "a real review still grades")
+
+
 def main() -> None:
+    redo_keeps_schedule()
     free_recall_and_culture()
     recap_mix()
     word_packs()

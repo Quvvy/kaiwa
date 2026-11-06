@@ -64,6 +64,7 @@ class GradeBody(BaseModel):
     rating: int | None = Field(default=None, ge=1, le=4)  # set only when the learner chose the grade
     answer: str = Field(default="", max_length=300)  # what was picked, typed or heard (for the learner log)
     gave_up: bool = False  # pressed "Show me" / "Don't know"
+    lesson: bool = False   # answered inside a lesson, not a review
 
 
 class UndoBody(BaseModel):
@@ -838,10 +839,12 @@ def grade(body: GradeBody) -> dict[str, Any]:
         correct = body.correct if body.correct is not None else bool(body.good)
         card = state.grade(
             body.card_id, correct=correct, ms=body.ms, helped=body.helped,
-            guessed=body.guessed, band=body.band, fmt=body.fmt, rating=body.rating,
+            guessed=body.guessed, band=body.band, fmt=body.fmt, rating=body.rating, lesson=body.lesson,
         )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    if card.get("skipped"):
+        return {"card": card}
     learner_log.log("review", card=body.card_id, fmt=body.fmt, correct=correct, ms=body.ms, helped=body.helped,
                     guessed=body.guessed, gave_up=body.gave_up, band=body.band, answer=body.answer,
                     chosen_grade=body.rating, grade=card.get("rating"), auto_grade=card.get("auto_rating"),
