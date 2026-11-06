@@ -798,9 +798,8 @@
     const rows = [];
     if (today.review.length) {
       // Only today's share is shown: the rest waits for later days, never piles up here.
-      const secs = today.review.reduce((n, c) => n + ({ kana: 4, word: 4, listen: 8, speak: 12, mined: 12, line: 12 }[c.kind === "phrase" ? c.skill : c.kind] || 8), 0);
       const n = today.review.length;
-      rows.push(planRow("Review", `${n} card${n === 1 ? "" : "s"}, about ${Math.max(1, Math.round(secs / 60))} min`, false, open("review", () => runReview(today.review))));
+      rows.push(planRow("Review", `${n} card${n === 1 ? "" : "s"}, about ${Math.max(1, Math.round(today.review_minutes))} min`, false, open("review", () => runReview(today.review))));
     } else if (s.phrases_learned) {
       rows.push(planRow("Review", "Nothing left today", false, null));
     }

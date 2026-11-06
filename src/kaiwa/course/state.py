@@ -818,7 +818,9 @@ FIRST_DAY_EXTRA = 4.0
 # Rough minutes a lesson step takes, including its share of the same-day recap.
 WORD_MINUTES = 0.3
 STEP_MINUTES = {"grammar": 5.5, "listen": 3.5, "speak": 3.5}
-REVIEW_SECONDS = {"kana": 4, "word": 5, "listen": 8, "speak": 12, "grammar": 15, "mined": 12, "line": 12}
+# A rough guess at answering and reading the result. The one table for review time: the
+# home screen's estimate and scripts/sim_pacing.py both use it.
+REVIEW_SECONDS = {"kana": 6, "word": 7, "listen": 11, "speak": 18, "grammar": 25, "mined": 18, "line": 18}
 
 
 def pace_of(state: dict[str, Any]) -> dict[str, Any]:
@@ -1266,9 +1268,30 @@ def plan_today(state: dict[str, Any]) -> dict[str, Any]:
         # After the new material: a second look at today's new and missed cards.
         plan.append("recap")
     used = minutes_budget - minutes_left
+    if unit and not day_one and not day_one_today and day_two and all(s in planned for s in day_two):
+        used += _next_unit_minutes(unit, state, minutes_left, new_left)  # finishing a unit rolls into the next
     return {"plan": plan, "catching_up": False, "day_two_tomorrow": day_two_tomorrow, "words_today": words_today,
             "pace": _pace_name(state), "slipping": slipping, "minutes": _day_minutes(reviews + mined_new, state, used),
             **mined_extra}
+
+
+def _next_unit_minutes(unit: dict[str, Any], state: dict[str, Any], minutes_left: float, new_left: float) -> float:
+    """What today's leftover budget holds of the unit after this one, for the time estimate."""
+    after = next((u for u in UNITS[UNITS.index(unit) + 1:] if not unit_done(state, u)), None)
+    if after is None:
+        return 0.0
+    row = state["units"].get(after["id"], {})
+    used = 0.0
+    if not row.get("learn"):
+        need = _step_minutes("learn", after)
+        if need > minutes_left or len(after["phrases"]) > new_left:
+            return 0.0
+        used, minutes_left, new_left = need, minutes_left - need, new_left - len(after["phrases"])
+    left = _words_left(after, row)
+    fits = int(min(left, max(0.0, minutes_left) / WORD_MINUTES, max(0.0, new_left)))
+    if fits < left:
+        fits -= fits % MIN_WORD_BATCH
+    return used + fits * WORD_MINUTES
 
 
 def _pace_name(state: dict[str, Any]) -> str:
@@ -1586,6 +1609,7 @@ def today_payload(*, path: Path | None = None) -> dict[str, Any]:
         "stats": stats(state),
         "review": due,
         "review_total": all_due,
+        "review_minutes": _review_minutes(due),
         "unit": public_unit(unit) if unit else None,
         "unit_steps": dict(state["units"].get(unit["id"], {})) if unit else {},
         "kana": public_kana_lesson(kana, state) if kana else None,
