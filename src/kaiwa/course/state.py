@@ -135,7 +135,7 @@ def load_state(path: Path | None = None) -> dict[str, Any]:
         state["grader"] = raw["grader"]
     if isinstance(raw.get("placement"), dict):
         state["placement"] = raw["placement"]
-    if raw.get("pace") in PACES:
+    if isinstance(raw.get("pace"), str) and raw["pace"] in PACES:
         state["pace"] = raw["pace"]
     state["limits"] = clean_limits(raw.get("limits"))
     if isinstance(raw.get("comeback"), str):
@@ -319,10 +319,17 @@ def complete_step(unit_id: str, step: str, *, count: int | None = None, path: Pa
     return _with_state(apply, path)
 
 
+def _lesson_min(day: dict[str, Any]) -> float:
+    try:
+        return float(day.get("lesson_min") or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
 def _spend_minutes(state: dict[str, Any], minutes: float) -> None:
     """Lesson time used today, so the rest of today's plan fits in what's left."""
     day = state["daily"].setdefault(_today().isoformat(), {"answers": 0, "right": 0, "ms": 0})
-    day["lesson_min"] = round(float(day.get("lesson_min") or 0) + minutes, 2)
+    day["lesson_min"] = round(_lesson_min(day) + minutes, 2)
 
 
 def _note_new(state: dict[str, Any], card_id: str, change: int = 1) -> None:
@@ -686,8 +693,7 @@ def _card_row(card_id: str, kind: tuple[str, str, str], card: dict[str, Any]) ->
 
 
 def _answered_today(card: dict[str, Any]) -> bool:
-    last = str(card.get("last") or "")
-    return bool(last) and srs.study_day(datetime.fromisoformat(last)).isoformat() == _today().isoformat()
+    return _on_study_day(card.get("last") or "", _today().isoformat())
 
 
 def _reviewable(card_id: str, kind: tuple[str, str, str] | None, card: dict[str, Any] | None = None) -> bool:
@@ -1177,7 +1183,7 @@ def plan_today(state: dict[str, Any]) -> dict[str, Any]:
     share = 0.5 if slipping is not None else 1.0
     # What's already been done today counts: the plan is worked out again after every step.
     day = state["daily"].get(iso, {})
-    spent = float(day.get("lesson_min") or 0)
+    spent = _lesson_min(day)
     limits = deck_limits(state, "course")
     new_cap = limits["new_per_day"]
     overall_new = all_limits(state)["new_per_day"]

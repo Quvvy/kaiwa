@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 import tempfile
@@ -432,7 +433,18 @@ def tomorrow_counts_settling_cards() -> None:
     _check(cs.day_summary(st)["due_tomorrow"] == 1, "tomorrow's count includes cards still settling")
 
 
+def damaged_saves_load() -> None:
+    with tempfile.TemporaryDirectory() as d:
+        iso = cs._today().isoformat()
+        cid = cs.UNITS[0]["phrases"][0]["id"] + ":listen"
+        for bad in ({"pace": ["regular"]}, {"cards": {cid: {**srs.new_card(), "last": "not-a-date"}}}, {"daily": {iso: {"answers": 1, "right": 1, "ms": 1, "lesson_min": "x"}}}):
+            path = Path(d) / "s.json"
+            path.write_text(json.dumps({"days": [iso], **bad}), encoding="utf-8")
+            _check(bool(cs.today_payload(path=path)["plan"]), f"a damaged save still opens: {list(bad)[0]}")
+
+
 def main() -> None:
+    damaged_saves_load()
     tomorrow_counts_settling_cards()
     finished_unit_in_the_evening()
     diff_shows_real_japanese()
