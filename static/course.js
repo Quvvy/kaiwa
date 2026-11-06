@@ -3019,7 +3019,7 @@
       onclick: () => runShadow(d.lines, voice, finishListen) }, "Say it with them");
     const speakers = [...new Set(d.lines.map(who))];
     const roleBtn = speakers.length >= 2 ? el("button", { type: "button", class: "secondary", hidden: true,
-      "data-tip": "Now you're one of them: the other person speaks, you say your lines from their meaning. Your real answers don't need to be word for word.",
+      "data-tip": "Now you're one of them: the other person speaks, you say your lines from their meaning. Each one is checked against the line in the conversation.",
       onclick: () => runRole(d.lines, who, voice, finishListen) }, "Take a part") : null;
     const byEar = el("p", { class: "by-ear", hidden: true, text: "Caught by ear." });
     const questionsBox = el("div", { class: "questions", hidden: true },
@@ -3134,8 +3134,8 @@
     function end() {
       frame({
         title: "Your part",
-        body: el("div", { class: "card-body" }, el("h3", { class: "end-title", text: "You held up your side." }),
-          el("p", { class: "prompt", text: "That's what a real exchange feels like. Doing it again from memory is worth it." })),
+        body: el("div", { class: "card-body" }, el("h3", { class: "end-title", text: "That's your part." }),
+          el("p", { class: "prompt", text: "Doing it again from memory is worth it." })),
         actions: [el("button", { type: "button", class: "secondary", onclick: () => runRole(lines, who, voice, onDone) }, "Again"), primaryButton("Continue", onDone)],
         primary: onDone,
       });
@@ -3336,7 +3336,7 @@
       hintUsed = false;
       pending = false;
       hold.disabled = false;
-      if (r.done || tries >= MAX_TRIES) finish();
+      if (r.done || tries >= MAX_TRIES) finish(!!r.done);
     }
 
     const hold = holdControl("Hold and answer", (blob, ext) => send(audioForm(blob, ext, {})), showProblem(feedback));
@@ -3352,12 +3352,14 @@
     const leave = mission ? () => continuePlan() : () => runTalk();
     const nextBtn = primaryButton(mission ? "Continue" : "Another conversation", leave, { disabled: true });
 
-    function finish() {
+    function finish(reached) {
       finished = true;
-      track("talk_end", { goal: scene.goal, tries, done: true });
+      track("talk_end", { goal: scene.goal, tries, done: reached });
       controls.hidden = true;
-      thread.after(el("p", { class: "by-ear", text: mission ? `Mission done: ${scene.goal} Click any line to hear it again.` : "Conversation done. Click any line to hear it again." }));
-      if (mission) postJson("/api/course/mission_done", { unit_id: mission }).catch(() => {});
+      thread.after(el("p", { class: "by-ear", text: !reached
+        ? "Let's stop there. This one's worth another go later. Click any line to hear it again."
+        : mission ? `Mission done: ${scene.goal} Click any line to hear it again.` : "Conversation done. Click any line to hear it again." }));
+      if (mission && reached) postJson("/api/course/mission_done", { unit_id: mission }).catch(() => {});
       if (fixes.length) {
         feedback.replaceChildren(el("div", { class: "talk-fixes" },
           el("p", { class: "model-label", text: "Worth keeping from this talk" }),
