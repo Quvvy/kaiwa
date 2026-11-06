@@ -448,6 +448,7 @@
   }
 
   let pendingChoice = null;
+  let pendingText = null;
   function wait(ms) {
     return new Promise((r) => setTimeout(r, ms));
   }
@@ -631,7 +632,8 @@
     keys.hold = hold ? hold.holdApi : null;
     keys.replay = null;
     keys.meanings = null;
-    keys.text = null;
+    keys.text = pendingText;
+    pendingText = null;
     keys.tab = null;
     keys.grade = null;
     keys.space = null;
@@ -1481,7 +1483,8 @@
     const firstTry = new Map(); // queue item → right on first try?
     const history = [];         // answered items, for Ctrl+Z
     const MAX_REPEATS = 2;
-    prefetch(queue.filter((c) => !c.grammar && !c.mined && !c.line).map((c) => [c.phrase ? c.phrase.jp : c.word ? c.word.jp : c.kana.char, {}]));
+    prefetch(queue.filter((c) => !c.grammar && !c.mined && !c.line).map((c) => [c.phrase ? c.phrase.jp : c.word ? c.word.jp : c.kana.char,
+      c.skill === "listen" || (c.word && c.format === "choice") ? reviewVoice(c) : {}]));
 
     // Upcoming recognition word cards get swapped for short listening sentences.
     const wordIds = queue.filter((c) => c.kind === "word" && c.format === "choice").map((c) => c.card_id);
@@ -1684,7 +1687,7 @@
           if (!byEar) return text;
           const showText = el("button", { class: "secondary", type: "button", onclick: () => {
             markHelped(); text.hidden = false; showText.hidden = true; } }, "Show text", kbd("T"));
-          keys.text = () => showText.click();
+          pendingText = () => showText.click();
           return [el("div", { class: "lesson-play" }, showText), text];
         },
         after: () => { text.hidden = false; return needsRomaji(w.jp) ? el("p", { class: "phrase-ro", text: w.ro }) : el("span"); } });
@@ -1706,7 +1709,7 @@
         extra: (markHelped) => {
           const showText = el("button", { class: "secondary", type: "button", onclick: () => {
             markHelped(); text.hidden = false; showText.hidden = true; } }, "Show text", kbd("T"));
-          keys.text = () => showText.click();
+          pendingText = () => showText.click();
           return [el("div", { class: "lesson-play" }, showText), text];
         },
         after: () => {
