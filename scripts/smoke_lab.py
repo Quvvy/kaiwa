@@ -412,7 +412,22 @@ def diff_shows_real_japanese() -> None:
     _check(joined(runs) == "もう一度" and runs[-1] == {"text": "一度", "ok": False}, "kanji stay kanji, marked whole")
 
 
+def finished_unit_in_the_evening() -> None:
+    real = srs._now
+    local = datetime.now().astimezone().tzinfo
+    srs._now = lambda: datetime(2027, 3, 3, 23, 30, tzinfo=local).astimezone(timezone.utc)  # late evening, local time
+    try:
+        st = cs._empty()
+        st["units"]["u1"] = {"done_at": (srs._now() - timedelta(minutes=5)).isoformat()}
+        _check([u["id"] for u in cs.day_summary(st)["units_finished"]] == ["u1"], "a unit finished this evening counts as today, whatever the UTC date")
+        st["units"]["u1"]["done_at"] = (srs._now() - timedelta(days=2)).isoformat()
+        _check(not cs.day_summary(st)["units_finished"], "one finished days ago doesn't")
+    finally:
+        srs._now = real
+
+
 def main() -> None:
+    finished_unit_in_the_evening()
     diff_shows_real_japanese()
     catch_up_stays()
     redo_keeps_schedule()

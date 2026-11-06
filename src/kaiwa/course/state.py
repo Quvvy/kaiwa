@@ -1487,6 +1487,14 @@ def stats(state: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _on_study_day(stamp: Any, day: str) -> bool:
+    """Was this UTC timestamp during the given study day, in local time?"""
+    try:
+        return srs.study_day(datetime.fromisoformat(str(stamp))).isoformat() == day
+    except ValueError:
+        return False
+
+
 def day_summary(state: dict[str, Any]) -> dict[str, Any]:
     """Today so far, in the learner's terms."""
     today = _today().isoformat()
@@ -1494,7 +1502,7 @@ def day_summary(state: dict[str, Any]) -> dict[str, Any]:
     answers = int(day.get("answers") or 0)
     finished = [{"id": u["id"], "number": i, "title": u["title"], "goal": u["goal"]}
                 for i, u in enumerate(UNITS, start=1)
-                if str(state["units"].get(u["id"], {}).get("done_at") or "")[:10] == today
+                if _on_study_day(state["units"].get(u["id"], {}).get("done_at"), today)
                 and not state["units"][u["id"]].get("placed")]
     tomorrow = (_today() + timedelta(days=1)).isoformat()
     due_by_deck: dict[str, int] = {}
