@@ -981,7 +981,9 @@
   }
   function markMilestonesSeen() {
     const list = today.milestones || [];
-    writePref("kaiwa_seen_milestones", ["-", ...list.map((m) => m.id)].join(","));
+    // Kept even if one lapses: reaching the same line twice isn't news.
+    const seen = readPref("kaiwa_seen_milestones", "").split(",").filter((x) => x && x !== "-");
+    writePref("kaiwa_seen_milestones", ["-", ...new Set([...seen, ...list.map((m) => m.id)])].join(","));
   }
 
   /**

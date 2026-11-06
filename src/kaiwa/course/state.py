@@ -1533,13 +1533,24 @@ def day_summary(state: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+HELD_DAYS = 3  # memory lasting this long has been recalled for real, not just taught
+
+
+def _held(card: dict[str, Any] | None) -> bool:
+    return bool(card) and not card.get("placed") and not srs.is_learning(card) and srs.stability(card) >= HELD_DAYS
+
+
 def milestones(state: dict[str, Any]) -> list[dict[str, str]]:
-    """Real abilities reached, oldest first. Counts things the learner can do, never points."""
-    words = sum(1 for w in _WORDS if f"{w}:mean" in state["cards"])
-    phrases = sum(1 for p in learned_phrase_ids(state) if not p.startswith("my."))
+    """Real abilities reached, oldest first. Counts what's been recalled, never what's been shown, and never points."""
+    cards = state["cards"]
+    words = sum(1 for w in _WORDS if _held(cards.get(f"{w}:mean")))
+    phrases = sum(1 for p in learned_phrase_ids(state) if not p.startswith("my.") and _held(cards.get(f"{p}:speak")))
     listening = state["listening"]["total_ms"] / 60000
     talk = sum(int(d.get("talk") or 0) for d in state["daily"].values())
-    prog = kana_progress(state)
+
+    def can_read(script: str) -> bool:
+        return all(_held(cards.get(f"kana.{ch}:read")) for l in KANA_LESSONS if l["script"] == script for ch, _ in l["kana"])
+
     units = sum(1 for u in UNITS if unit_done(state, u))
     out: list[dict[str, str]] = []
 
@@ -1551,8 +1562,8 @@ def milestones(state: dict[str, Any]) -> list[dict[str, str]]:
         add(f"phrases{n}", phrases >= n, f"{n} phrases you can say.")
     for n in (50, 100, 200, 300):
         add(f"words{n}", words >= n, f"{n} words you know.")
-    add("hiragana", prog["hiragana"][0] >= prog["hiragana"][1], "You can read all of hiragana.")
-    add("katakana", prog["katakana"][0] >= prog["katakana"][1], "You can read all of katakana.")
+    add("hiragana", can_read("hiragana"), "You can read all of hiragana.")
+    add("katakana", can_read("katakana"), "You can read all of katakana.")
     for n in (30, 60, 300, 600):
         add(f"listening{n}", listening >= n, f"{n // 60} hours of listening." if n >= 120 else f"{n} minutes of listening.")
     for n in (25, 100, 500):

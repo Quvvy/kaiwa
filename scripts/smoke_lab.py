@@ -218,8 +218,14 @@ def habit_and_map() -> None:
         _check(cs.milestones({**cs._empty()}) == [], "no milestones on day one")
         st4 = cs.load_state(path)
         for p in [p["id"] for u in UNITS[:2] for p in u["phrases"]]:
-            st4["cards"][f"{p}:listen"] = srs.new_card()
-        _check(any(x["id"] == "phrases10" for x in cs.milestones(st4)), "ten phrases is a milestone")
+            st4["cards"][f"{p}:speak"] = srs.new_card()
+        _check(not any(x["id"] == "phrases10" for x in cs.milestones(st4)), "being taught ten phrases isn't a milestone")
+        for p in [p["id"] for u in UNITS[:2] for p in u["phrases"]]:
+            st4["cards"][f"{p}:speak"] = {**srs.placed_card(5.0, cs._today()), "placed": False}
+        _check(any(x["id"] == "phrases10" for x in cs.milestones(st4)), "recalling ten phrases is")
+        for p in [p["id"] for u in UNITS[:2] for p in u["phrases"]]:
+            st4["cards"][f"{p}:speak"] = srs.placed_card(5.0, cs._today())
+        _check(not any(x["id"] == "phrases10" for x in cs.milestones(st4)), "a placed card isn't proof yet")
 
 
 def fluency_and_mine() -> None:
