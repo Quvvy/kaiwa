@@ -1088,7 +1088,8 @@
             await postJson("/api/course/pace", { pace: key }).catch(() => {});
             showHome();
           },
-        }, p.label, el("span", { class: "pace-minutes", text: `~${p.minutes} min a day · ~${p.months} months` })))));
+        }, p.label, el("span", { class: "pace-minutes", text: `~${p.minutes} min a day · ~${p.months} months` })))),
+      el("span", { class: "pace-note", text: "Estimates from a simulation, not from real learners yet." }));
   }
   /**
    * Anki-style daily limits, per deck and overall. A blank box follows the pace, so the

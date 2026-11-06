@@ -70,20 +70,17 @@ def pacing_plans() -> None:
     p = cs.plan_today(state)
     _check(p["plan"][0] == "kana" and "learn" in p["plan"] and p["plan"][-1] == "recap", "day one has kana, phrases and a recap")
     _check(p["minutes"] >= 8, "the plan says how long today takes, the first day's extra included")
-    relaxed = {**cs._empty(), "pace": "relaxed"}
-    pr = cs.plan_today(relaxed)
+    pr = cs.plan_today({**cs._empty(), "pace": "regular"})
     _check(cs.DEFAULT_PACE == "intensive" and cs.plan_today(cs._empty())["pace"] == "intensive", "Intensive is the default pace")
     with tempfile.TemporaryDirectory() as d:
         path = Path(d) / "s.json"
-        cs.set_pace("relaxed", path=path)
-        _check(cs.plan_today(cs.load_state(path))["pace"] == "relaxed", "a pace the learner chose outlasts the default")
-    for name in ("relaxed", "regular"):
-        plan = cs.plan_today({**cs._empty(), "pace": name})
-        _check("words" in plan["plan"] and plan["words_today"] >= 5, f"{name} reaches words on day one")
+        cs.set_pace("regular", path=path)
+        _check(cs.plan_today(cs.load_state(path))["pace"] == "regular", "a pace the learner chose outlasts the default")
+    _check("words" in pr["plan"] and pr["words_today"] >= 5, "regular reaches words on day one")
     intense = {**cs._empty(), "pace": "intensive"}
     pi = cs.plan_today(intense)
     _check(pi["words_today"] == 20 and "words" in pi["plan"], "intensive takes all of a unit's words in a day")
-    _check("words" not in pr["plan"] or pr["words_today"] < 20, "relaxed spreads a unit's words out")
+    _check("words" not in pr["plan"] or pr["words_today"] < 20, "regular spreads a unit's words out")
     with tempfile.TemporaryDirectory() as d:
         path = Path(d) / "s.json"
         cs.complete_step("u1", "learn", path=path)
@@ -94,8 +91,8 @@ def pacing_plans() -> None:
         cs.complete_step("u1", "words", count=10, path=path)
         st = cs.load_state(path)
         _check(st["units"]["u1"]["words"] and sum(c.startswith("u1w.") for c in st["cards"]) == 20, "the last part finishes it")
-        cs.set_pace("relaxed", path=path)
-        _check(cs.load_state(path)["pace"] == "relaxed", "pace is saved")
+        cs.set_pace("regular", path=path)
+        _check(cs.load_state(path)["pace"] == "regular", "pace is saved")
     with tempfile.TemporaryDirectory() as d:
         path = Path(d) / "s.json"
         first = cs.plan_today(cs.load_state(path))

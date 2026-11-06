@@ -1684,7 +1684,8 @@ body:not([data-mode="learn"]) .ask-dock {
 /* Three paces side by side, each a name over what it costs. */
 .pace-options {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-auto-columns: 1fr;
+  grid-auto-flow: column;
   gap: 4px;
   padding: 4px;
   border: 1px solid var(--line);
@@ -1751,6 +1752,11 @@ body:not([data-mode="learn"]) .ask-dock {
   border-color: var(--accent, var(--ink));
   color: var(--ink);
   font-weight: 600;
+}
+
+.pace-note {
+  color: var(--ink-3);
+  font-size: 12px;
 }
 
 /* ---------- which sounds didn't come through ---------- */

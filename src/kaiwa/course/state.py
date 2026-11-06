@@ -790,18 +790,16 @@ def recap_cards(state: dict[str, Any]) -> list[dict[str, Any]]:
 # ---------- pacing ----------
 # How much a day holds, set by the learner. Reviews come first and get their own
 # budget (rough "seconds/3" units, see CARD_COST); lessons then fill `lesson_minutes`.
-# `minutes` and `months` are what scripts/sim_pacing.py measures while lessons last
-# (with 15% of days skipped), so they're what the pace promises. The old fixed plan
-# said 15 minutes and ran 19-27 for most of the course. Reviews set the floor: going
-# much under Relaxed's minutes only adds months, so a slower pace mainly means less new at once.
+# `minutes` and `months` are what scripts/sim_pacing.py measures while lessons last (with
+# 15% of days skipped). They're estimates: its seconds per card are guesses and it can't
+# model overload, so real session lengths and real recall outrank them.
 PACES: dict[str, dict[str, Any]] = {
-    "relaxed": {"label": "Relaxed", "minutes": 17, "months": 7, "lesson_minutes": 9, "reviews": 24, "new_items": 18},
-    "regular": {"label": "Regular", "minutes": 21, "months": 5, "lesson_minutes": 10, "reviews": 36, "new_items": 24},
-    "intensive": {"label": "Intensive", "minutes": 23, "months": 2, "lesson_minutes": 24, "reviews": 50, "new_items": 50},
+    "regular": {"label": "Regular", "minutes": 11, "months": 4, "lesson_minutes": 10, "reviews": 36, "new_items": 24},
+    "intensive": {"label": "Intensive", "minutes": 21, "months": 2, "lesson_minutes": 24, "reviews": 50, "new_items": 50},
 }
-# Intensive by the owner's choice: about 4 more minutes a day than Regular for about
-# a quarter of the calendar. The simulator doesn't model overload, so this is the
-# number to recheck against real use; SLOW_DOWN_BELOW is the guard if it's too much.
+# Intensive by the owner's choice: about 10 more minutes a day than Regular for about half
+# the calendar. This is the number to recheck against real use; SLOW_DOWN_BELOW is the guard
+# if it's too much, though it only fires once recall falls under 80%.
 DEFAULT_PACE = "intensive"
 # When the due backlog is worth more than two days of reviews, that day is a
 # catch-up day: no new material is planned, and the review budget doubles.
