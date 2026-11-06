@@ -383,7 +383,26 @@ def redo_keeps_schedule() -> None:
         _check(not cs.grade(cid, correct=True, ms=4000, path=path).get("skipped"), "a real review still grades")
 
 
+def catch_up_stays() -> None:
+    st = cs._empty()
+    st["pace"] = "intensive"
+    st["days"] = [(cs._today() - timedelta(days=1)).isoformat()]
+    chars = [c for l in KANA_LESSONS for c, _ in l["kana"]][:110]
+    for ch in chars:
+        card = srs.placed_card(5.0, cs._today())
+        card.pop("placed")
+        st["cards"][f"kana.{ch}:read"] = card
+    _check(cs.plan_today(st)["catching_up"], "a big backlog is a catch-up day")
+    for _ in range(2):  # a sitting asks at most 80 cards
+        for c in cs.todays_reviews(st):
+            cs._apply_grade(st, c["card_id"], cs._card_kind(c["card_id"]), {"correct": True, "ms": 3000, "helped": False, "guessed": False, "band": "", "fmt": "kana:choice"}, None)
+    p = cs.plan_today(st)
+    _check(p["catching_up"] and not {"kana", "learn", "words"} & set(p["plan"]), "doing part of the backlog doesn't turn the day back into lessons")
+    _check(not cs.todays_reviews(st), "and the day's review share is finished")
+
+
 def main() -> None:
+    catch_up_stays()
     redo_keeps_schedule()
     free_recall_and_culture()
     recap_mix()

@@ -976,11 +976,15 @@ def due_cost(state: dict[str, Any]) -> int:
 
 
 def catching_up(state: dict[str, Any]) -> bool:
-    """A course backlog worth more than two days. Other decks never make a catch-up day."""
+    """A course backlog worth more than two days, judged on what was due when the day began,
+    so clearing part of a backlog can't flip a reviews-only day back to lessons.
+    Other decks never make a catch-up day."""
     cap = _review_cap(state)
     if cap is not None:
-        return len(due_cards(state, limit=10_000, deck="course")) > cap * CATCH_UP_DAYS
-    return due_cost(state) > pace_of(state)["reviews"] * CATCH_UP_DAYS
+        due = len(due_cards(state, limit=10_000, deck="course")) + reviews_done_today(state, "course")
+        return due > cap * CATCH_UP_DAYS
+    spent = state["reviewed"].get(_today().isoformat(), 0)
+    return due_cost(state) + spent > pace_of(state)["reviews"] * CATCH_UP_DAYS
 
 
 def _course_reviews(state: dict[str, Any]) -> list[dict[str, Any]]:
