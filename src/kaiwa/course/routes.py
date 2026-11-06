@@ -666,11 +666,12 @@ def reminder(time: str = "19:00") -> Response:
     except ValueError as exc:
         raise HTTPException(status_code=400, detail="Time should look like 19:30") from exc
     today = state._today().strftime("%Y%m%d")
+    minutes = state.pace_of(state.load_state())["minutes"]
     body = "\r\n".join([
         "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Kaiwa//Study time//EN", "BEGIN:VEVENT",
         f"UID:kaiwa-study-{today}@kaiwa", f"DTSTAMP:{today}T000000Z", f"DTSTART:{today}T{hour:02d}{minute:02d}00",
-        "DURATION:PT15M", "RRULE:FREQ=DAILY", "SUMMARY:Japanese with Kaiwa",
-        "DESCRIPTION:Fifteen minutes. If you're busy\\, just two.", "BEGIN:VALARM", "TRIGGER:PT0M", "ACTION:DISPLAY",
+        f"DURATION:PT{minutes}M", "RRULE:FREQ=DAILY", "SUMMARY:Japanese with Kaiwa",
+        f"DESCRIPTION:About {minutes} minutes. If you're busy\\, just two.", "BEGIN:VALARM", "TRIGGER:PT0M", "ACTION:DISPLAY",
         "DESCRIPTION:Japanese with Kaiwa", "END:VALARM", "END:VEVENT", "END:VCALENDAR", "",
     ])
     return Response(content=body, media_type="text/calendar",
