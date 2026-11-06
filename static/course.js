@@ -740,6 +740,15 @@
   async function refresh() {
     today = await api("/api/course/today");
     if (today.unit_titles) UNIT_TITLES = today.unit_titles;
+    if (recapSettled()) today.plan = (today.plan || []).filter((s) => s !== "recap");
+  }
+  const dayKey = () => String(((today.stats || {}).week || []).find((w) => w.today)?.d);
+  /** A recap is over for the day even if a missed card or two is left. New cards bring it back. */
+  function recapSettled() {
+    try {
+      const d = JSON.parse(readPref("kaiwa_recap_settled", "{}"));
+      return d.day === dayKey() && (today.recap || []).length <= d.left;
+    } catch (_) { return false; }
   }
   /** Going on to the next step: a lost connection says so and offers to try again, never a dead screen. */
   async function refreshOrRetry(again) {
@@ -805,7 +814,7 @@
     }
     if ((today.recap || []).length) {
       const n = today.recap.length;
-      rows.push(planRow("Recap", `${n} new card${n === 1 ? "" : "s"}, a second look`, false,
+      rows.push(planRow("Recap", steps.includes("recap") ? `${n} new card${n === 1 ? "" : "s"}, a second look` : `${n} card${n === 1 ? "" : "s"} still settling, if you want another go`, false,
         steps.includes("recap") ? open("recap", () => runStep("recap")) : () => runStep("recap")));
     }
     const kp = today.kana_progress;
@@ -2024,6 +2033,7 @@
       const go = async () => {
         if (!onPlan) return showHome();
         if (!(await refreshOrRetry(go))) return undefined;
+        if (planStep === "recap") writePref("kaiwa_recap_settled", JSON.stringify({ day: dayKey(), left: (today.recap || []).length }));
         today.plan = (today.plan || []).filter((s) => s !== planStep);
         return runNext();
       };

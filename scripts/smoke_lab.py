@@ -426,7 +426,14 @@ def finished_unit_in_the_evening() -> None:
         srs._now = real
 
 
+def tomorrow_counts_settling_cards() -> None:
+    st = cs._empty()
+    st["cards"][cs.UNITS[0]["words"][0]["id"] + ":mean"] = srs.new_card()
+    _check(cs.day_summary(st)["due_tomorrow"] == 1, "tomorrow's count includes cards still settling")
+
+
 def main() -> None:
+    tomorrow_counts_settling_cards()
     finished_unit_in_the_evening()
     diff_shows_real_japanese()
     catch_up_stays()

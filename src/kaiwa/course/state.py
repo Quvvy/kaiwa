@@ -1514,6 +1514,8 @@ def day_summary(state: dict[str, Any]) -> dict[str, Any]:
     due_tomorrow = min(due_by_deck.get("course", 0), pace_of(state)["reviews"] if cap is None else cap)
     for deck in SIDE_DECKS:
         due_tomorrow += min(due_by_deck.get(deck, 0), _review_cap(state, deck) or 0)
+    # Cards still settling come back too.
+    due_tomorrow += sum(1 for c in state["cards"].values() if srs.is_learning(c))
     return {
         "answers": answers,
         "right": int(day.get("right") or 0),
