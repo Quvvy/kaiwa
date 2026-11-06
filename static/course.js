@@ -728,7 +728,7 @@
       afterLesson = null;
       return back();
     }
-    await refresh();
+    if (!(await refreshOrRetry(continuePlan))) return undefined;
     const next = planSteps()[0];
     return next ? runStep(next) : showDayDone();
   }
@@ -740,6 +740,23 @@
   async function refresh() {
     today = await api("/api/course/today");
     if (today.unit_titles) UNIT_TITLES = today.unit_titles;
+  }
+  /** Going on to the next step: a lost connection says so and offers to try again, never a dead screen. */
+  async function refreshOrRetry(again) {
+    try {
+      await refresh();
+      return true;
+    } catch (err) {
+      frame({
+        title: "Couldn't reach Kaiwa",
+        body: el("div", { class: "card-body" },
+          el("p", { class: "verdict off", text: "What you just did is saved. Check that Kaiwa can reach your PC, then try again." }),
+          el("p", { class: "status", text: String(err.message || err) })),
+        actions: [primaryButton("Try again", again)],
+        primary: again,
+      });
+      return false;
+    }
   }
 
   async function showHome() {
@@ -2006,7 +2023,7 @@
       const onPlan = planStep === "review" || planStep === "recap" || planStep === "mined" || planStep === "kaishi";
       const go = async () => {
         if (!onPlan) return showHome();
-        await refresh();
+        if (!(await refreshOrRetry(go))) return undefined;
         today.plan = (today.plan || []).filter((s) => s !== planStep);
         return runNext();
       };
