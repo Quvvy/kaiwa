@@ -164,8 +164,24 @@ def matches_any(patterns: list[str], heard: str) -> bool:
     return False
 
 
+def _written_parts(target: str) -> list[tuple[str, int]]:
+    """The target as written, cut into pieces, each with how many compared sounds it holds."""
+    parts: list[tuple[str, int]] = []
+    for piece in re.split(r"(\d+時?)", target):
+        if _NUM_RE.fullmatch(piece):
+            parts.append((piece, len(normalize(piece))))
+            continue
+        for seg in _kks.convert(piece):
+            orig = seg.get("orig", "")
+            if orig == seg.get("hira") or orig == seg.get("kana"):
+                parts.extend((ch, len(normalize(ch))) for ch in orig)  # kana: mark sound by sound
+            elif orig:
+                parts.append((orig, len(normalize(seg.get("hira") or orig))))  # kanji: all or nothing
+    return parts
+
+
 def spot_differences(target: str, heard: str) -> list[dict[str, object]]:
-    """The target's sounds in order, in runs, each marked heard or not.
+    """The target as written (コーヒー stays コーヒー), in runs, each marked heard or not.
 
     Showing exactly which sounds went missing tells the learner what to listen for
     next time, where a score only tells them it wasn't right.
@@ -177,10 +193,17 @@ def spot_differences(target: str, heard: str) -> list[dict[str, object]]:
     for block in SequenceMatcher(None, t, h, autojunk=False).get_matching_blocks():
         for i in range(block.a, block.a + block.size):
             heard_at[i] = True
+    parts = _written_parts(target)
+    if sum(n for _, n in parts) != len(t):  # couldn't line them up: show the compared sounds
+        parts = [(ch, 1) for ch in t]
     runs: list[dict[str, object]] = []
-    for ch, ok in zip(t, heard_at):
+    at = 0
+    for text, n in parts:
+        # ー takes after the sound it lengthens; punctuation has no sound to miss.
+        ok = all(heard_at[at:at + n]) if n else (bool(runs[-1]["ok"]) if runs and text == "ー" else True)
+        at += n
         if runs and runs[-1]["ok"] == ok:
-            runs[-1]["text"] = str(runs[-1]["text"]) + ch
+            runs[-1]["text"] = str(runs[-1]["text"]) + text
         else:
-            runs.append({"text": ch, "ok": ok})
+            runs.append({"text": text, "ok": ok})
     return runs

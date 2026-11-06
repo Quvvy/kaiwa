@@ -401,7 +401,19 @@ def catch_up_stays() -> None:
     _check(not cs.todays_reviews(st), "and the day's review share is finished")
 
 
+def diff_shows_real_japanese() -> None:
+    from kaiwa.course.speech_check import spot_differences
+    joined = lambda runs: "".join(str(r["text"]) for r in runs)
+    runs = spot_differences("コーヒーをください。", "ください")
+    _check(joined(runs) == "コーヒーをください。", "the target keeps its katakana and long vowels")
+    _check(runs[0] == {"text": "コーヒーを", "ok": False}, "the long vowel is marked with its sound")
+    _check(all(r["ok"] for r in spot_differences("コーヒーをください。", "こひをください")), "a heard line marks nothing")
+    runs = spot_differences("もう一度", "もう")
+    _check(joined(runs) == "もう一度" and runs[-1] == {"text": "一度", "ok": False}, "kanji stay kanji, marked whole")
+
+
 def main() -> None:
+    diff_shows_real_japanese()
     catch_up_stays()
     redo_keeps_schedule()
     free_recall_and_culture()
