@@ -466,7 +466,9 @@
       el("p", { class: "phrase-en", text: m.en }),
       m.word ? el("p", { class: "mined-word" }, el("strong", { lang: "ja", text: m.word })) : null,
       m.note ? el("p", { class: "phrase-note mined-note", text: m.note }) : null,
-      sourceLine(m.source) ? el("p", { class: "mined-source", text: sourceLine(m.source) }) : null);
+      sourceLine(m.source) ? el("p", { class: "mined-source", text: sourceLine(m.source) }) : null,
+      // The scene, as a memory cue. Only on the back: on the front it could give the meaning away.
+      m.image_url ? el("img", { class: "mined-shot", src: m.image_url, alt: "", loading: "lazy" }) : null);
   }
   function phraseBlock(p) {
     return el("div", { class: "phrase" },

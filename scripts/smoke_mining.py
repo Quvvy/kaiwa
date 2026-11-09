@@ -140,6 +140,8 @@ def adding(client: TestClient) -> None:
     _check(row["status"] == "pending" and row["audio"] and row["image"] and 1500 < row["audio_ms"] < 2600,
            "the line waits to be prepared, with its clip and screenshot")
     _check(row["source"]["title"] == "Frieren E03" and row["source"]["start_ms"] == 754000, "the source and time are kept")
+    title, ms = mined._parse_source("動画のタイトル - 日本語 (自動生成).ytsrv3 (00h01m06.0s)")
+    _check(title == "動画のタイトル" and ms == 66000, "asbplayer's own time format and track name are tidied")
     media = client.get(f"/api/course/mined/media/{row['audio']}")
     _check(media.status_code == 200 and media.headers["content-type"].startswith("audio/"), "the clip is served")
     for bad in ("..%2Fcourse_state.json", "../course_state.json", mined_media.safe_name("never.mp3")):

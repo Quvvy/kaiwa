@@ -32,6 +32,11 @@ _BOLD_RE = re.compile(r"<(b|strong)\b[^>]*>(.*?)</\1\s*>", re.I | re.S)
 _BREAK_RE = re.compile(r"<\s*(br|/div|/p|div|p)\b[^>]*>", re.I)
 _TAG_RE = re.compile(r"<[^>]+>")
 _STAMP_RE = re.compile(r"\((?:(\d+):)?(\d{1,2}):(\d{2})(?:\.\d+)?\)\s*$")
+# asbplayer's own form: "Title (00h01m06.0s)"
+_HMS_RE = re.compile(r"\((\d+)h(\d+)m(\d+)(?:\.\d+)?s\)\s*$")
+# What's left of a subtitle file name: ".srt", YouTube's ".ytsrv3", " - 日本語 (自動生成)"
+_TRACK_EXT_RE = re.compile(r"\.(srt|ass|ssa|vtt|ytsrv3|ttml|json3|sup)\s*$", re.I)
+_YT_TRACK_RE = re.compile(r"\s*-\s*日本語(?:\s*\(自動生成\))?\s*$")
 
 
 def normalize_key(text: str) -> str:
@@ -84,12 +89,15 @@ def _field(fields: dict[str, Any], name: str) -> Any:
 
 
 def _parse_source(text: str) -> tuple[str, int | None]:
-    """asbplayer writes the source as "Title (12:34)" or "Title (1:02:03)": split the time off."""
-    m = _STAMP_RE.search(text)
-    if not m:
-        return text, None
-    h, mm, ss = int(m.group(1) or 0), int(m.group(2)), int(m.group(3))
-    return text[: m.start()].strip(), ((h * 60 + mm) * 60 + ss) * 1000
+    """Split the time off a source ("Title (12:34)", "Title (00h12m34.0s)") and tidy the title."""
+    start_ms = None
+    m = _HMS_RE.search(text) or _STAMP_RE.search(text)
+    if m:
+        h, mm, ss = int(m.group(1) or 0), int(m.group(2)), int(m.group(3))
+        start_ms = ((h * 60 + mm) * 60 + ss) * 1000
+        text = text[: m.start()]
+    text = _TRACK_EXT_RE.sub("", text.strip())
+    return _YT_TRACK_RE.sub("", text).strip(), start_ms
 
 
 def note_to_capture(note: dict[str, Any]) -> dict[str, Any]:

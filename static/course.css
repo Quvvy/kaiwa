@@ -2429,3 +2429,12 @@ button.secondary.pressed {
 .mined-meta .link-button {
   font-size: 13px;
 }
+
+.mined-shot {
+  border-radius: 8px;
+  display: block;
+  margin-top: 10px;
+  max-height: 220px;
+  max-width: 100%;
+  object-fit: contain;
+}
