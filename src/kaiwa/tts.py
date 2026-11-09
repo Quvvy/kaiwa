@@ -12,6 +12,7 @@ from typing import Any, Literal
 import httpx
 
 from kaiwa.config import Settings
+from kaiwa.course.spoken import for_speech
 
 TtsEngine = Literal["aivisspeech", "voicevox"]
 VALID_ENGINES = {"aivisspeech", "voicevox"}
@@ -259,7 +260,7 @@ def _disk_path(key: tuple):
 
 
 def is_cached(settings: Settings, text: str, *, speaker_id: int | None, engine: str | None, speed: float | None = None) -> bool:
-    key = (normalize_engine(engine, settings.tts_engine), speaker_id, text, speed)
+    key = (normalize_engine(engine, settings.tts_engine), speaker_id, for_speech(text), speed)
     with _cache_lock:
         if key in _cache:
             return True
@@ -278,7 +279,12 @@ def synthesize_cached(
 
     Lesson lines never change, so once rendered they are read from disk instead
     of costing ~0.8 s of synthesis each time the app starts.
+
+    Course lines are kana; the engine is sent their kanji spelling (course.spoken)
+    so it reads the right word with the right pitch. The cache is keyed on what
+    was sent, so a corrected spelling renders afresh.
     """
+    text = for_speech(text)
     key = (normalize_engine(engine, settings.tts_engine), speaker_id, text, speed)
     with _cache_lock:
         hit = _cache.get(key)
