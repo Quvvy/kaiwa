@@ -582,7 +582,11 @@ def answer_format(kind: str, skill: str, card: dict[str, Any]) -> str:
     if kind == "phrase":
         return "speak" if skill == "speak" else "choice"
     if kind == "mined":
-        return "choice"  # hear the real line, pick its meaning; there's no "produce" side
+        # Pick the meaning while new or slipping; once it holds, recall it unaided. A mined
+        # line's three options never change, so choice alone ends up testing the options.
+        if (is_leech(card) and srs.stability(card) < LEECH_STABLE_DAYS) or not srs.known(card):
+            return "choice"
+        return "recall"
     if kind == "grammar":
         return "build"
     if is_leech(card) and srs.stability(card) < LEECH_STABLE_DAYS:

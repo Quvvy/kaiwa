@@ -2318,9 +2318,6 @@ button.secondary.pressed {
   margin: 2px 0 0;
 }
 
-.mined-word {
-  margin: 4px 0 0;
-}
 
 .mined-source {
   color: var(--ink-3);
@@ -2430,11 +2427,92 @@ button.secondary.pressed {
   font-size: 13px;
 }
 
-.mined-shot {
-  border-radius: 8px;
-  display: block;
+/* Back of a mined card: line, reading, meaning, note, then source and scene. */
+.mined-back {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.mined-line {
+  font-family: var(--font-jp);
+  font-size: clamp(22px, 4vw, 28px);
+  line-height: 1.45;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.mined-hl {
+  background: transparent;
+  border-bottom: 2px solid var(--accent, var(--ink));
+  color: inherit;
+  font-weight: 600;
+}
+
+.mined-back .mined-kana {
+  margin: 0 0 6px;
+}
+
+.mined-en {
+  font-size: 18px;
+  margin: 0;
+}
+
+.mined-note {
+  color: var(--ink-2);
+  font-size: 14.5px;
+  margin: 0;
+}
+
+.mined-foot {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
   margin-top: 10px;
-  max-height: 220px;
-  max-width: 100%;
+}
+
+.mined-foot .mined-source {
+  margin: 0;
+}
+
+.mined-thumb {
+  border-radius: 6px;
+  cursor: zoom-in;
+  height: 72px;
+  object-fit: cover;
+  width: 128px;
+}
+
+.mined-thumb.open {
+  cursor: zoom-out;
+  height: auto;
+  max-height: 60vh;
   object-fit: contain;
+  width: 100%;
+}
+
+.mined-ask {
+  margin: 8px 0 0;
+}
+
+.mined-reveal {
+  align-self: flex-start;
+  margin-top: 4px;
+}
+
+.mined-judge {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.mined-judge[hidden] {
+  display: none;
+}
+
+.mined-got {
+  border-color: var(--accent, var(--ink));
 }

@@ -459,16 +459,29 @@
     const at = t == null ? "" : `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`;
     return [src.title, at].filter(Boolean).join(" · ");
   }
-  /** The back of a mined card: the kana reading (its own line, never furigana), meaning, note, source. */
+  /** The line as written, with the mined word marked inside it (never furigana). */
+  function minedLine(m) {
+    const at = m.word ? m.text.indexOf(m.word) : -1;
+    const parts = at < 0 ? [m.text]
+      : [m.text.slice(0, at), el("mark", { class: "mined-hl", text: m.word }), m.text.slice(at + m.word.length)];
+    return el("p", { class: "mined-line", lang: "ja" }, parts);
+  }
+  /**
+   * The back of a mined card, read top to bottom: the line, its reading right under it,
+   * what it means, one note, then where it's from with the scene as a small picture.
+   */
   function minedBack(m) {
-    return el("div", { class: "phrase-block mined-back" },
+    const src = sourceLine(m.source);
+    const thumb = m.image_url ? el("img", {
+      class: "mined-thumb", src: m.image_url, alt: "The scene", loading: "lazy", title: "Click to enlarge",
+      onclick: (e) => e.currentTarget.classList.toggle("open"),
+    }) : null;
+    return el("div", { class: "mined-back" },
+      minedLine(m),
       m.kana && m.kana !== m.text ? el("p", { class: "mined-kana", lang: "ja", text: m.kana }) : null,
-      el("p", { class: "phrase-en", text: m.en }),
-      m.word ? el("p", { class: "mined-word" }, el("strong", { lang: "ja", text: m.word })) : null,
-      m.note ? el("p", { class: "phrase-note mined-note", text: m.note }) : null,
-      sourceLine(m.source) ? el("p", { class: "mined-source", text: sourceLine(m.source) }) : null,
-      // The scene, as a memory cue. Only on the back: on the front it could give the meaning away.
-      m.image_url ? el("img", { class: "mined-shot", src: m.image_url, alt: "", loading: "lazy" }) : null);
+      el("p", { class: "mined-en", text: m.en }),
+      m.note ? el("p", { class: "mined-note", text: m.note }) : null,
+      thumb || src ? el("div", { class: "mined-foot" }, thumb, src ? el("span", { class: "mined-source", text: src }) : null) : null);
   }
   function phraseBlock(p) {
     return el("div", { class: "phrase" },
@@ -1450,7 +1463,7 @@
       else if (card.kind === "grammar") buildCard(card);
       else if (card.kind === "phrase" && card.skill === "speak") speakCard(card);
       else if (card.kind === "phrase") listenCard(card);
-      else if (card.kind === "mined") minedCard(card);
+      else if (card.kind === "mined") (card.format === "recall" ? minedRecallCard : minedCard)(card);
       else if (card.format === "produce") produceCard(card);
       else if (card.kind === "kana") kanaChoice(card);
       else wordChoice(card);
@@ -1674,8 +1687,61 @@
           keys.text = () => showText.click();
           return [el("div", { class: "lesson-play" }, showText), text];
         },
-        after: () => { text.hidden = false; return minedBack(m); },
+        after: () => { text.hidden = true; return minedBack(m); }, // the back shows the line, marked
       });
+      play(m.text, voice);
+    }
+    /**
+     * A mined line that holds: hear it and recall what it means on your own, then check.
+     * No options to lean on; you say whether you had it, and how fast you revealed it
+     * (and whether you needed the text) shades the grade.
+     */
+    function minedRecallCard(card) {
+      const m = card.mined;
+      const voice = m.audio_url ? { clip: m.audio_url } : {};
+      const text = el("p", { class: "sentence-jp mined-jp", lang: "ja", hidden: true, text: m.text });
+      const result = el("div", { class: "result", "aria-live": "polite" });
+      const slot = el("div", { class: "grade-slot" });
+      const nextBtn = primaryButton("Next", () => advance());
+      nextBtn.hidden = true;
+      let helped = false;
+      let revealMs = 0;
+      const showText = el("button", { class: "secondary", type: "button", onclick: () => {
+        helped = true; text.hidden = false; showText.hidden = true; } }, "Show text", kbd("T"));
+      const ask = el("p", { class: "prompt mined-ask", text: "What does it mean? Say it to yourself, then check." });
+      const judge = (got) => {
+        if (current.answered) return;
+        keys.choice = null;
+        judgeRow.hidden = true;
+        answered(card, { correct: got, ms: revealMs, helped, fmt: "mined:recall", answer: got ? "got it" : "missed it" }, slot, nextBtn);
+      };
+      const judgeRow = el("div", { class: "mined-judge", hidden: true },
+        el("button", { type: "button", class: "secondary", onclick: () => judge(false) }, el("span", { class: "choice-key", text: "1" }), "Missed it"),
+        el("button", { type: "button", class: "secondary mined-got", onclick: () => judge(true) }, el("span", { class: "choice-key", text: "2" }), "Got it"));
+      const reveal = () => {
+        if (!revealBtn.isConnected || revealBtn.hidden) return;
+        revealMs = elapsed();
+        revealBtn.hidden = true;
+        ask.hidden = true;
+        text.hidden = true;
+        showText.hidden = true;
+        keys.text = null;
+        result.replaceChildren(minedBack(m));
+        judgeRow.hidden = false;
+        keys.primary = keys.space = null;
+        keys.choice = (i) => { if (i === 0) judge(false); else if (i === 1) judge(true); };
+      };
+      const revealBtn = el("button", { type: "button", class: "lesson-primary mined-reveal", onclick: reveal }, "Show meaning", kbd("Space"));
+      const body = el("div", { class: "card-body" },
+        repeatTag(card),
+        playRow(m.text, voice),
+        el("div", { class: "lesson-play" }, showText),
+        text, ask, revealBtn, result, judgeRow, slot);
+      frame({ title, ...counter(), body, actions: [nextBtn], primary: reveal,
+        ask: { screen: `${title.toLowerCase()} mined recall`, jp: m.text, answer: m.en } });
+      keys.space = reveal;
+      keys.text = () => showText.click();
+      keys.replay = () => play(m.text, voice);
       play(m.text, voice);
     }
 
@@ -2001,7 +2067,7 @@
     const code = (t) => el("code", { text: t });
     const setup = el("details", { class: "mining-setup", open: d.total === 0 },
       el("summary", {}, "Set up asbplayer"),
-      el("p", { class: "stats-text", text: "asbplayer is a browser extension that mines lines from YouTube, Tsugi's player and any video with subtitles. Kaiwa stands in for Anki, so it sends them here instead." }),
+      el("p", { class: "stats-text", text: "In Tsugi, turn on Mining in the player: it fetches Japanese subtitles and sends lines here with one key, no setup here needed. For YouTube and other sites, use asbplayer, a browser extension that mines from any video with subtitles. Kaiwa stands in for Anki, so it sends them here instead." }),
       el("ol", { class: "mining-steps" },
         step("Install asbplayer in your browser, then open its settings and go to ", el("strong", { text: "Anki" }), "."),
         step("Set the AnkiConnect URL to ", el("span", { class: "mining-url" }, code(url), copy)),

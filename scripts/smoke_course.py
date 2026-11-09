@@ -887,8 +887,16 @@ def mined_deck() -> None:
 
         first = f"{rows[0]['id']}:listen"
         st = course_state.load_state(path)
-        _check(course_state.answer_format("mined", "listen", srs.from_legacy({"box": 5, "due": "2099-01-01", "reps": 9})) == "choice",
-               "a mined card is always answered by picking the meaning")
+        fmt = lambda c: course_state.answer_format("mined", "listen", c)  # noqa: E731
+        held = srs.from_legacy({"box": 5, "due": "2099-01-01", "reps": 9})
+        _check(fmt(srs.new_card()) == "choice", "a new mined line is answered by picking its meaning")
+        _check(fmt(held) == "recall", "a mined line that holds is recalled, not picked")
+        shaky = {**srs.from_legacy({"box": 1, "due": "2099-01-01", "reps": 9}), "lapses": course_state.LEECH_LAPSES}
+        _check(srs.known(shaky) and fmt(shaky) == "choice", "a slipping (leech) line goes back to picking until it's stable")
+        missed = srs.review(held, srs.AGAIN)
+        _check(fmt(missed) == "choice", "missing a recalled line sends it back to picking")
+        row = course_state._card_row(first, ("mined", rows[0]["id"], "listen"), held)
+        _check(row["format"] == "recall", "the format reaches the page with the card")
         course_state.grade(first, correct=True, ms=4000, fmt="mined:listen", path=path)
         st = course_state.load_state(path)
         by = st["daily"][course_state._today().isoformat()]["new_by_deck"]

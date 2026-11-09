@@ -215,6 +215,16 @@ def _tags(params: dict[str, Any], add: bool) -> None:
         course_state.update_mined(row["note_id"], {"tags": list(dict.fromkeys(now))})
 
 
+def delete_notes(params: dict[str, Any]) -> None:
+    """Forget lines (Tsugi's Undo, or a tool's delete), with their clips and screenshots."""
+    for nid in params.get("notes") or []:
+        row = _by_note_id(nid)
+        if row is None:
+            continue
+        unused = course_state.remove_mined(row["id"])
+        mined_media.delete(_base(), unused or [])
+
+
 def store_media_file(params: dict[str, Any]) -> str:
     filename = str(params.get("filename") or "")
     if params.get("url") or params.get("path"):
@@ -300,6 +310,7 @@ ACTIONS: dict[str, Callable[[dict[str, Any]], Any]] = {
     "addNotes": lambda p: [_add_or_none(n) for n in p.get("notes") or []],
     "updateNoteFields": lambda p: update_note(p.get("note")),
     "updateNote": lambda p: update_note(p.get("note")),
+    "deleteNotes": delete_notes,
     "addTags": lambda p: _tags(p, True),
     "removeTags": lambda p: _tags(p, False),
     "getTags": lambda p: sorted({t for r in _rows() for t in r["tags"]}),

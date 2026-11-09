@@ -191,12 +191,17 @@ def adding(client: TestClient) -> None:
            "the Mined lines page lists newest first, with status counts")
 
     base = mined_media.media_dir(course_state.state_path())
+    keep_row = next(r for r in course_state.mined_rows() if r["note_id"] == added["result"])
+    deleted = _post(client, {"action": "deleteNotes", "version": 6, "params": {"notes": [added["result"]]}}).json()
+    _check(deleted == {"result": None, "error": None} and all(r["note_id"] != added["result"] for r in course_state.mined_rows())
+           and not mined_media.path_for(base, keep_row["audio"]) and not mined_media.path_for(base, keep_row["image"]),
+           "deleteNotes (Tsugi's Undo) removes the line and its files")
     gone = client.delete(f"/api/course/mined/{ref_row['id']}")
     _check(gone.status_code == 200 and not mined_media.path_for(base, ref_row["audio"]), "removing a line deletes its files")
     stray = base / mined_media.safe_name("stray.mp3")
     stray.write_bytes(b"x")
     os.utime(stray, (time.time() - 2 * 86400,) * 2)
-    _check(mined_media.sweep_orphans(base, {after["audio"], row["audio"], row["image"]}) >= 1 and not stray.exists(),
+    _check(mined_media.sweep_orphans(base, {after["audio"]}) >= 1 and not stray.exists(),
            "old uploads no line uses are swept")
 
 
