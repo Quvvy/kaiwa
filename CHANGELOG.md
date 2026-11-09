@@ -21,6 +21,8 @@ Study lab branch: see `HAM_LOG.md` for each change and why.
 - **Free recall** and a summary at the end of the day.
 - **Daily pace** (Relaxed, Regular, Intensive), a two-minute option for busy days, and a calendar file for your study time.
 - **What trips you up lately** on the stats page.
+- **Sentence mining (asbplayer):** point asbplayer's AnkiConnect URL at `http://127.0.0.1:8787/ankiconnect` and lines you mine from YouTube or Tsugi's player become **New lines** in your day: the real clip, three meanings to pick from, and the kanji line, a kana line and a short note on the back. See **Mined lines** on the Learn page for setup.
+- **Daily limits** under Learn → Options: new per day, max reviews per day, lesson minutes and desired retention, for the course and for mined lines, plus an overall cap. Blank boxes follow the pace.
 
 ### Changed
 

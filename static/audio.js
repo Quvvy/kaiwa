@@ -64,10 +64,45 @@
       finishCurrent = finish;
       player.addEventListener("ended", finish);
       player.addEventListener("error", finish);
+      player.playbackRate = 1;
       player.src = url;
       player.play().catch((err) => {
         if (onBlocked) onBlocked(err);
         finish();
+      });
+    });
+  }
+
+  /**
+   * Play a file from the server (a mined line's real clip). Resolves true when it played
+   * to the end (or was replaced), false if it couldn't be loaded, so the caller can fall back.
+   */
+  function playUrl(url, { rate = 1, onBlocked } = {}) {
+    stop();
+    return new Promise((resolve) => {
+      const finish = (ok) => {
+        if (finishCurrent !== done) return;
+        finishCurrent = null;
+        player.removeEventListener("ended", ended);
+        player.removeEventListener("error", failed);
+        resolve(ok);
+      };
+      const done = () => finish(true);
+      const ended = () => finish(true);
+      const failed = () => finish(false);
+      finishCurrent = done;
+      player.addEventListener("ended", ended);
+      player.addEventListener("error", failed);
+      player.src = url;
+      player.playbackRate = rate;
+      player.preservesPitch = true;
+      player.play().catch((err) => {
+        if (err && err.name === "NotAllowedError") {
+          if (onBlocked) onBlocked(err);
+          finish(true);
+        } else {
+          finish(false);
+        }
       });
     });
   }
@@ -85,5 +120,5 @@
     document.addEventListener(name, unlock, true);
   }
 
-  window.KaiwaAudio = { play, stop };
+  window.KaiwaAudio = { play, playUrl, stop };
 })();

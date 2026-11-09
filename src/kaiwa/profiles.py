@@ -352,6 +352,9 @@ def reset_active() -> tuple[ProfileMeta, Path]:
         (profiles_dir() / reg.active / COURSE_STATE_FILE).unlink(missing_ok=True)
         for name in LEARNER_LOG_FILES:  # a fresh start shouldn't inherit old mistakes
             (profiles_dir() / reg.active / name).unlink(missing_ok=True)
+        from kaiwa.course.mined_media import remove_all  # the backup above kept a copy of the clips
+
+        remove_all(profiles_dir() / reg.active)
     _touch_meta(reg, reg.active)
     _save_registry(reg)
     meta = get_meta(reg.active)

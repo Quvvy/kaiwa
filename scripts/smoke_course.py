@@ -817,6 +817,104 @@ def limits() -> None:
             _check(True, "unknown decks are refused")
 
 
+def mined_deck() -> None:
+    """Mined lines: their own deck, limits and share of the day, never the course's budget."""
+    ready = {"kana": "かな", "kana_src": "llm", "en": "A meaning.", "note": "", "wrong": ["Wrong one.", "Wrong two."]}
+
+    def add(path, n, start=0):
+        rows = []
+        for i in range(start, start + n):
+            row, _ = course_state.add_mined({"text": f"テストの文{i}です"}, path=path)
+            course_state.store_enrichment(row["id"], row["rev"], ready, path=path)
+            rows.append(row)
+        return rows
+
+    with tempfile.TemporaryDirectory() as raw:
+        path = Path(raw) / "course_state.json"
+        view = course_state.limits_view(course_state.load_state(path))
+        mf = view["decks"]["mined"]["fields"]
+        _check(mf["new_per_day"]["value"] == 10 and mf["max_reviews"]["value"] == 50 and "lesson_minutes" not in mf,
+               "the Mined deck starts at 10 new and 50 reviews a day, with no lesson minutes")
+        try:
+            course_state.set_limits("mined", {"lesson_minutes": 5}, path=path)
+            _check(False, "lesson minutes don't apply to mined lines")
+        except ValueError:
+            _check(True, "lesson minutes don't apply to mined lines")
+
+        rows = add(path, 15)
+        try:
+            course_state.add_mined({"text": "テストの文0です!"}, path=path)
+            _check(False, "the same line twice is refused")
+        except ValueError as exc:
+            _check("duplicate" in str(exc), "the same line twice is refused")
+        p = course_state.plan_today(course_state.load_state(path))
+        _check(p["plan"][0] == "mined" and len(p["mined_new"]) == 10 and p["mined_new"][0]["mined"]["text"] == "テストの文0です",
+               "ten ready lines are offered as new, oldest first")
+        course_state.set_limits("mined", {"new_per_day": 2}, path=path)
+        _check(len(course_state.plan_today(course_state.load_state(path))["mined_new"]) == 2, "the mined new limit holds")
+        course_state.set_limits("all", {"new_per_day": 1}, path=path)
+        p = course_state.plan_today(course_state.load_state(path))
+        _check(len(p["mined_new"]) == 1 and not set(p["plan"]) & {"kana", "learn", "words"},
+               "mined lines take the overall new limit first; lessons get what's left")
+        course_state.set_limits("all", {"new_per_day": None}, path=path)
+        course_state.set_limits("mined", {"new_per_day": None}, path=path)
+
+        first = f"{rows[0]['id']}:listen"
+        st = course_state.load_state(path)
+        _check(course_state.answer_format("mined", "listen", srs.from_legacy({"box": 5, "due": "2099-01-01", "reps": 9})) == "choice",
+               "a mined card is always answered by picking the meaning")
+        course_state.grade(first, correct=True, ms=4000, fmt="mined:listen", path=path)
+        st = course_state.load_state(path)
+        by = st["daily"][course_state._today().isoformat()]["new_by_deck"]
+        _check(first in st["cards"] and by["mined"] == 1, "answering a new line makes its card and counts it as mined new")
+        _check(course_state.undo(path=path) and first not in course_state.load_state(path)["cards"]
+               and course_state.load_state(path)["daily"][course_state._today().isoformat()]["new_by_deck"]["mined"] == 0,
+               "undo takes a new line back")
+
+        # Lots due: the mined share is capped at 50 and leaves the course's budget alone.
+        st = course_state.load_state(path)
+        rows += [r for r in add(path, 60, start=100)]
+        st = course_state.load_state(path)
+        for r in rows:
+            st["cards"][f"{r['id']}:listen"] = srs.from_legacy({"box": 2, "due": "2000-01-01", "reps": 2})
+        course_state.save_state(st, path)
+        st = course_state.load_state(path)
+        todays = course_state.todays_reviews(st)
+        mined_share = [c for c in todays if c["kind"] == "mined"]
+        _check(len(mined_share) == 50 and not course_state.catching_up(st), "60+ mined due: 50 today, and no course catch-up day")
+        _check(len(todays) == len(course_state._course_reviews(st)) + 50, "the course share is what it would be without them")
+        add(path, 3, start=500)  # lines not met yet
+        _check(course_state.plan_today(course_state.load_state(path))["mined_new"],
+               "a backlog under two days' worth still allows new lines")
+        course_state.set_limits("mined", {"max_reviews": 20}, path=path)
+        p = course_state.plan_today(course_state.load_state(path))
+        _check(not p["mined_new"] and p["mined_paused"], "a mined backlog over two days' worth holds new lines")
+        course_state.set_limits("mined", {"max_reviews": None}, path=path)
+        st = course_state.load_state(path)
+        reviewed_before = dict(st["reviewed"])
+        course_state.grade(mined_share[0]["card_id"], correct=False, ms=4000, fmt="mined:listen", path=path)
+        st = course_state.load_state(path)
+        today = course_state._today().isoformat()
+        _check(st["log"][-1].get("deck") == "mined" and st["reviewed"].get(today, 0) == reviewed_before.get(today, 0),
+               "a mined review is logged for its deck and doesn't spend the course budget")
+        _check(course_state.recall_slipping(st) is None, "missed mined lines don't slow the course")
+        stats = course_state.course_stats(path=path)
+        _check("Mined lines" in stats["stages"] and stats["forecast"][0] <= 50, "stats show mined lines without a backlog wall")
+
+        # Editing a line's text sends it back to be prepared; it sits out meanwhile.
+        target = rows[1]
+        course_state.update_mined(target["note_id"], {"text": "編集した文"}, path=path)
+        st = course_state.load_state(path)
+        ids = {c["card_id"] for c in course_state.due_cards(st, limit=10_000)}
+        _check(f"{target['id']}:listen" not in ids, "a line being prepared again isn't reviewed")
+
+        cid = mined_share[0]["card_id"]
+        unused = course_state.remove_mined(cid.split(":")[0], path=path)
+        st = course_state.load_state(path)
+        _check(unused == [] and cid not in st["cards"] and all(e["card_id"] != cid for e in st["undo"]),
+               "removing a line removes its card and its undo entries")
+
+
 def main() -> None:
     content()
     kana_track()
@@ -831,6 +929,7 @@ def main() -> None:
     placement_self_correction()
     pacing()
     limits()
+    mined_deck()
     story_checks()
     listening_checks()
     talk_checks()

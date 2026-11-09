@@ -2302,3 +2302,122 @@ button.secondary.pressed {
 .limit-input::placeholder {
   color: var(--ink-3);
 }
+
+/* ---------- mined lines (asbplayer → Kaiwa) ---------- */
+.mined-kana {
+  color: var(--ink-2);
+  font-size: 17px;
+  margin: 2px 0 0;
+}
+
+.mined-word {
+  margin: 4px 0 0;
+}
+
+.mined-source {
+  color: var(--ink-3);
+  font-size: 13px;
+  margin: 6px 0 0;
+}
+
+.mining-setup {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 14px;
+}
+
+.mining-setup > summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.mining-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 10px 0;
+  padding-left: 20px;
+}
+
+.mining-steps code,
+.mining-url code {
+  background: var(--line);
+  border-radius: 4px;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+  padding: 1px 5px;
+}
+
+.mining-url {
+  align-items: center;
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.mined-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.mined-row {
+  align-items: flex-start;
+  display: flex;
+  gap: 10px;
+}
+
+.mined-play {
+  flex: none;
+  min-width: 36px;
+  padding: 4px 8px;
+}
+
+.mined-main {
+  min-width: 0;
+}
+
+.mined-text {
+  font-size: 17px;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.mined-en {
+  color: var(--ink-2);
+  font-size: 14px;
+  margin: 2px 0 0;
+}
+
+.mined-meta {
+  align-items: center;
+  color: var(--ink-3);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 13px;
+  gap: 4px 10px;
+  margin: 4px 0 0;
+}
+
+.mined-chip {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0 8px;
+}
+
+.mined-chip.ready {
+  border-color: var(--accent, var(--ink));
+  color: var(--ink);
+}
+
+.mined-chip.failed {
+  border-style: dashed;
+}
+
+.mined-remove,
+.mined-meta .link-button {
+  font-size: 13px;
+}

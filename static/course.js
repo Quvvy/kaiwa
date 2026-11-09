@@ -164,8 +164,14 @@
       currentAudio = null;
     }
   }
-  async function play(text, opts) {
+  async function play(text, opts = {}) {
     stopAudio();
+    if (opts && opts.clip) {
+      // A mined line: the real speaker. If the clip can't load, the voice reads the line instead.
+      currentAudio = window.KaiwaAudio.playUrl(opts.clip, { rate: opts.slow ? 0.75 : 1 });
+      if ((await currentAudio) !== false) return;
+      opts = { ...opts, clip: null };
+    }
     let b64;
     try {
       b64 = await audioFor(text, opts);
@@ -446,6 +452,22 @@
     return new Promise((r) => setTimeout(r, ms));
   }
 
+  /** "Frieren E03 · 12:34" for a mined line's source. */
+  function sourceLine(src) {
+    if (!src) return "";
+    const t = src.start_ms != null ? Math.floor(src.start_ms / 1000) : null;
+    const at = t == null ? "" : `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`;
+    return [src.title, at].filter(Boolean).join(" · ");
+  }
+  /** The back of a mined card: the kana reading (its own line, never furigana), meaning, note, source. */
+  function minedBack(m) {
+    return el("div", { class: "phrase-block mined-back" },
+      m.kana && m.kana !== m.text ? el("p", { class: "mined-kana", lang: "ja", text: m.kana }) : null,
+      el("p", { class: "phrase-en", text: m.en }),
+      m.word ? el("p", { class: "mined-word" }, el("strong", { lang: "ja", text: m.word })) : null,
+      m.note ? el("p", { class: "phrase-note mined-note", text: m.note }) : null,
+      sourceLine(m.source) ? el("p", { class: "mined-source", text: sourceLine(m.source) }) : null);
+  }
   function phraseBlock(p) {
     return el("div", { class: "phrase" },
       el("p", { class: "phrase-jp", lang: "ja", text: p.jp }),
@@ -622,7 +644,7 @@
   }
 
   // ---------- home ----------
-  const STEP_NAMES = { learn: "New phrases", words: "Words", grammar: "Grammar", listen: "Listen", speak: "Speak" };
+  const STEP_NAMES = { learn: "New phrases", words: "Words", grammar: "Grammar", listen: "Listen", speak: "Speak", mined: "New lines" };
   /** Today's steps, decided by the server's pacing (state.plan_today). */
   function planSteps() {
     return [...(today.plan || [])];
@@ -636,6 +658,7 @@
     grammar: ["Grammar", "Just enough to see the pattern, then you use it. You'll put real sentences together yourself, and they come back later."],
     listen: ["Listen", "Listen first, no text. You won't catch everything, and you don't need to. Getting the gist from sound alone is the skill."],
     speak: ["Speak", "Answer in your own words if you can. Getting it out imperfectly teaches more than getting it perfect silently."],
+    mined: ["New lines", "Lines you mined from what you watch, in the real voice. Pick what it means; missing it the first time is normal, and the text is one click away. Each one comes back until you catch it by ear."],
     kana: ["Kana", "Each one comes with a picture, in case it helps you hold the shape at first. What really makes them stick is the practice that follows. You'll drop the pictures once reading is automatic."],
   };
   function withWhy(step, go) {
@@ -658,6 +681,7 @@
     track("open", { activity: step, unit: today.unit ? today.unit.id : null });
     if (step === "review") return runReview(today.review);
     if (step === "recap") return runReview(today.recap || [], { title: "Recap", planStep: "recap" });
+    if (step === "mined") return runReview(today.mined_new || [], { title: "New lines", planStep: "mined" });
     if (step === "kana") return runKana(today.kana);
     return runUnitStep(today.unit, step, today.unit_steps || {});
   }
@@ -719,11 +743,17 @@
     const rows = [];
     if (today.review.length) {
       // Only today's share is shown: the rest waits for later days, never piles up here.
-      const secs = today.review.reduce((n, c) => n + ({ kana: 4, word: 4, listen: 8, speak: 12 }[c.kind === "phrase" ? c.skill : c.kind] || 8), 0);
+      const secs = today.review.reduce((n, c) => n + ({ kana: 4, word: 4, listen: 8, speak: 12, mined: 12 }[c.kind === "phrase" ? c.skill : c.kind] || 8), 0);
       const n = today.review.length;
       rows.push(planRow("Review", `${n} card${n === 1 ? "" : "s"}, about ${Math.max(1, Math.round(secs / 60))} min`, false, open("review", () => runReview(today.review))));
     } else if (s.phrases_learned) {
       rows.push(planRow("Review", "Nothing left today", false, null));
+    }
+    if ((today.mined_new || []).length) {
+      const n = today.mined_new.length;
+      rows.push(planRow("New lines", `${n} from your shows`, false, open("mined", () => runStep("mined"))));
+    } else if (today.mined_paused) {
+      rows.push(planRow("New lines", "None today: your mined reviews come first", false, null));
     }
     if ((today.recap || []).length) {
       const n = today.recap.length;
@@ -832,6 +862,8 @@
         el("div", { class: "home-links" },
           el("button", { type: "button", class: "secondary", onclick: runMap, "data-tip": "All 20 units, what each lets you do, and how far you are" }, "Course map"),
           !fresh ? el("button", { type: "button", class: "secondary", onclick: runBook, "data-tip": "Everything you've learned, to look up and hear again" }, "Phrasebook") : null,
+          el("button", { type: "button", class: "secondary", onclick: runMining,
+            "data-tip": "Lines you mined from shows with asbplayer, and how to set it up" }, "Mined lines"),
           !fresh ? el("button", { type: "button", class: "secondary", onclick: runStats,
             "data-tip": "Retention, what's coming up, your cards, and how scheduling works" }, "Stats") : null),
         el("details", { class: "home-options", open: optionsOpen, ontoggle: (e) => { optionsOpen = e.target.open; } },
@@ -1003,6 +1035,9 @@
     lesson_minutes: ["Lesson minutes", "Time for new lessons a day, after reviews"],
     retention: ["Desired retention %", "How much you want to remember. Higher means more reviews"],
   };
+  const LIMIT_TIPS = {
+    mined: { new_per_day: "New lines from your shows a day", max_reviews: "Mined cards a day, at most. The rest wait, never pile up" },
+  };
   function limitsPanel() {
     const lim = today.limits;
     if (!lim) return null;
@@ -1021,7 +1056,8 @@
       }
     };
     const field = (deck, name, f) => {
-      const [label, tip] = LIMIT_LABELS[name];
+      const [label, baseTip] = LIMIT_LABELS[name];
+      const tip = (LIMIT_TIPS[deck] || {})[name] || baseTip;
       const pct = name === "retention";
       const shown = (v) => (v == null ? "" : pct ? String(Math.round(v * 100)) : String(v));
       const input = el("input", {
@@ -1363,7 +1399,7 @@
     const firstTry = new Map(); // queue item → right on first try?
     const history = [];         // answered items, for Ctrl+Z
     const MAX_REPEATS = 2;
-    prefetch(queue.filter((c) => !c.grammar).map((c) => [c.phrase ? c.phrase.jp : c.word ? c.word.jp : c.kana.char, {}]));
+    prefetch(queue.filter((c) => !c.grammar && !c.mined).map((c) => [c.phrase ? c.phrase.jp : c.word ? c.word.jp : c.kana.char, {}]));
 
     // Upcoming recognition word cards get swapped for short listening sentences.
     const wordIds = queue.filter((c) => c.kind === "word" && c.format === "choice").map((c) => c.card_id);
@@ -1391,6 +1427,7 @@
       else if (card.kind === "grammar") buildCard(card);
       else if (card.kind === "phrase" && card.skill === "speak") speakCard(card);
       else if (card.kind === "phrase") listenCard(card);
+      else if (card.kind === "mined") minedCard(card);
       else if (card.format === "produce") produceCard(card);
       else if (card.kind === "kana") kanaChoice(card);
       else wordChoice(card);
@@ -1598,6 +1635,26 @@
       });
       play(s.jp);
     }
+    /**
+     * A line mined from a show: the real clip, then pick its meaning. The text stays
+     * hidden (reading it would turn a listening card into a reading one) unless asked for.
+     */
+    function minedCard(card) {
+      const m = card.mined;
+      const voice = m.audio_url ? { clip: m.audio_url } : {};
+      const text = el("p", { class: "sentence-jp mined-jp", lang: "ja", hidden: true, text: m.text });
+      choiceCard(card, {
+        answer: m.en, options: shuffle([m.en, ...m.wrong]), audio: m.text, voice, fmt: "mined:listen", askJp: m.text,
+        extra: (markHelped) => {
+          const showText = el("button", { class: "secondary", type: "button", onclick: () => {
+            markHelped(); text.hidden = false; showText.hidden = true; } }, "Show text", kbd("T"));
+          keys.text = () => showText.click();
+          return [el("div", { class: "lesson-play" }, showText), text];
+        },
+        after: () => { text.hidden = false; return minedBack(m); },
+      });
+      play(m.text, voice);
+    }
 
     /** Known kana and words: produce the answer (say it, or type it). */
     function produceCard(card) {
@@ -1801,7 +1858,9 @@
      * memory hook, written once by Flash and kept), then on with the review.
      */
     async function leechHelp(card) {
-      const item = card.word || card.phrase || (card.grammar && card.grammar.items[0]) || (card.kana && { jp: card.kana.char, en: card.kana.ro });
+      const item = card.word || card.phrase || (card.grammar && card.grammar.items[0]) || (card.kana && { jp: card.kana.char, en: card.kana.ro })
+        || (card.mined && { jp: card.mined.text, en: card.mined.en });
+      const voice = card.mined && card.mined.audio_url ? { clip: card.mined.audio_url } : {};
       const hookBox = el("div", { class: "leech-hook" }, el("p", { class: "pending", text: "Writing a memory hook…" }));
       current = null;
       frame({
@@ -1810,15 +1869,15 @@
           el("p", { class: "leech-note", text: "This one keeps slipping. Here's another way in." }),
           el("p", { class: "kana-big kana-word", lang: "ja", text: item.jp }),
           el("p", { class: "phrase-en", text: item.en }),
-          playRow(item.jp),
+          playRow(item.jp, voice),
           hookBox),
         actions: [primaryButton("Continue", next)],
         primary: next,
         ask: { screen: "leech help", jp: item.jp, en: item.en },
       });
       keys.undo = undoLast;
-      keys.replay = () => play(item.jp);
-      play(item.jp);
+      keys.replay = () => play(item.jp, voice);
+      play(item.jp, voice);
       const here = onThisScreen();
       let hook = card.hook;
       if (!hook) {
@@ -1834,7 +1893,7 @@
 
     function finish() {
       current = null;
-      const onPlan = planStep === "review" || planStep === "recap";
+      const onPlan = planStep === "review" || planStep === "recap" || planStep === "mined";
       const go = async () => {
         if (!onPlan) return showHome();
         await refresh();
@@ -1891,6 +1950,87 @@
     const target = line == null ? null : svg("line", { x1: 0, x2: w, y1: (plotH - scale(line)).toFixed(1),
       y2: (plotH - scale(line)).toFixed(1), class: "target-line" });
     return svg("svg", { viewBox: `0 0 ${w} ${height}`, class: "chart", role: "img" }, bars, target, ticks);
+  }
+
+  /**
+   * Mined lines: how to point asbplayer here, and what's come in. No due counts:
+   * this page is for what you caught, not what you owe.
+   */
+  async function runMining() {
+    stopAudio();
+    screenId += 1;
+    askContext = null;
+    askPanel.refresh();
+    clearKeys();
+    root.replaceChildren(el("div", { class: "home" }, el("p", { class: "pending", text: "Loading…" })));
+    let d;
+    try {
+      d = await api("/api/course/mined");
+    } catch (err) {
+      root.replaceChildren(el("div", { class: "home" }, el("p", { class: "verdict off", text: String(err.message || err) })));
+      return;
+    }
+    const url = `${location.protocol}//${location.hostname === "localhost" ? "127.0.0.1" : location.hostname}:${location.port || 80}${d.path}`;
+    const copy = el("button", { type: "button", class: "secondary", onclick: async () => {
+      try { await navigator.clipboard.writeText(url); copy.textContent = "Copied"; } catch (_) { copy.textContent = "Select and copy it"; }
+    } }, "Copy");
+    const step = (...parts) => el("li", {}, ...parts);
+    const code = (t) => el("code", { text: t });
+    const setup = el("details", { class: "mining-setup", open: d.total === 0 },
+      el("summary", {}, "Set up asbplayer"),
+      el("p", { class: "stats-text", text: "asbplayer is a browser extension that mines lines from YouTube, Tsugi's player and any video with subtitles. Kaiwa stands in for Anki, so it sends them here instead." }),
+      el("ol", { class: "mining-steps" },
+        step("Install asbplayer in your browser, then open its settings and go to ", el("strong", { text: "Anki" }), "."),
+        step("Set the AnkiConnect URL to ", el("span", { class: "mining-url" }, code(url), copy)),
+        step("Pick deck ", code("Kaiwa"), " and note type ", code("Kaiwa Mining"), "."),
+        step("Map the fields: Sentence → ", code("Sentence"), ", Definition → ", code("Translation"), ", Audio → ", code("Audio"),
+          ", Image → ", code("Image"), ", Word → ", code("Word"), ", Source → ", code("Source"), ", URL → ", code("URL"), "."),
+        step("Watch something with Japanese subtitles and mine a line. It shows up below, and in your day once it's ready.")),
+      el("p", { class: "stats-caption", text: "This only works on this PC, from browser extensions. Websites can't send lines here." }));
+    const notes = [
+      !d.has_key ? el("p", { class: "home-note", text: "Lines are waiting for your DeepSeek key (Settings) to work out their meaning and reading. They'll be ready a minute after it's saved." }) : null,
+      d.refused ? el("p", { class: "home-note", text: `Kaiwa turned away a request from ${d.refused.origin}: only browser extensions can send lines here. If that was your mining tool, use its extension rather than its website.` }) : null,
+    ];
+    const STATUS = { ready: "ready", pending: "getting ready", failed: "couldn't prepare" };
+    const rowFor = (r) => {
+      const remove = el("button", { type: "button", class: "link-button mined-remove" }, "Remove");
+      let armed = false;
+      remove.onclick = async () => {
+        if (!armed) { armed = true; remove.textContent = "Remove: click again"; return; }
+        remove.disabled = true;
+        try { await api(`/api/course/mined/${encodeURIComponent(r.id)}`, { method: "DELETE" }); } catch (_) {}
+        runMining();
+      };
+      const retry = r.status === "failed" ? el("button", { type: "button", class: "link-button", onclick: async () => {
+        try { await postJson(`/api/course/mined/${encodeURIComponent(r.id)}/retry`, {}); } catch (_) {}
+        runMining();
+      } }, "Retry") : null;
+      return el("li", { class: "mined-row" },
+        el("button", { type: "button", class: "secondary mined-play", "aria-label": "Play",
+          onclick: () => play(r.text, r.audio_url ? { clip: r.audio_url } : {}) }, "▶"),
+        el("div", { class: "mined-main" },
+          el("p", { class: "mined-text", lang: "ja", text: r.text }),
+          r.status === "ready" ? el("p", { class: "mined-en", text: r.en }) : null,
+          el("p", { class: "mined-meta" },
+            el("span", { class: `mined-chip ${r.status}`, text: STATUS[r.status] || r.status }),
+            sourceLine(r.source) ? el("span", { text: sourceLine(r.source) }) : null,
+            retry, remove)));
+    };
+    const list = d.rows.length
+      ? el("ul", { class: "mined-list" }, d.rows.map(rowFor))
+      : el("p", { class: "status", text: "Nothing mined yet. Once asbplayer is set up, lines you mine appear here." });
+    const more = d.total > d.rows.length ? el("p", { class: "stats-caption", text: `Showing the newest ${d.rows.length} of ${d.total}.` }) : null;
+    root.replaceChildren(el("div", { class: "home mining" },
+      el("div", { class: "lesson-top" },
+        el("button", { class: "secondary lesson-exit", type: "button", onclick: () => showHome() }, "Back"),
+        el("h2", { class: "lesson-title", text: "Mined lines" })),
+      notes, setup, list, more));
+    keys.primary = showHome;
+    if (d.counts.pending) {
+      // Lines being prepared: look again shortly, while this page is still open.
+      const here = screenId;
+      setTimeout(() => { if (screenId === here && learnVisible()) runMining(); }, 8000);
+    }
   }
 
   async function runStats() {

@@ -12,12 +12,13 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, File, Form, HTTPException, Response, UploadFile
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from kaiwa import stt, tts
 from kaiwa.config import get_settings
 from kaiwa.course import ask, coach, hooks, kana_judge, placement, prerender, roleplay, sentences, state, stories
-from kaiwa.course import drills, learner_log, missions, my_phrases
+from kaiwa.course import drills, learner_log, mined_enrich, mined_media, missions, my_phrases
 from kaiwa.course.kana import KANA_ROMAJI
 from kaiwa.course.speech_check import check_phrase, normalize, spot_differences
 from kaiwa.secrets_store import user_data_dir
@@ -111,7 +112,49 @@ class AskBody(BaseModel):
 
 @router.get("/today")
 def today() -> dict[str, Any]:
+    mined_enrich.kick()  # cheap; picks up lines still waiting (a key added since, a retry due)
     return {**state.today_payload(), "has_tutor": bool(get_settings().deepseek_api_key)}
+
+
+# ---------- mined lines (asbplayer → /ankiconnect → here) ----------
+
+@router.get("/mined")
+def mined_list() -> dict[str, Any]:
+    from kaiwa import ankiconnect
+
+    mined_enrich.kick()
+    return {**state.mined_overview(), "has_key": bool(get_settings().deepseek_api_key),
+            "path": "/ankiconnect", "refused": ankiconnect.last_refused()}
+
+
+@router.delete("/mined/{row_id}")
+def mined_remove(row_id: str) -> dict[str, Any]:
+    unused = state.remove_mined(row_id)
+    if unused is None:
+        raise HTTPException(status_code=404, detail="That line isn't kept.")
+    mined_media.delete(mined_media.media_dir(state.state_path()), unused)
+    return {"ok": True}
+
+
+@router.post("/mined/{row_id}/retry")
+def mined_retry(row_id: str) -> dict[str, Any]:
+    if not state.retry_mined(row_id):
+        raise HTTPException(status_code=404, detail="Nothing to retry for that line.")
+    mined_enrich.kick()
+    return {"ok": True}
+
+
+@router.get("/mined/media/{name}")
+def mined_media_file(name: str) -> Response:
+    """A mined line's clip or screenshot. Only files a kept line uses, only from its folder."""
+    rows = state.mined_rows()
+    if not any(name in (r["audio"], r["image"]) for r in rows):
+        raise HTTPException(status_code=404, detail="No such file.")
+    path = mined_media.path_for(mined_media.media_dir(state.state_path()), name)
+    if path is None:
+        raise HTTPException(status_code=404, detail="No such file.")
+    return FileResponse(path, media_type=mined_media.MIME[mined_media.ext_of(name)],
+                        headers={"Cache-Control": "private, max-age=86400", "X-Content-Type-Options": "nosniff"})
 
 
 @router.post("/tts")

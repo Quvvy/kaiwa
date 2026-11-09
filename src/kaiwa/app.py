@@ -39,6 +39,7 @@ from kaiwa.prefs import load_prefs, save_prefs, validate_prefs_dict
 from kaiwa.reply_shape import analyze_reply_shape
 from kaiwa import ptt_events
 from kaiwa import ptt_sounds
+from kaiwa import ankiconnect
 from kaiwa.learner_profile import (
     apply_chat_signals,
     apply_manual_override,
@@ -65,6 +66,7 @@ from kaiwa import jsonio
 from kaiwa.course import chat_link as course_chat_link
 from kaiwa.course import kana_judge as course_kana_judge
 from kaiwa.course import learner_log as course_learner_log
+from kaiwa.course import mined_enrich as course_mined_enrich
 from kaiwa.course import prerender as course_prerender
 from kaiwa.course import routes as course_routes
 from kaiwa import engine_watchdog
@@ -130,6 +132,7 @@ async def _phone_guard(request: Request, call_next):
 
 
 app.include_router(course_routes.router)
+app.include_router(ankiconnect.router)
 
 # In-memory chat history keyed by browser session id.
 _sessions: dict[str, list[dict[str, str]]] = {}
@@ -294,6 +297,7 @@ async def _warm_stt() -> None:
 
     asyncio.create_task(asyncio.to_thread(_load))
     threading.Thread(target=course_kana_judge.warm, name="kaiwa-kana-warm", daemon=True).start()
+    course_mined_enrich.kick()  # lines mined while Kaiwa was closed, or still waiting for a key
     threading.Thread(target=_warm_tts, name="kaiwa-tts-warm", daemon=True).start()
     if os.environ.get("KAIWA_TTS_WATCHDOG", "1") != "0":
         engine_watchdog.start()
@@ -574,6 +578,7 @@ def secrets_put_deepseek(body: DeepseekKeyBody) -> dict[str, Any]:
     base = get_settings().deepseek_base_url
     validation = secrets_store.soft_validate_deepseek(key, base)
     _refresh_settings()
+    course_mined_enrich.kick()  # mined lines were waiting for a key
     s = get_settings()
     return {
         "ok": True,

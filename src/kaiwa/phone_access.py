@@ -42,6 +42,8 @@ _LOCAL_ONLY_PATHS = {
     "/api/secrets/deepseek",
     "/api/data/open_folder",
     "/api/prefs/mic",
+    "/ankiconnect",  # mining tools run on the PC; ankiconnect.py checks this itself too
+    "/ankiconnect/",
 }
 _PHONE_OSES = {"ios", "android"}
 _URL = re.compile(r"https://\S+")

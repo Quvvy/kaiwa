@@ -105,8 +105,22 @@ Relicense Kaiwa MIT → AGPL-3.0 in the PR that adds the `anki` dependency. Upda
    - A limit of 0 for new per day or lesson minutes means no lessons that day.
    - Retention is used per deck by `srs.scheduler()`.
    - `GET`/`PUT /api/course/limits`; the panel is under Learn → Options; checks are in `smoke_course.limits()`.
-2. **Mining ingest + card builder + AnkiConnect adapter.** Try it with asbplayer on YouTube and on Tsugi's player.
-3. **Mined review**: Listen → meaning for mined cards in the daily review, plus a Mined deck browser (edit, delete, re-cut audio).
+2. **Mining ingest + card builder + AnkiConnect adapter.** Try it with asbplayer on YouTube and on Tsugi's player. *Built 2026-11-09, together with the basic review from phase 3 (asbplayer only for now):*
+   - **Adapter** (`src/kaiwa/ankiconnect.py`): AnkiConnect at `/ankiconnect`, with one deck (`Kaiwa`) and one note type (`Kaiwa Mining`: Sentence, Word, Translation, Audio, Image, Source, URL).
+     - Replies follow the request's version; bodies are parsed whatever their Content-Type; `multi` works.
+     - Accepted: extension origins and no Origin. Refused with 403: every web origin, `null`, and the phone. The last refused origin is shown on the Mined lines page.
+     - `storeMediaFile` takes base64 data only (no `path`/`url`). The update-last-card flow works (`findNotes added:1` → `notesInfo` → `updateNoteFields`).
+   - **Lines** (`course/mined.py`, `state["mined"]`): one card per line, deduplicated on the normalized text; `<b>` marks the word.
+   - **Media** (`course/mined_media.py`): `<profile>/mined_media/`, deterministic safe names, audio probed with PyAV (30 s / 8 MB max), served only when a line uses it.
+   - **Preparation** (`course/mined_enrich.py`): a background Flash pass gives the kana line, meaning, note and two wrong meanings.
+     - The reading is checked by shape: every kana kept, nothing left in kanji. pykakasi can't judge readings itself (it reads 今日は as こんにちは), so it's only the fallback.
+     - Retries back off; a line is marked failed after 4 tries. Without a key, lines wait.
+   - **Scheduling:** a Mined deck (10 new / 50 reviews by default) and a "New lines" plan step.
+     - Mined reviews log `deck: mined` and never spend the course's pace budget or affect its catch-up and slow-down rules.
+     - New lines wait while more than two days' worth of mined reviews are due.
+     - The pacing simulator's numbers are unchanged.
+   - **Page:** Mined lines (setup steps, status, retry, remove) and the review card (real clip, Slow, Show text; the back has kanji, a separate kana line, meaning, note, source).
+3. **Mined review**: the basic Listen → meaning review shipped with phase 2. Still to do: a Mined deck browser (edit text and reading, re-cut audio), AAC transcoding for iPhone playback of ogg/webm clips, and media in profile export.
 4. **Tsugi**: Jimaku subs, overlay, mine hotkey in the helper extension.
 5. **Anki sync** + AGPL relicense.
 6. **Kaishi takeover** with gradual backlog intake.

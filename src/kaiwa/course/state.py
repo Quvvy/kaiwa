@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Any
 
 from kaiwa import jsonio
-from kaiwa.course import build, drills, grader, my_phrases, srs
+from kaiwa.course import build, drills, grader, mined, my_phrases, srs
 from kaiwa.course.kana import KANA_LESSONS, KANA_ROMAJI, LESSON_BY_ID, lesson_chars
 from kaiwa.course.kana_hooks import alike, hook_for
 from kaiwa.course.missions import CULTURE, MISSIONS
@@ -40,6 +40,9 @@ _PHRASE_UNIT: dict[str, str] = {}
 _WORDS: dict[str, dict[str, Any]] = {}
 _WORD_UNIT: dict[str, str] = {}
 _GRAMMAR: dict[str, dict[str, Any]] = {}
+# Mined lines of the profile loaded last, by row id. Rebound (never mutated) on every load,
+# so a background reader always sees one consistent profile.
+_MINED: dict[str, dict[str, Any]] = {}
 for _unit in UNITS:
     for _g in _unit.get("grammar", []):
         if build.items_for(_g["id"]):
@@ -90,7 +93,8 @@ RETENTION_MIN_REVIEWS = 20
 # takes a few seconds, hearing a phrase a little longer, saying one longest. 30 ≈
 # five minutes. Due cards beyond it wait for later days instead of piling up, so a
 # missed week never turns into a wall of reviews.
-CARD_COST = {"kana": 1, "word": 1, "listen": 2, "speak": 3, "grammar": 2}
+# Mined lines only count toward their own deck's card limit, never this budget.
+CARD_COST = {"kana": 1, "word": 1, "listen": 2, "speak": 3, "grammar": 2, "mined": 3}
 
 
 def card_cost(kind: str, skill: str) -> int:
@@ -101,7 +105,7 @@ def _empty() -> dict[str, Any]:
     return {"version": 2, "units": {}, "cards": {}, "days": [], "kana": {}, "questions": [], "reviewed": {}, "timing": {}, "log": [],
             "undo": [], "overrides": [], "daily": {}, "seq": 0, "grades": [], "grader": None,
             "checks": {}, "listening": {"recent": [], "total_ms": 0}, "bests": {}, "mine": [],
-            "limits": {"decks": {}, "all": {}}}
+            "limits": {"decks": {}, "all": {}}, "mined": []}
 
 
 def load_state(path: Path | None = None) -> dict[str, Any]:
@@ -136,6 +140,9 @@ def load_state(path: Path | None = None) -> dict[str, Any]:
     state["mine"] = my_phrases.clean_kept(raw.get("mine"))
     for row in state["mine"]:
         _PHRASES[row["id"]] = row
+    state["mined"] = mined.clean_rows(raw.get("mined"))
+    global _MINED
+    _MINED = {row["id"]: row for row in state["mined"]}
     if isinstance(raw.get("listening"), dict):
         lst = raw["listening"]
         state["listening"] = {"recent": [str(s) for s in lst.get("recent") or []][-LISTEN_RECENT_KEPT:],
@@ -319,6 +326,10 @@ def _note_new(state: dict[str, Any], card_id: str, change: int = 1) -> None:
         return
     day = state["daily"].setdefault(_today().isoformat(), {"answers": 0, "right": 0, "ms": 0})
     day["new"] = max(0, int(day.get("new") or 0) + change)
+    deck = deck_of(card_id)
+    if deck != "course":
+        by = day.setdefault("new_by_deck", {})
+        by[deck] = max(0, int(by.get(deck) or 0) + change)
 
 
 def _add_card(state: dict[str, Any], card_id: str) -> None:
@@ -356,7 +367,18 @@ def _card_kind(card_id: str) -> tuple[str, str, str] | None:
         return "kana", item[5:], skill
     if item in _GRAMMAR and skill == "build":
         return "grammar", item, skill
+    if item in _MINED and skill == "listen":
+        return "mined", item, skill
     return None
+
+
+def _kind_or_reload(card_id: str, path: Path | None) -> tuple[str, str, str] | None:
+    """A mined line added since this process last loaded the profile needs one reload to be known."""
+    kind = _card_kind(card_id)
+    if kind is None and card_id.startswith("mined."):
+        load_state(path)
+        kind = _card_kind(card_id)
+    return kind
 
 
 def grade(
@@ -377,7 +399,7 @@ def grade(
     review for each grade, for the grade buttons), `learning` and `again_soon`.
     Everything the answer changes is recorded so `undo` can put it back.
     """
-    kind = _card_kind(card_id)
+    kind = _kind_or_reload(card_id, path)
     if kind is None:
         raise KeyError(f"unknown card: {card_id}")
     fmt = fmt or f"{kind[0]}:{kind[2]}"
@@ -417,10 +439,14 @@ def _apply_grade(state: dict[str, Any], card_id: str, kind: tuple, outcome: dict
     }])[-grader.ROWS_KEPT:]
     if was_review:
         # Only real reviews spend the daily budget and count toward retention.
-        entry["cost"] = card_cost(kind[0], kind[2])
+        # Other decks have their own card-count limits and leave the course's budget alone.
+        deck = deck_of(card_id)
+        entry["cost"] = card_cost(kind[0], kind[2]) if deck == "course" else 0
         state["reviewed"] = {today: state["reviewed"].get(today, 0) + entry["cost"]}
         row = {"seq": state["seq"], "d": today, "k": kind[0] if kind[0] != "phrase" else f"phrase:{kind[2]}",
                "ok": rating != srs.AGAIN}
+        if deck != "course":
+            row["deck"] = deck
         state["log"] = (state["log"] + [row])[-LOG_KEPT:]
         entry["log"] = state["seq"]
     clean = outcome["correct"] and not (outcome["helped"] or outcome["guessed"]) and forced is None
@@ -511,7 +537,7 @@ def undo(*, card_id: str | None = None, path: Path | None = None) -> dict[str, A
 
 def regrade(card_id: str, rating: int, *, path: Path | None = None) -> dict[str, Any]:
     """The learner picked a different grade: undo their last answer on this card and reapply it."""
-    kind = _card_kind(card_id)
+    kind = _kind_or_reload(card_id, path)
     if kind is None:
         raise KeyError(f"unknown card: {card_id}")
 
@@ -541,6 +567,8 @@ def _card_payload(kind: str, item: str) -> dict[str, Any]:
         return {"word": dict(_WORDS[item])}
     if kind == "grammar":
         return {"grammar": _GRAMMAR[item]}
+    if kind == "mined":
+        return {"mined": mined.public_row(_MINED[item])}
     return {"kana": _kana_item(item, KANA_ROMAJI[item])}
 
 
@@ -553,6 +581,8 @@ def answer_format(kind: str, skill: str, card: dict[str, Any]) -> str:
     """
     if kind == "phrase":
         return "speak" if skill == "speak" else "choice"
+    if kind == "mined":
+        return "choice"  # hear the real line, pick its meaning; there's no "produce" side
     if kind == "grammar":
         return "build"
     if is_leech(card) and srs.stability(card) < LEECH_STABLE_DAYS:
@@ -590,6 +620,9 @@ def card_item(card_id: str) -> dict[str, Any] | None:
     if kind[0] == "grammar":
         g = payload["grammar"]
         return {"kind": "grammar", "jp": g["items"][0]["jp"], "en": g["items"][0]["en"], "note": g["rule"]}
+    if kind[0] == "mined":
+        m = payload["mined"]
+        return {"kind": "mined", "jp": m["text"], "en": m["en"], "note": m["note"]}
     item = payload.get("phrase") or payload.get("word")
     return {"kind": kind[0], "jp": item["jp"], "en": item["en"], "note": item.get("note", "")}
 
@@ -603,7 +636,8 @@ def retention(state: dict[str, Any], *, days: int = RETENTION_DAYS) -> dict[str,
     rows = [r for r in state["log"] if str(r.get("d")) >= since]
     if len(rows) < RETENTION_MIN_REVIEWS:
         return None
-    groups = {"kana": "kana", "word": "words", "phrase:listen": "phrases heard", "phrase:speak": "phrases said", "grammar": "grammar"}
+    groups = {"kana": "kana", "word": "words", "phrase:listen": "phrases heard", "phrase:speak": "phrases said", "grammar": "grammar",
+              "mined": "mined lines"}
     by_kind = {}
     for key, label in groups.items():
         part = [r for r in rows if r.get("k") == key]
@@ -636,7 +670,13 @@ def _answered_today(card: dict[str, Any]) -> bool:
     return bool(last) and srs.study_day(datetime.fromisoformat(last)).isoformat() == _today().isoformat()
 
 
-def due_cards(state: dict[str, Any], *, limit: int = 20, budget: int | None = None) -> list[dict[str, Any]]:
+def _reviewable(card_id: str, kind: tuple[str, str, str] | None) -> bool:
+    """A mined line being prepared again (its text was edited) sits out until it's ready."""
+    return kind is not None and (kind[0] != "mined" or _MINED[kind[1]]["status"] == "ready")
+
+
+def due_cards(state: dict[str, Any], *, limit: int = 20, budget: int | None = None,
+              deck: str | None = None) -> list[dict[str, Any]]:
     """Due cards, most-forgotten first (lowest box, then oldest), within `budget` if given.
 
     A phrase's two sides are never back to back. In today's share (`budget` given) a
@@ -647,7 +687,9 @@ def due_cards(state: dict[str, Any], *, limit: int = 20, budget: int | None = No
     rows = []
     for card_id, card in state["cards"].items():
         kind = _card_kind(card_id)
-        if kind is None or srs.is_learning(card) or str(card.get("due") or "") > today:
+        if not _reviewable(card_id, kind) or srs.is_learning(card) or str(card.get("due") or "") > today:
+            continue
+        if deck is not None and deck_of(card_id) != deck:
             continue
         # Weakest memories first (lowest stability), then the most overdue.
         rows.append((srs.stability(card), str(card.get("due") or ""), card_id, kind))
@@ -702,7 +744,7 @@ def recap_cards(state: dict[str, Any]) -> list[dict[str, Any]]:
     rows = []
     for card_id, card in state["cards"].items():
         kind = _card_kind(card_id)
-        if kind and srs.is_learning(card) and str(card.get("due") or "") <= today:
+        if _reviewable(card_id, kind) and srs.is_learning(card) and str(card.get("due") or "") <= today:
             rows.append((srs.due_at(card), card_id, kind))
     rows.sort(key=lambda r: r[0])
     picked = rows[:RECAP_LIMIT]
@@ -748,7 +790,7 @@ FIRST_DAY_EXTRA = 4.0
 # Rough minutes a lesson step takes, including its share of the same-day recap.
 WORD_MINUTES = 0.3
 STEP_MINUTES = {"grammar": 5.5, "listen": 3.5, "speak": 3.5}
-REVIEW_SECONDS = {"kana": 4, "word": 5, "listen": 8, "speak": 12, "grammar": 15}
+REVIEW_SECONDS = {"kana": 4, "word": 5, "listen": 8, "speak": 12, "grammar": 15, "mined": 12}
 
 
 def pace_of(state: dict[str, Any]) -> dict[str, Any]:
@@ -771,20 +813,25 @@ def set_pace(pace: str, *, path: Path | None = None) -> str:
 # left unset follows the pace, so the pace presets are just starting values. A set
 # review limit counts cards (like Anki) and is a hard cap: no catch-up doubling.
 # Only the course exists so far; mined sentences and imported decks join later.
-DECKS: dict[str, dict[str, str]] = {"course": {"label": "Course"}}
+DECK_FIELDS = ("new_per_day", "max_reviews", "lesson_minutes", "retention")
+DECKS: dict[str, dict[str, Any]] = {
+    "course": {"label": "Course", "fields": DECK_FIELDS},
+    # Lines mined from shows: a handful a day, and a hard review cap so they never pile up.
+    "mined": {"label": "Mined", "fields": ("new_per_day", "max_reviews", "retention"),
+              "defaults": {"new_per_day": 10, "max_reviews": 50}},
+}
 LIMIT_RANGES: dict[str, tuple[float, float]] = {
     "new_per_day": (0, 9999),
     "max_reviews": (0, 9999),
     "lesson_minutes": (0, 600),
     "retention": (0.70, 0.97),
 }
-DECK_FIELDS = ("new_per_day", "max_reviews", "lesson_minutes", "retention")
 ALL_FIELDS = ("new_per_day", "max_reviews")
 REVIEW_ROWS_MAX = 200  # due cards sent to the page at once; the rest come on the next load
 
 
 def deck_of(card_id: str) -> str:
-    return "course"
+    return "mined" if card_id.startswith("mined.") else "course"
 
 
 def _clean_values(raw: Any, fields: tuple[str, ...]) -> dict[str, float]:
@@ -805,21 +852,25 @@ def clean_limits(raw: Any) -> dict[str, Any]:
     raw = raw if isinstance(raw, dict) else {}
     decks = raw.get("decks") if isinstance(raw.get("decks"), dict) else {}
     return {
-        "decks": {d: v for d in DECKS if (v := _clean_values(decks.get(d), DECK_FIELDS))},
+        "decks": {d: v for d in DECKS if (v := _clean_values(decks.get(d), DECKS[d]["fields"]))},
         "all": _clean_values(raw.get("all"), ALL_FIELDS),
     }
 
 
+def _deck_defaults(state: dict[str, Any], deck: str) -> dict[str, Any]:
+    """A deck's numbers before the learner changes any: the course follows the pace."""
+    if deck == "course":
+        pace = pace_of(state)
+        return {"new_per_day": pace["new_items"], "max_reviews": None, "lesson_minutes": pace["lesson_minutes"],
+                "retention": srs.DEFAULT_RETENTION}
+    return {"retention": srs.DEFAULT_RETENTION, **DECKS[deck].get("defaults", {})}
+
+
 def deck_limits(state: dict[str, Any], deck: str) -> dict[str, Any]:
-    """What a deck's day holds: the learner's numbers, else the pace's. max_reviews None = the pace's budget."""
-    pace = pace_of(state)
+    """What a deck's day holds: the learner's numbers, else the defaults. Course max_reviews None = the pace's budget."""
     own = state.get("limits", {}).get("decks", {}).get(deck, {})
-    return {
-        "new_per_day": own.get("new_per_day", pace["new_items"]),
-        "max_reviews": own.get("max_reviews"),
-        "lesson_minutes": own.get("lesson_minutes", pace["lesson_minutes"]),
-        "retention": own.get("retention", srs.DEFAULT_RETENTION),
-    }
+    defaults = _deck_defaults(state, deck)
+    return {f: own.get(f, defaults.get(f)) for f in DECKS[deck]["fields"]}
 
 
 def all_limits(state: dict[str, Any]) -> dict[str, Any]:
@@ -828,22 +879,22 @@ def all_limits(state: dict[str, Any]) -> dict[str, Any]:
 
 
 def custom_limits(state: dict[str, Any]) -> bool:
+    """Whether the pace's own estimates still hold: only course and overall limits change them."""
     lim = state.get("limits", {})
-    return bool(lim.get("all")) or any(lim.get("decks", {}).values())
+    return bool(lim.get("all")) or bool(lim.get("decks", {}).get("course"))
 
 
 def limits_view(state: dict[str, Any]) -> dict[str, Any]:
     """Settings view: every field with its value, the pace's default, and whether the learner set it."""
     pace = pace_of(state)
-    defaults = {"new_per_day": pace["new_items"], "max_reviews": None, "lesson_minutes": pace["lesson_minutes"],
-                "retention": srs.DEFAULT_RETENTION}
     lim = state.get("limits", {})
     decks = {}
     for deck, meta in DECKS.items():
         own = lim.get("decks", {}).get(deck, {})
-        decks[deck] = {"label": meta["label"],
-                       "fields": {f: {"value": own.get(f, defaults[f]), "default": defaults[f], "set": f in own}
-                                  for f in DECK_FIELDS}}
+        defaults = _deck_defaults(state, deck)
+        decks[deck] = {"label": meta["label"], "custom": bool(own),
+                       "fields": {f: {"value": own.get(f, defaults.get(f)), "default": defaults.get(f), "set": f in own}
+                                  for f in meta["fields"]}}
     own_all = lim.get("all", {})
     return {"decks": decks,
             "all": {f: {"value": own_all.get(f), "default": None, "set": f in own_all} for f in ALL_FIELDS},
@@ -852,9 +903,9 @@ def limits_view(state: dict[str, Any]) -> dict[str, Any]:
 
 def set_limits(deck: str, values: dict[str, Any], *, path: Path | None = None) -> dict[str, Any]:
     """Set (a number) or clear (None) limit fields for one deck, or for "all"."""
-    fields = ALL_FIELDS if deck == "all" else DECK_FIELDS
     if deck != "all" and deck not in DECKS:
         raise ValueError(f"unknown deck: {deck}")
+    fields = ALL_FIELDS if deck == "all" else DECKS[deck]["fields"]
     unknown = set(values) - set(fields)
     if unknown:
         raise ValueError(f"unknown limit: {', '.join(sorted(unknown))}")
@@ -879,46 +930,107 @@ def set_limits(deck: str, values: dict[str, Any], *, path: Path | None = None) -
     return _with_state(apply, path)
 
 
-def reviews_done_today(state: dict[str, Any]) -> int:
+def reviews_done_today(state: dict[str, Any], deck: str | None = None) -> int:
     today = _today().isoformat()
-    return sum(1 for r in state["log"] if r.get("d") == today)
+    return sum(1 for r in state["log"] if r.get("d") == today and (deck is None or r.get("deck", "course") == deck))
 
 
-def _review_cap(state: dict[str, Any]) -> int | None:
+def _review_cap(state: dict[str, Any], deck: str = "course") -> int | None:
     """Cards per day the learner set (deck and overall, the tighter one), or None to use the pace's budget."""
-    caps = [c for c in (deck_limits(state, "course")["max_reviews"], all_limits(state)["max_reviews"]) if c is not None]
+    caps = [c for c in (deck_limits(state, deck)["max_reviews"], all_limits(state)["max_reviews"]) if c is not None]
     return min(caps) if caps else None
 
 
 def due_cost(state: dict[str, Any]) -> int:
-    return sum(card_cost(c["kind"], c["skill"]) for c in due_cards(state, limit=10_000))
+    return sum(card_cost(c["kind"], c["skill"]) for c in due_cards(state, limit=10_000, deck="course"))
 
 
 def catching_up(state: dict[str, Any]) -> bool:
+    """A course backlog worth more than two days. Other decks never make a catch-up day."""
     cap = _review_cap(state)
     if cap is not None:
-        return len(due_cards(state, limit=10_000)) > cap * CATCH_UP_DAYS
+        return len(due_cards(state, limit=10_000, deck="course")) > cap * CATCH_UP_DAYS
     return due_cost(state) > pace_of(state)["reviews"] * CATCH_UP_DAYS
 
 
-def todays_reviews(state: dict[str, Any]) -> list[dict[str, Any]]:
-    """Today's share of due cards: what fits in the budget left after today's reviews."""
+def _course_reviews(state: dict[str, Any]) -> list[dict[str, Any]]:
     cap = _review_cap(state)
     if cap is not None:
         # The learner's own number: a plain card count, the same every day.
-        left = max(0, cap - reviews_done_today(state))
-        return due_cards(state, limit=min(left, REVIEW_ROWS_MAX), budget=10**9) if left else []
+        left = max(0, cap - reviews_done_today(state, "course"))
+        return due_cards(state, limit=min(left, REVIEW_ROWS_MAX), budget=10**9, deck="course") if left else []
     spent = state["reviewed"].get(_today().isoformat(), 0)
     # Coming back from a break gets a normal day: a doubled pile is how a break becomes quitting.
     returning = days_away(state) >= COMEBACK_DAYS or state.get("comeback") == _today().isoformat()
     budget = pace_of(state)["reviews"] * (2 if catching_up(state) and not returning else 1)
-    return due_cards(state, limit=80, budget=max(0, budget - spent))
+    return due_cards(state, limit=80, budget=max(0, budget - spent), deck="course")
+
+
+def _mined_reviews(state: dict[str, Any]) -> list[dict[str, Any]]:
+    cap = _review_cap(state, "mined")
+    left = max(0, (cap if cap is not None else 0) - reviews_done_today(state, "mined"))
+    return due_cards(state, limit=min(left, REVIEW_ROWS_MAX), budget=10**9, deck="mined") if left else []
+
+
+def _interleave(main: list[dict[str, Any]], extra: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Spread `extra` evenly through `main`, so one deck never comes as a block."""
+    if not main or not extra:
+        return main + extra
+    out: list[dict[str, Any]] = []
+    step = (len(main) + len(extra)) / len(extra)
+    slots = {int(i * step + step / 2) for i in range(len(extra))}
+    mi, ei = iter(main), iter(extra)
+    for pos in range(len(main) + len(extra)):
+        nxt = next(ei, None) if pos in slots else next(mi, None)
+        if nxt is None:
+            nxt = next(mi, None) or next(ei, None)
+        if nxt is not None:
+            out.append(nxt)
+    return out
+
+
+def todays_reviews(state: dict[str, Any]) -> list[dict[str, Any]]:
+    """Today's share of due cards: each deck's share within its limit, then the overall limit."""
+    rows = _interleave(_course_reviews(state), _mined_reviews(state))
+    overall = all_limits(state)["max_reviews"]
+    if overall is not None:
+        rows = rows[: max(0, overall - reviews_done_today(state))]
+    return rows
+
+
+def mined_backlog(state: dict[str, Any]) -> bool:
+    """More mined reviews due than two days' worth: hold new lines until it shrinks."""
+    cap = _review_cap(state, "mined") or 0
+    return len(due_cards(state, limit=10_000, deck="mined")) > cap * CATCH_UP_DAYS
+
+
+def todays_mined_new(state: dict[str, Any]) -> list[dict[str, Any]]:
+    """Ready mined lines to meet today, oldest first, within the mined and overall new limits."""
+    if mined_backlog(state):
+        return []
+    day = state["daily"].get(_today().isoformat(), {})
+    mined_new = int((day.get("new_by_deck") or {}).get("mined") or 0)
+    left = deck_limits(state, "mined")["new_per_day"] - mined_new
+    overall = all_limits(state)["new_per_day"]
+    if overall is not None:
+        left = min(left, overall - int(day.get("new") or 0))
+    if left <= 0:
+        return []
+    out = []
+    for row in state.get("mined", []):
+        cid = f"{row['id']}:listen"
+        if row["status"] == "ready" and cid not in state["cards"]:
+            out.append(_card_row(cid, ("mined", row["id"], "listen"), srs.new_card()))
+            if len(out) >= left:
+                break
+    return out
 
 
 def recall_slipping(state: dict[str, Any]) -> int | None:
     """Recent recall as a percent when it's low enough to slow new material, else None."""
     since = (_today() - timedelta(days=SLOW_DOWN_DAYS)).isoformat()
-    rows = [r for r in state["log"] if str(r.get("d")) >= since]
+    # Course reviews only: real anime lines are harder, and missing them says nothing about the course.
+    rows = [r for r in state["log"] if str(r.get("d")) >= since and r.get("deck", "course") == "course"]
     if len(rows) < SLOW_DOWN_MIN_REVIEWS:
         return None
     percent = round(100 * sum(1 for r in rows if r.get("ok")) / len(rows))
@@ -962,11 +1074,16 @@ def plan_today(state: dict[str, Any]) -> dict[str, Any]:
     plan: list[str] = []
     if reviews:
         plan.append("review")
+    # New mined lines are their own deck: offered even on a course catch-up day.
+    mined_new = todays_mined_new(state)
+    mined_extra = {"mined_new": mined_new, "mined_paused": not mined_new and mined_backlog(state)}
+    if mined_new:
+        plan.append("mined")
     if catching_up(state):
         if recap_cards(state):
             plan.append("recap")
         return {"plan": plan, "catching_up": True, "day_two_tomorrow": False, "words_today": 0, "pace": _pace_name(state),
-                "slipping": None, "minutes": _day_minutes(reviews, state, 0.0)}
+                "slipping": None, "minutes": _day_minutes(reviews + mined_new, state, 0.0), **mined_extra}
 
     slipping = recall_slipping(state)
     share = 0.5 if slipping is not None else 1.0
@@ -975,10 +1092,16 @@ def plan_today(state: dict[str, Any]) -> dict[str, Any]:
     spent = float(day.get("lesson_min") or 0)
     limits = deck_limits(state, "course")
     new_cap = limits["new_per_day"]
-    if all_limits(state)["new_per_day"] is not None:
-        new_cap = min(new_cap, all_limits(state)["new_per_day"])
+    overall_new = all_limits(state)["new_per_day"]
+    if overall_new is not None:
+        new_cap = min(new_cap, overall_new)
     minutes_left = limits["lesson_minutes"] * share - spent
-    new_left = new_cap * share - int(day.get("new") or 0)
+    total_new = int(day.get("new") or 0)
+    course_new = total_new - sum(int(v or 0) for v in (day.get("new_by_deck") or {}).values())
+    new_left = limits["new_per_day"] * share - course_new
+    if overall_new is not None:
+        # Mined lines take their share of the overall limit first; lessons get what's left.
+        new_left = min(new_left, overall_new - total_new - len(mined_new))
     started = spent > 0
     if set(state["days"]) <= {iso}:
         minutes_left += FIRST_DAY_EXTRA  # the very first day gets a real phrase, not only five vowels
@@ -1031,6 +1154,8 @@ def plan_today(state: dict[str, Any]) -> dict[str, Any]:
 
     # A limit of 0 means no lessons today, not "at least one small one".
     paused = new_cap <= 0 or limits["lesson_minutes"] <= 0
+    # An overall limit used up (by mined lines, say) is a stop too, not room for "one small lesson".
+    paused = paused or (overall_new is not None and new_left <= 0)
     kana_wanted = bool(kana) and iso not in state["kana"].values() and not paused
     if paused:
         pass
@@ -1043,12 +1168,13 @@ def plan_today(state: dict[str, Any]) -> dict[str, Any]:
             try_kana()
     planned.sort(key=lambda s: 0 if s == "kana" else 1)  # kana first: it's what the rest gets read with
     plan.extend(planned)
-    if planned or recap_cards(state):
+    if planned or mined_new or recap_cards(state):
         # After the new material: a second look at today's new and missed cards.
         plan.append("recap")
     used = minutes_budget - minutes_left
     return {"plan": plan, "catching_up": False, "day_two_tomorrow": day_two_tomorrow, "words_today": words_today,
-            "pace": _pace_name(state), "slipping": slipping, "minutes": _day_minutes(reviews, state, used)}
+            "pace": _pace_name(state), "slipping": slipping, "minutes": _day_minutes(reviews + mined_new, state, used),
+            **mined_extra}
 
 
 def _pace_name(state: dict[str, Any]) -> str:
@@ -1283,9 +1409,14 @@ def day_summary(state: dict[str, Any]) -> dict[str, Any]:
                 if str(state["units"].get(u["id"], {}).get("done_at") or "")[:10] == today
                 and not state["units"][u["id"]].get("placed")]
     tomorrow = (_today() + timedelta(days=1)).isoformat()
-    due_tomorrow = sum(1 for c in state["cards"].values() if not srs.is_learning(c) and str(c.get("due") or "") <= tomorrow)
+    due_by_deck: dict[str, int] = {}
+    for cid, c in state["cards"].items():
+        if not srs.is_learning(c) and str(c.get("due") or "") <= tomorrow:
+            due_by_deck[deck_of(cid)] = due_by_deck.get(deck_of(cid), 0) + 1
+    # No more than a day's share of each deck ever comes up.
     cap = _review_cap(state)
-    due_tomorrow = min(due_tomorrow, pace_of(state)["reviews"] if cap is None else cap)  # no more than a day's share ever comes up
+    due_tomorrow = min(due_by_deck.get("course", 0), pace_of(state)["reviews"] if cap is None else cap)
+    due_tomorrow += min(due_by_deck.get("mined", 0), _review_cap(state, "mined") or 0)
     return {
         "answers": answers,
         "right": int(day.get("right") or 0),
@@ -1399,18 +1530,22 @@ def course_stats(*, path: Path | None = None) -> dict[str, Any]:
 
     # Coming up: real reviews due on each of the next 30 days (overdue counts as today).
     forecast = [0] * 30
-    for card in state["cards"].values():
+    mined_now = 0
+    for cid, card in state["cards"].items():
         if srs.is_learning(card):
             continue
         try:
             offset = (date.fromisoformat(str(card.get("due"))[:10]) - today).days
         except ValueError:
             continue
-        if offset < 30:
+        if offset <= 0 and deck_of(cid) == "mined":
+            mined_now += 1  # only a day's share of these ever comes up, so only that is shown
+        elif offset < 30:
             forecast[max(0, offset)] += 1
+    forecast[0] += min(mined_now, _review_cap(state, "mined") or mined_now)
 
     # Your cards, by kind and stage.
-    kinds = {"kana": "Kana", "word": "Words", "phrase": "Phrases", "grammar": "Grammar"}
+    kinds = {"kana": "Kana", "word": "Words", "phrase": "Phrases", "grammar": "Grammar", "mined": "Mined lines"}
     stages = {k: {"new": 0, "learning": 0, "young": 0, "mature": 0} for k in kinds}
     intervals = [0] * len(INTERVAL_BUCKETS)
     for cid, card in state["cards"].items():
@@ -1768,6 +1903,175 @@ def remove_my_phrase(phrase_id: str, *, path: Path | None = None) -> bool:
         return True
 
     return _with_state(apply, path)
+
+
+# ---------- mined lines ----------
+# Lines the learner caught in real shows (via asbplayer and the AnkiConnect adapter).
+# A line is "pending" until mined_enrich prepares it, then "ready": only ready lines
+# are offered as new cards or come up in reviews.
+
+def _rebind_mined(state: dict[str, Any]) -> None:
+    global _MINED
+    _MINED = {row["id"]: row for row in state["mined"]}
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def _fresh_note_id(state: dict[str, Any]) -> int:
+    taken = {r["note_id"] for r in state["mined"]}
+    nid = int(datetime.now(timezone.utc).timestamp() * 1000)
+    while nid in taken:
+        nid += 1
+    return nid
+
+
+DUPLICATE = "cannot create note because it is a duplicate"
+
+
+def mined_rows(*, path: Path | None = None) -> list[dict[str, Any]]:
+    return load_state(path)["mined"]
+
+
+def add_mined(capture: dict[str, Any], media: dict[str, Any] | None = None, *, allow_dup: bool = False,
+              path: Path | None = None) -> tuple[dict[str, Any], bool]:
+    """Keep a mined line. Returns (row, created). The same line twice is a duplicate:
+    an error, or with `allow_dup` the line already kept (never two cards for one line)."""
+    mined.validate_capture(capture)
+    media = media or {}
+    key = mined.normalize_key(capture["text"])
+
+    def apply(state: dict[str, Any]) -> tuple[dict[str, Any], bool]:
+        same = next((r for r in state["mined"] if r["key"] == key), None)
+        if same is not None:
+            if not allow_dup:
+                raise ValueError(DUPLICATE)
+            return same, False
+        now = _now_iso()
+        row = mined.clean_row({
+            "id": mined.row_id(key), "note_id": _fresh_note_id(state), "key": key,
+            "text": capture["text"], "word": capture.get("word"), "en_sub": capture.get("en_sub"),
+            "source": capture.get("source") or {}, "tags": capture.get("tags") or [],
+            "audio": media.get("audio") or "", "audio_ms": media.get("audio_ms") or 0, "image": media.get("image") or "",
+            "status": "pending", "rev": 1, "added_at": now, "updated_at": now,
+        })
+        assert row is not None
+        state["mined"] = (state["mined"] + [row])[-mined.MAX_KEPT:]
+        _rebind_mined(state)
+        return row, True
+
+    return _with_state(apply, path)
+
+
+def update_mined(note_id: int, changes: dict[str, Any], *, path: Path | None = None) -> tuple[dict[str, Any], list[str]]:
+    """Change a kept line (asbplayer's "update last card"). A new text means preparing it again.
+    Returns (row, media names it no longer uses)."""
+
+    def apply(state: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
+        row = next((r for r in state["mined"] if r["note_id"] == note_id), None)
+        if row is None:
+            raise KeyError(f"note was not found: {note_id}")
+        old_media = []
+        if changes.get("text") and changes["text"] != row["text"]:
+            mined.validate_capture({"text": changes["text"]})
+            key = mined.normalize_key(changes["text"])
+            if any(r["key"] == key and r is not row for r in state["mined"]):
+                raise ValueError(DUPLICATE)
+            row.update({"text": changes["text"][:mined.MAX_TEXT], "key": key, "kana": "", "en": "", "note": "",
+                        "wrong": [], "status": "pending", "attempts": 0, "next_try": "", "error": ""})
+            row["rev"] += 1
+        for field in ("word", "en_sub"):
+            if field in changes and changes[field] is not None:
+                row[field] = str(changes[field])[:300 if field == "en_sub" else 40]
+        if changes.get("source"):
+            row["source"] = {**row["source"], **{k: v for k, v in changes["source"].items() if v not in (None, "")}}
+        for field in ("audio", "image"):
+            if changes.get(field) and changes[field] != row[field]:
+                if row[field]:
+                    old_media.append(row[field])
+                row[field] = changes[field]
+                if field == "audio":
+                    row["audio_ms"] = int(changes.get("audio_ms") or 0)
+        if "tags" in changes:
+            row["tags"] = [str(t)[:40] for t in changes["tags"] if str(t).strip()][:20]
+        row["updated_at"] = _now_iso()
+        still = {r["audio"] for r in state["mined"]} | {r["image"] for r in state["mined"]}
+        _rebind_mined(state)
+        return dict(row), [m for m in old_media if m not in still]
+
+    return _with_state(apply, path)
+
+
+def remove_mined(row_id: str, *, path: Path | None = None) -> list[str] | None:
+    """Forget a line and its card. Returns the media files nothing uses now (None if not found)."""
+
+    def apply(state: dict[str, Any]) -> list[str] | None:
+        row = next((r for r in state["mined"] if r["id"] == row_id), None)
+        if row is None:
+            return None
+        state["mined"] = [r for r in state["mined"] if r["id"] != row_id]
+        cid = f"{row_id}:listen"
+        state["cards"].pop(cid, None)
+        state["undo"] = [e for e in state["undo"] if e.get("card_id") != cid]  # Ctrl+Z can't bring back half a card
+        _rebind_mined(state)
+        still = {r["audio"] for r in state["mined"]} | {r["image"] for r in state["mined"]}
+        return [m for m in (row["audio"], row["image"]) if m and m not in still]
+
+    return _with_state(apply, path)
+
+
+def retry_mined(row_id: str, *, path: Path | None = None) -> bool:
+    def apply(state: dict[str, Any]) -> bool:
+        row = next((r for r in state["mined"] if r["id"] == row_id), None)
+        if row is None or row["status"] == "ready":
+            return False
+        row.update({"status": "pending", "attempts": 0, "next_try": "", "error": ""})
+        _rebind_mined(state)
+        return True
+
+    return _with_state(apply, path)
+
+
+def store_enrichment(row_id: str, rev: int, result: dict[str, Any] | None, *, path: Path | None = None) -> str | None:
+    """Keep a prepared card (or count a failed try). Ignored if the line changed meanwhile.
+    Returns the line's new status, or None if it was gone or edited."""
+    from kaiwa.course import mined_enrich
+
+    def apply(state: dict[str, Any]) -> str | None:
+        row = next((r for r in state["mined"] if r["id"] == row_id), None)
+        if row is None or row["rev"] != rev or row["status"] == "ready":
+            return None
+        if result:
+            row.update({k: result[k] for k in ("kana", "kana_src", "en", "note", "wrong")})
+            row.update({"status": "ready", "error": "", "next_try": ""})
+        else:
+            row["attempts"] += 1
+            if row["attempts"] >= mined_enrich.MAX_ATTEMPTS:
+                row.update({"status": "failed", "error": "The meaning couldn't be worked out reliably."})
+            else:
+                row["next_try"] = (datetime.now(timezone.utc) + mined_enrich.backoff(row["attempts"])).isoformat(
+                    timespec="seconds")
+        row["updated_at"] = _now_iso()
+        _rebind_mined(state)
+        return row["status"]
+
+    return _with_state(apply, path)
+
+
+def mined_overview(*, path: Path | None = None, limit: int = 100) -> dict[str, Any]:
+    """The Mined lines page: newest first, with status counts. No due or overdue numbers."""
+    state = load_state(path)
+    rows = list(reversed(state["mined"]))[:limit]
+    counts = {s: 0 for s in mined.STATUSES}
+    for r in state["mined"]:
+        counts[r["status"]] += 1
+    out = []
+    for r in rows:
+        card = state["cards"].get(f"{r['id']}:listen")
+        out.append({**mined.public_row(r), "started": card is not None,
+                    "known": bool(card) and srs.known(card), "error": r["error"]})
+    return {"rows": out, "counts": counts, "total": len(state["mined"])}
 
 
 def record_best(key: str, value: int, *, path: Path | None = None) -> dict[str, int]:
