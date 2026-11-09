@@ -65,11 +65,42 @@ def to_hiragana(text: str) -> str:
     return "".join(p.get("hira") or p.get("orig", "") for p in _kks.convert(text))
 
 
+_VOWEL_OF: dict[str, str] = {}
+for _vowel, _row in (
+    ("あ", "あかがさざただなはばぱまやらわぁゃゎ"),
+    ("い", "いきぎしじちぢにひびぴみりぃ"),
+    ("う", "うくぐすずつづぬふぶぷむゆるぅゅ"),
+    ("え", "えけげせぜてでねへべぺめれぇ"),
+    ("お", "おこごそぞとどのほぼぽもよろをぉょ"),
+):
+    for _ch in _row:
+        _VOWEL_OF[_ch] = _vowel
+
+
+def vowel_of(ch: str) -> str:
+    """The vowel a hiragana ends in (か → あ, しょ's ょ → お), or "" for ん, っ and the rest."""
+    return _VOWEL_OF.get(ch, "")
+
+
+def _long_vowels(text: str) -> str:
+    """ー as the vowel it stretches: こーひー → こおひい, びーる → びいる.
+
+    It used to be dropped, which made ビール (beer) and ビル (building) the same
+    answer. Spelled out, a long vowel is one more sound, like がっこう's う.
+    """
+    out: list[str] = []
+    for ch in text:
+        if ch == "ー":
+            ch = vowel_of(out[-1]) if out else ""
+        out.append(ch)
+    return "".join(out)
+
+
 def normalize(text: str) -> str:
     text = unicodedata.normalize("NFKC", text or "").casefold()
     text = _PUNCT_RE.sub("", text)
     text = to_hiragana(text)
-    return text.replace("ー", "").strip()
+    return _long_vowels(text).strip()
 
 
 def _levenshtein(a: str, b: str) -> int:

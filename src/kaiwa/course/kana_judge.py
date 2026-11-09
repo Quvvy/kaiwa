@@ -22,6 +22,8 @@ from pathlib import Path
 
 import numpy as np
 
+from kaiwa.course.speech_check import vowel_of
+
 _log = logging.getLogger("kaiwa.course.kana_judge")
 
 # A rival must beat the target by this much (CTC cost, nats) before we believe it.
@@ -119,9 +121,6 @@ def _ctc_cost(logp: np.ndarray, ids: list[int]) -> float:
 
 # ---------- typical slips ----------
 
-_O_ROW = set("おこごそぞとどのほぼぽもよろょ")
-_U_ROW = set("うくぐすずつづぬふぶぷむゆるゅ")
-_E_ROW = set("えけげせぜてでねへべぺめれ")
 _SMALL_TO_BIG = {"ゃ": "や", "ゅ": "ゆ", "ょ": "よ"}
 
 
@@ -136,11 +135,10 @@ def slips(target: str) -> list[tuple[str, str]]:
             out.append((cut, f"Pause on the small っ: {target[max(0, i - 1):i + 2]} has a tiny stop before {nxt}."))
         elif ch == "ん":
             out.append((cut, f"Don't drop the ん in {target[max(0, i - 1):i + 2]}: it's a full beat of its own."))
-        elif ch == "う" and (prev in _O_ROW or prev in _U_ROW):
-            out.append((cut, f"Stretch the vowel in {prev}う: hold it for two beats."))
-        elif ch == "い" and prev in _E_ROW:
-            out.append((cut, f"Stretch the vowel in {prev}い: hold it for two beats."))
-        elif prev and ch == prev and ch in "あいうえお":
+        elif ch == "う" and vowel_of(prev) in ("お", "う") or ch == "い" and vowel_of(prev) == "え":
+            out.append((cut, f"Stretch the vowel in {prev}{ch}: hold it for two beats."))
+        elif ch in "あいうえお" and vowel_of(prev) == ch:
+            # Also a katakana long vowel, which normalize spells out (こーひー → こおひい).
             out.append((cut, f"Hold the {ch} longer: {prev}{ch} is two beats, not one."))
         elif ch in _SMALL_TO_BIG and prev:
             big = target[:i] + _SMALL_TO_BIG[ch] + target[i + 1:]
