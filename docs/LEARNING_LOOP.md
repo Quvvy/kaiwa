@@ -6,6 +6,8 @@ Kaiwa teaches the smallest useful thing that helps the learner communicate, then
 
 Conversation-first is the **reason**, not a Chat-gated **door**. Comprehensibility-first (#99) does **not** mean skip the recast. Forgiving-without-a-model is the bug.
 
+> **Status: partly superseded.** Since Phase 10, Learn became the home tab: a hand-written course (20 units, kana track) with FSRS review and a speaking coach, described in [CLEANUP.md](CLEANUP.md) ("Course (the new core)") and decisions #152–#161. The Chat recast loop below still runs as described; the **Learn (10.6)** section and the SRS/catalog non-goals describe the earlier plan, not the app today.
+
 Spec for Phase 10. Slice status: [ROADMAP.md](ROADMAP.md). Practice product (Phase 9, live): [PRACTICE.md](PRACTICE.md). Detection/store: [ARCHITECTURE.md](ARCHITECTURE.md). Decision #136.
 
 ## Two paths
@@ -72,7 +74,8 @@ A tiny caption of the **same** model phrase Kaiwa just said. Not grammar names. 
 - Practice as the main menu
 - Genki / Bunpro / category tiles (Particles, て-form, …)
 - Live Chat `TRY:`
-- XP / SRS
+- XP (still out: decisions #158, #161)
 - Rebuilding cards from extract `grammar_add`
-- A predetermined lesson catalog as the primary source
 - Treating a line list as N5 progress
+
+**No longer non-goals:** SRS and a predetermined lesson catalog. The course is now the primary source and FSRS schedules its review (see the status note at the top). The feature test still applies to what the course teaches.

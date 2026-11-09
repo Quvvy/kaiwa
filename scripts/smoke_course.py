@@ -45,6 +45,32 @@ def content() -> None:
             for variant in task["hint"].split("／"):
                 sample = variant.replace("＿", "ねこ")
                 _check(matches_any(task["expect"], sample), f"{unit['id']} speak {i}: hint 「{sample}」 passes")
+    # The patterns are the verdict when the coach can't be reached, so they must
+    # turn down answers that only share a fragment with the right one.
+    speak = {(u["id"], i): t for u in UNITS for i, t in enumerate(u["speak"])}
+    fallback_cases = [
+        ("u2", 2, "アメリカからきました。", "わかりません。"),
+        ("u3", 2, "「cat」は、にほんごでなんですか。", "にほんごで、おねがいします。"),
+        ("u7", 1, "えきは、どこですか。", "トイレは、どこですか。"),
+        ("u8", 0, "さんじです。", "じゃあ、また。"),
+        ("u9", 2, "おもしろいです。", "いいえ。"),
+        ("u9", 0, "むずかしいです。", "にほんごです。"),
+        ("u11", 2, "カードで、いいですか。", "カードです。"),
+        ("u16", 0, "つくえのうえです。", "うえ。"),
+        ("u16", 1, "ベッドのしたにいます。", "しました。"),
+        ("u16", 2, "えきのまえで、まっています。", "なまえは、なんですか。"),
+        ("u18", 0, "でんしゃでいきます。", "そうです。"),
+        ("u18", 2, "バスのりばは、どこですか。", "トイレはどこですか。"),
+        ("u19", 1, "あめでした。", "あめです。"),
+        ("u19", 2, "なつがすきです。", "ねこがすきです。"),
+        ("u20", 0, "いそがしいですから、ちょっと…。", "から。"),
+        ("u20", 1, "じゅうじにあいましょう。", "えいがはどうですか。"),
+        ("u20", 2, "えきで、あいましょう。", "えきは、どこですか。"),
+    ]
+    for uid, i, right, wrong in fallback_cases:
+        expect = speak[(uid, i)]["expect"]
+        _check(matches_any(expect, right) and not matches_any(expect, wrong),
+               f"{uid} speak {i}: 「{right}」 passes, 「{wrong}」 doesn't")
     _check(len(UNITS) == 20, "twenty units")
     for unit in UNITS:
         for d in unit.get("drill", []):

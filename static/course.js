@@ -775,7 +775,8 @@
               el("p", { class: "home-goal", text: unit.goal }))
           : el("div", { class: "home-unit" },
               el("h1", { class: "home-title", text: `You've finished all ${s.units_total} units` }),
-              el("p", { class: "home-goal", text: "That's real: you can greet, order, shop, plan a day and hold a short conversation in Japanese. What keeps it now is using it. Reviews continue daily, and Chat, missions and the word packs are all yours." })),
+              el("p", { class: "home-goal", text: "That's real: you can greet, order, shop, plan a day and hold a short conversation in Japanese. What keeps it now is using it. Reviews continue daily, and Chat, missions and the word packs are all yours." }),
+              courseNextSteps()),
         unit && unit.reopenedNote ? el("p", { class: "home-note", text: unit.reopenedNote }) : null,
         unit && ["u8", "u11"].includes(unit.id) && !(today.words_pool || []).some((w) => w.jp === "きゅう")
           ? el("p", { class: "home-note" }, "This unit leans on numbers. If they're shaky, there's a 3-minute Numbers pack in the ",
@@ -1042,6 +1043,26 @@
       + (r.leeches ? ` ${r.leeches} card${r.leeches === 1 ? " is" : "s are"} getting extra help.` : "");
     return el("p", { class: "home-retention", "data-tip": tip },
       el("strong", { text: `${r.percent}%` }), ` remembered in reviews (last ${r.days} days)`);
+  }
+  // After the last unit: what this course covered and didn't, and where each gap is filled.
+  function courseNextSteps() {
+    const steps = [
+      ["Kanji",
+        "Everything here was in kana; real Japanese is written with kanji. Start with the words you already know (日本, 学校, 先生, 雨) in a kanji flashcard app, a few a day."],
+      ["More grammar",
+        "You've covered about the first five lessons of a beginner textbook, plus a few later forms. Genki I from lesson 6, or Minna no Nihongo I from lesson 14, picks up where this leaves off with the て-form rules and plain speech."],
+      ["Lots of easy listening",
+        "Hours of Japanese you mostly understand: beginner \"comprehensible input\" videos and podcasts, a little every day."],
+      ["Easy reading",
+        "Free graded readers for beginners (search \"Tadoku level 0\") are short stories in kana."],
+      ["A native ear",
+        "Kaiwa can't hear pitch, so a few sessions with a native speaker or tutor will catch what it misses."],
+    ];
+    return el("div", { class: "home-next" },
+      el("p", { class: "can-do-label", text: "Where to go next" }),
+      steps.map(([title, text]) => el("div", { class: "can-do" },
+        el("p", { class: "can-do-text", text: title }),
+        el("p", { class: "can-do-label", text }))));
   }
   function planRow(name, detail, isDone, onOpen, openLabel) {
     return el("li", { class: "plan-row" + (isDone ? " done" : "") },

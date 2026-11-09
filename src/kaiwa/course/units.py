@@ -435,7 +435,7 @@ UNITS: list[dict[str, Any]] = [
             {"say": "おなまえは？", "situation": "She asks your name.",
              "hint": "わたしは＿です。", "expect": ["わたしは*です", "*です"]},
             {"say": "どこからきましたか。", "situation": "She asks where you're from.",
-             "hint": "＿からきました。", "expect": ["*からきました", "*から"]},
+             "hint": "＿からきました。", "expect": ["*からきました", "*からです", "*からき*"]},
         ],
     },
     {
@@ -710,7 +710,7 @@ UNITS: list[dict[str, Any]] = [
              "hint": "ゆっくり、おねがいします。", "expect": ["ゆっくり*"]},
             {"say": "なにか、しつもんはありますか。",
              "situation": "She asks if you have questions. Ask how to say “cat” in Japanese.",
-             "hint": "「cat」は、にほんごでなんですか。", "expect": ["*にほんごでなんですか", "*にほんごで*"]},
+             "hint": "「cat」は、にほんごでなんですか。", "expect": ["*にほんごでなん*", "*なんていいますか*", "*なんといいますか*"]},
         ],
     },
     {
@@ -971,7 +971,7 @@ UNITS: list[dict[str, Any]] = [
         ],
         "speak": [
             {"say": "なにがすきですか。", "situation": "Tell her something you like.",
-             "hint": "＿がすきです。", "expect": ["*がすきです", "*すきです"]},
+             "hint": "＿がすきです。", "expect": ["*がすき*", "*がだいすき*"]},
             {"say": "ねこがすきですか。", "situation": "Do you like cats? Answer yes or no.",
              "hint": "はい、すきです。／いいえ、あまりすきじゃないです。",
              "expect": ["はい*", "いいえ*", "*すきです", "*すきじゃないです"]},
@@ -1785,7 +1785,7 @@ UNITS: list[dict[str, Any]] = [
             {"say": "どこにいきますか。", "situation": "Say where you're going.",
              "hint": "＿にいきます。", "expect": ["*いきます", "*かえります"]},
             {"say": "どうしましたか。", "situation": "You're lost. Ask where the station is.",
-             "hint": "えきは、どこですか。", "expect": ["*どこですか"]},
+             "hint": "えきは、どこですか。", "expect": ["*えき*どこ*"]},
             {"say": "がっこうにいきますか。", "situation": "Are you going to school? Answer.",
              "hint": "はい、いきます。／いいえ、いきません。", "expect": ["はい*", "いいえ*", "*いきます", "*いきません"]},
         ],
@@ -2058,7 +2058,7 @@ UNITS: list[dict[str, Any]] = [
         ],
         "speak": [
             {"say": "いま、なんじですか。", "situation": "Tell her the time (any time is fine).",
-             "hint": "＿じです。", "expect": ["*じです", "*じ*"]},
+             "hint": "＿じです。", "expect": ["*じです", "*じはん*", "*ふんです", "*ぷんです"]},
             {"say": "きょう、なにをしますか。", "situation": "Say something you'll do today.",
              "hint": "＿をします。／＿にいきます。", "expect": ["*ます"]},
             {"say": "まいにち、にほんごをべんきょうしますか。", "situation": "Do you study Japanese every day? Answer.",
@@ -2330,11 +2330,11 @@ UNITS: list[dict[str, Any]] = [
         ],
         "speak": [
             {"say": "にほんごは、どうですか。", "situation": "How is Japanese for you?",
-             "hint": "むずかしいです。でも、たのしいです。", "expect": ["*むずかしい*", "*たのしい*", "*おもしろい*", "*です"]},
+             "hint": "むずかしいです。でも、たのしいです。", "expect": ["*むずかしい*", "*たのしい*", "*おもしろい*", "*かんたん*", "*やさしい*", "*いいです*", "*くないです*"]},
             {"say": "このかばん、ごまんえんです。", "situation": "A bag costs 50,000 yen. React.",
              "hint": "たかいです！", "expect": ["*たかい*"]},
             {"say": "このアニメ、どうですか。", "situation": "Give your opinion of an anime you've seen.",
-             "hint": "おもしろいです。", "expect": ["*です", "*い"]},
+             "hint": "おもしろいです。", "expect": ["*おもしろい*", "*つまらない*", "*たのしい*", "*いいです*", "*すきです*", "*くないです*", "*すきじゃない*"]},
         ],
     },
     {
@@ -2983,9 +2983,7 @@ UNITS: list[dict[str, Any]] = [
                 "say": "ぜんぶで、さんぜんえんです。",
                 "situation": "Ask if you can pay by card.",
                 "hint": "カードで、いいですか。",
-                "expect": [
-                    "*カード*"
-                ]
+                "expect": ["*カード*いいですか*", "*カード*だいじょうぶ*", "*カード*つかえ*", "*カード*できますか*"]
             }
         ]
     },
@@ -3354,9 +3352,7 @@ UNITS: list[dict[str, Any]] = [
                 "say": "これ、わたしのいぬです。",
                 "situation": "Your friend shows you their dog. Ask its name.",
                 "hint": "なまえは、なんですか。",
-                "expect": [
-                    "*なまえ*"
-                ]
+                "expect": ["*なまえは*"]
             }
         ]
     },
@@ -3867,7 +3863,7 @@ UNITS: list[dict[str, Any]] = [
                 "rule": "て-form ＋ ください = please (do). みます → みて, かきます → かいて.",
                 "explain": [
                     "To ask someone to do something, use the verb's て-form with ください: みてください (please look).",
-                    "The て-form has a few patterns; for now learn these as words: みて, まって, かいて, よんで, はなして, おしえて, すわって. A later unit covers the rules."
+                    "The て-form has a few patterns, and the same ます ending can hide different ones (みます → みて, but のみます → のんで). So this course teaches each て-form as a word of its own: みて, まって, かいて, よんで, はなして, おしえて, すわって."
                 ],
                 "examples": [
                     {
@@ -4072,10 +4068,7 @@ UNITS: list[dict[str, Any]] = [
                 "say": "なにか、しつもんはありますか。",
                 "situation": "Ask them to teach you how to say \"cat\".",
                 "hint": "「cat」をおしえてください。／「cat」は、にほんごでなんですか。",
-                "expect": [
-                    "*おしえて*",
-                    "*にほんごで*"
-                ]
+                "expect": ["*おしえて*", "*にほんごでなん*"]
             },
             {
                 "say": "これ、たべてもいいですか。",
@@ -4489,7 +4482,7 @@ UNITS: list[dict[str, Any]] = [
                 "id": "u16.mae",
                 "jp": "えきのまえで、まっています。",
                 "en": "I'm waiting in front of the station.",
-                "note": "まっています = I'm waiting."
+                "note": "まって (as in まってください) ＋ います = I'm waiting, right now."
             },
             {
                 "id": "u16.tonari",
@@ -4791,25 +4784,19 @@ UNITS: list[dict[str, Any]] = [
                 "say": "かぎは、どこですか。",
                 "situation": "The keys are on the desk. Tell them.",
                 "hint": "つくえのうえです。",
-                "expect": [
-                    "*うえ*"
-                ]
+                "expect": ["*のうえ*"]
             },
             {
                 "say": "ねこは、どこにいますか。",
                 "situation": "The cat is under the bed. Say so.",
                 "hint": "ベッドのしたにいます。",
-                "expect": [
-                    "*した*"
-                ]
+                "expect": ["*のした*"]
             },
             {
                 "say": "いま、どこですか。",
                 "situation": "You're in front of the station. Say you're waiting there.",
                 "hint": "えきのまえで、まっています。",
-                "expect": [
-                    "*まえ*"
-                ]
+                "expect": ["*のまえ*"]
             }
         ]
     },
@@ -5175,9 +5162,7 @@ UNITS: list[dict[str, Any]] = [
                 "say": "よく、ジムにいきますか。",
                 "situation": "Say how often you go.",
                 "hint": "ときどきいきます。／ぜんぜんいきません。",
-                "expect": [
-                    "*いき*"
-                ]
+                "expect": ["*いきます*", "*いきません*"]
             }
         ]
     },
@@ -5519,11 +5504,7 @@ UNITS: list[dict[str, Any]] = [
                 "say": "がっこうに、なんでいきますか。",
                 "situation": "Say how you get to school or work.",
                 "hint": "＿でいきます。／あるいていきます。",
-                "expect": [
-                    "*でいきます*",
-                    "*あるいて*",
-                    "*で*"
-                ]
+                "expect": ["*でいきます*", "*あるいて*", "*で*いきます*"]
             },
             {
                 "say": "うちから、どのくらいかかりますか。",
@@ -5538,9 +5519,7 @@ UNITS: list[dict[str, Any]] = [
                 "say": "どうしましたか。",
                 "situation": "You're lost. Ask where the bus stop is.",
                 "hint": "バスのりばは、どこですか。",
-                "expect": [
-                    "*どこ*"
-                ]
+                "expect": ["*バス*どこ*", "*のりば*どこ*"]
             }
         ]
     },
@@ -5899,17 +5878,13 @@ UNITS: list[dict[str, Any]] = [
                 "say": "きのうは、どうでしたか。",
                 "situation": "It rained yesterday. Say so.",
                 "hint": "あめでした。",
-                "expect": [
-                    "*あめ*"
-                ]
+                "expect": ["*あめでした*", "*あめだった*", "*あめがふり*"]
             },
             {
                 "say": "どのきせつが、すきですか。",
                 "situation": "Say your favourite season.",
                 "hint": "＿がいちばんすきです。／なつがすきです。",
-                "expect": [
-                    "*すきです*"
-                ]
+                "expect": ["*がいちばんすき*", "*はる*すき*", "*なつ*すき*", "*あき*すき*", "*ふゆ*すき*"]
             }
         ]
     },
@@ -6244,27 +6219,19 @@ UNITS: list[dict[str, Any]] = [
                 "say": "どようび、えいがをみませんか。",
                 "situation": "You're busy on Saturday. Decline and give a reason.",
                 "hint": "いそがしいですから、ちょっと…。",
-                "expect": [
-                    "*から*",
-                    "*ちょっと*"
-                ]
+                "expect": ["*ですから*", "*ますから*", "*から*ちょっと*"]
             },
             {
                 "say": "なんじに、あいましょうか。",
                 "situation": "Suggest a time.",
                 "hint": "＿じにあいましょう。／じゅうじはどうですか。",
-                "expect": [
-                    "*ましょう*",
-                    "*どうですか*"
-                ]
+                "expect": ["*じに*ましょう*", "*じ*どうですか*", "*じはどう*"]
             },
             {
                 "say": "どこで、あいましょうか。",
                 "situation": "Suggest meeting at the station.",
                 "hint": "えきで、あいましょう。",
-                "expect": [
-                    "*えき*"
-                ]
+                "expect": ["*えきで*"]
             }
         ]
     },

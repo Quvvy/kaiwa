@@ -1838,6 +1838,14 @@ body:not([data-mode="learn"]) .ask-dock {
   margin-top: 2px;
 }
 
+.home-next {
+  margin-top: 18px;
+}
+
+.home-next .can-do {
+  margin: 8px 0 10px;
+}
+
 .home-links {
   display: flex;
   flex-wrap: wrap;
