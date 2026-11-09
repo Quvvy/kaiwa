@@ -42,6 +42,13 @@ class PaceBody(BaseModel):
     pace: str
 
 
+class LimitsBody(BaseModel):
+    """One deck's limits (or "all"): a number sets a field, null puts it back to the pace's."""
+
+    deck: str
+    values: dict[str, float | None]
+
+
 class GradeBody(BaseModel):
     """What happened on one answer; the server turns it into an FSRS grade."""
 
@@ -548,6 +555,19 @@ def reminder(time: str = "19:00") -> Response:
 def set_pace(body: PaceBody) -> dict[str, Any]:
     try:
         return {"pace": state.set_pace(body.pace)}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/limits")
+def get_limits() -> dict[str, Any]:
+    return state.limits_view(state.load_state())
+
+
+@router.put("/limits")
+def put_limits(body: LimitsBody) -> dict[str, Any]:
+    try:
+        return state.set_limits(body.deck, body.values)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

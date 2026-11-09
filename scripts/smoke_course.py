@@ -757,6 +757,66 @@ def pacing() -> None:
         course_state._today = real_today
 
 
+def limits() -> None:
+    with tempfile.TemporaryDirectory() as raw:
+        path = Path(raw) / "course_state.json"
+        view = course_state.limits_view(course_state.load_state(path))
+        pace = course_state.PACES[course_state.DEFAULT_PACE]
+        f = view["decks"]["course"]["fields"]
+        _check(f["new_per_day"]["value"] == pace["new_items"] and not f["new_per_day"]["set"] and not view["custom"],
+               "limits start at the pace's numbers")
+
+        # A big backlog with the pace's budget: a catch-up day, cost-limited.
+        course_state.complete_step("u1", "learn", path=path)
+        course_state.complete_step("u1", "words", path=path)
+        st = course_state.load_state(path)
+        for cid in list(st["cards"]):
+            st["cards"][cid] = srs.from_legacy({"box": 1, "due": "2000-01-01", "reps": 1})
+        course_state.save_state(st, path)
+        due_all = len(course_state.due_cards(course_state.load_state(path), limit=10_000))
+
+        course_state.set_limits("course", {"max_reviews": 3}, path=path)
+        st = course_state.load_state(path)
+        _check(len(course_state.todays_reviews(st)) == 3, "a set review limit is a plain card count")
+        first = course_state.todays_reviews(st)[0]["card_id"]
+        course_state.grade(first, correct=True, ms=3000, path=path)
+        _check(len(course_state.todays_reviews(course_state.load_state(path))) == 2, "reviews done today count against it")
+
+        course_state.set_limits("course", {"max_reviews": 9000}, path=path)
+        st = course_state.load_state(path)
+        # Everything due, except a phrase's other side when one side was answered today.
+        everything = course_state.due_cards(st, limit=10_000, budget=10**9)
+        _check(len(course_state.todays_reviews(st)) == len(everything) and due_all > 20 and not course_state.catching_up(st),
+               "a high limit shows everything due and never calls it a backlog")
+
+        course_state.set_limits("all", {"max_reviews": 1}, path=path)
+        _check(len(course_state.todays_reviews(course_state.load_state(path))) == 0, "the overall limit caps every deck")
+        course_state.set_limits("all", {"max_reviews": None}, path=path)
+
+        course_state.set_limits("course", {"new_per_day": 0}, path=path)
+        p = course_state.plan_today(course_state.load_state(path))["plan"]
+        _check(not set(p) & {"kana", "learn", "words", "grammar", "listen", "speak"}, "new per day 0 means no lessons")
+
+        course_state.set_limits("course", {"retention": 5, "new_per_day": -3, "max_reviews": None}, path=path)
+        f = course_state.limits_view(course_state.load_state(path))["decks"]["course"]["fields"]
+        _check(f["retention"]["value"] == 0.97 and f["new_per_day"]["value"] == 0, "out-of-range limits are clamped")
+
+        card = srs.from_legacy({"box": 3, "due": "2000-01-01", "reps": 3})
+        loose = srs.preview(card, retention=0.80)[srs.GOOD]
+        tight = srs.preview(card, retention=0.95)[srs.GOOD]
+        _check(tight < loose, "higher desired retention schedules sooner")
+
+        course_state.set_limits("course", {k: None for k in course_state.DECK_FIELDS}, path=path)
+        view = course_state.limits_view(course_state.load_state(path))
+        _check(not view["custom"] and view["decks"]["course"]["fields"]["new_per_day"]["value"] == pace["new_items"],
+               "clearing a limit goes back to the pace")
+        try:
+            course_state.set_limits("nope", {"max_reviews": 1}, path=path)
+            _check(False, "unknown decks are refused")
+        except ValueError:
+            _check(True, "unknown decks are refused")
+
+
 def main() -> None:
     content()
     kana_track()
@@ -770,6 +830,7 @@ def main() -> None:
     placement_hints()
     placement_self_correction()
     pacing()
+    limits()
     story_checks()
     listening_checks()
     talk_checks()

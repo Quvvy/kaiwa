@@ -32,6 +32,23 @@ SCHEDULER = Scheduler(
     enable_fuzzing=False,
 )
 
+DEFAULT_RETENTION = SCHEDULER.desired_retention
+_SCHEDULERS: dict[float, Scheduler] = {DEFAULT_RETENTION: SCHEDULER}
+
+
+def scheduler(retention: float | None = None) -> Scheduler:
+    """The scheduler for a deck's desired retention (the same steps, only the target differs)."""
+    target = round(float(retention or DEFAULT_RETENTION), 2)
+    if target not in _SCHEDULERS:
+        _SCHEDULERS[target] = Scheduler(
+            desired_retention=target,
+            learning_steps=SCHEDULER.learning_steps,
+            relearning_steps=SCHEDULER.relearning_steps,
+            enable_fuzzing=False,
+        )
+    return _SCHEDULERS[target]
+
+
 AGAIN, HARD, GOOD, EASY = 1, 2, 3, 4
 TIMING_KEPT = 40          # recent answer times kept per answer format
 TIMING_MIN_SAMPLES = 8    # until then, speed doesn't change the grade
@@ -114,21 +131,21 @@ def _card(stored: dict[str, Any]) -> Card:
     return Card.from_dict(ensure(stored)["fsrs"])
 
 
-def review(stored: dict[str, Any], rating: int, *, now: datetime | None = None) -> dict[str, Any]:
+def review(stored: dict[str, Any], rating: int, *, now: datetime | None = None, retention: float | None = None) -> dict[str, Any]:
     stored = ensure(stored)
-    card, _log = SCHEDULER.review_card(_card(stored), Rating(rating), now or _now())
+    card, _log = scheduler(retention).review_card(_card(stored), Rating(rating), now or _now())
     reps = int(stored.get("reps") or 0) + 1
     lapses = int(stored.get("lapses") or 0) + (1 if rating == AGAIN and stored["fsrs"].get("state") == State.Review.value else 0)
     return _store(card, reps=reps, lapses=lapses)
 
 
-def preview(stored: dict[str, Any], *, now: datetime | None = None) -> dict[int, int]:
+def preview(stored: dict[str, Any], *, now: datetime | None = None, retention: float | None = None) -> dict[int, int]:
     """Seconds until the next review for each possible grade (shown on the grade buttons)."""
     now = now or _now()
     card = _card(stored)
     out = {}
     for rating in (AGAIN, HARD, GOOD, EASY):
-        nxt, _log = SCHEDULER.review_card(Card.from_dict(card.to_dict()), Rating(rating), now)
+        nxt, _log = scheduler(retention).review_card(Card.from_dict(card.to_dict()), Rating(rating), now)
         out[rating] = max(0, int((nxt.due - now).total_seconds()))
     return out
 

@@ -11,6 +11,7 @@
   let today = null;
   let placementAfterHome = false; // Settings asked to open the placement test
   let showRomaji = readPref("kaiwa_course_romaji", "1") === "1";
+  let optionsOpen = false; // keep Options open while limits are edited (the home re-renders on save)
   const keys = { primary: null, hold: null, replay: null, choice: null, meanings: null, text: null, tab: null,
     grade: null, space: null, undo: null, hint: null, back: null };
 
@@ -833,9 +834,10 @@
           !fresh ? el("button", { type: "button", class: "secondary", onclick: runBook, "data-tip": "Everything you've learned, to look up and hear again" }, "Phrasebook") : null,
           !fresh ? el("button", { type: "button", class: "secondary", onclick: runStats,
             "data-tip": "Retention, what's coming up, your cards, and how scheduling works" }, "Stats") : null),
-        el("details", { class: "home-options" },
+        el("details", { class: "home-options", open: optionsOpen, ontoggle: (e) => { optionsOpen = e.target.open; } },
           el("summary", {}, "Options"),
           fresh ? null : paceRow(),
+          fresh ? null : limitsPanel(),
           el("label", { class: "home-romaji" },
             el("input", { type: "checkbox", checked: showRomaji, onchange: (e) => { showRomaji = e.target.checked; writePref("kaiwa_course_romaji", showRomaji ? "1" : "0"); } }),
             " Show romaji for kana you haven't learned"),
@@ -990,6 +992,72 @@
           showHome();
         },
       }, p.label, el("span", { class: "pace-minutes", text: ` ~${p.minutes} min a day, course in ~${p.months} months` }))));
+  }
+  /**
+   * Anki-style daily limits, per deck and overall. A blank box follows the pace, so the
+   * pace chips stay the easy way in; a number here is the learner's own and wins.
+   */
+  const LIMIT_LABELS = {
+    new_per_day: ["New per day", "New words, phrases and kana a day"],
+    max_reviews: ["Max reviews per day", "Cards a day. Blank: the pace decides, by time"],
+    lesson_minutes: ["Lesson minutes", "Time for new lessons a day, after reviews"],
+    retention: ["Desired retention %", "How much you want to remember. Higher means more reviews"],
+  };
+  function limitsPanel() {
+    const lim = today.limits;
+    if (!lim) return null;
+    const status = el("p", { class: "limits-status", role: "status" });
+    const save = async (deck, field, input) => {
+      const raw = input.value.trim();
+      let value = raw === "" ? null : Number(raw);
+      if (value != null && !Number.isFinite(value)) return;
+      if (field === "retention" && value != null) value = value / 100;
+      try {
+        await api("/api/course/limits", { method: "PUT", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ deck, values: { [field]: value } }) });
+        showHome();
+      } catch (err) {
+        status.textContent = err.message;
+      }
+    };
+    const field = (deck, name, f) => {
+      const [label, tip] = LIMIT_LABELS[name];
+      const pct = name === "retention";
+      const shown = (v) => (v == null ? "" : pct ? String(Math.round(v * 100)) : String(v));
+      const input = el("input", {
+        type: "number", inputmode: "numeric", class: "limit-input" + (f.set ? " set" : ""),
+        min: pct ? "70" : "0", max: pct ? "97" : "9999", step: "1",
+        value: f.set ? shown(f.value) : "",
+        placeholder: f.default != null ? shown(f.default) : deck === "all" ? "no limit" : "pace",
+        "aria-label": `${label}${deck === "all" ? " (all decks)" : ""}`,
+        onchange: (e) => save(deck, name, e.target),
+      });
+      return el("label", { class: "limit-field", "data-tip": tip }, el("span", { class: "limit-name", text: label }), input);
+    };
+    const decks = Object.entries(lim.decks).map(([deck, d]) => el("fieldset", { class: "limit-deck" },
+      el("legend", { text: d.label }),
+      Object.entries(d.fields).map(([name, f]) => field(deck, name, f))));
+    const overall = el("fieldset", { class: "limit-deck" },
+      el("legend", { text: "All decks" }),
+      Object.entries(lim.all).map(([name, f]) => field("all", name, f)));
+    const reset = lim.custom
+      ? el("button", { type: "button", class: "link-button", onclick: async () => {
+          const clear = (fields) => Object.fromEntries(Object.keys(fields).map((k) => [k, null]));
+          for (const [deck, d] of Object.entries(lim.decks)) {
+            await api("/api/course/limits", { method: "PUT", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ deck, values: clear(d.fields) }) }).catch(() => {});
+          }
+          await api("/api/course/limits", { method: "PUT", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ deck: "all", values: clear(lim.all) }) }).catch(() => {});
+          showHome();
+        } }, "Back to the pace's numbers")
+      : null;
+    return el("div", { class: "limits", role: "group", "aria-label": "Daily limits" },
+      el("span", { class: "pace-label", text: "Daily limits" }),
+      el("p", { class: "limits-note", text: lim.custom
+        ? "Using your own limits. The pace's minutes and months are estimates for its own numbers, so they no longer apply."
+        : "Blank boxes follow the pace. Type a number to set your own." }),
+      decks, overall, reset, status);
   }
   /** One extra-practice mode on the home screen: its button and what it's for. */
   function practiceRow(label, onclick, what) {

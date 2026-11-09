@@ -2234,3 +2234,71 @@ button.secondary.pressed {
   gap: 6px;
   padding-bottom: 12px;
 }
+
+/* ---------- daily limits (per deck + all decks) ---------- */
+.limits {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.limits-note,
+.limits-status {
+  color: var(--ink-3);
+  font-size: 13.5px;
+  margin: 0;
+}
+
+.limits-status:empty {
+  display: none;
+}
+
+.limit-deck {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  display: grid;
+  gap: 8px 16px;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 210px), 1fr));
+  margin: 0;
+  padding: 8px 12px 12px;
+}
+
+.limit-deck > legend {
+  color: var(--ink-2);
+  font-size: 13.5px;
+  font-weight: 600;
+  padding: 0 4px;
+}
+
+.limit-field {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.limit-name {
+  color: var(--ink-2);
+  font-size: 14px;
+}
+
+.limit-input {
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  padding: 3px 6px;
+  text-align: right;
+  width: 6.5em;
+}
+
+.limit-input.set {
+  border-color: var(--accent, var(--ink));
+  font-weight: 600;
+}
+
+.limit-input::placeholder {
+  color: var(--ink-3);
+}

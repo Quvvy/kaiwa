@@ -100,7 +100,8 @@ def card_cost(kind: str, skill: str) -> int:
 def _empty() -> dict[str, Any]:
     return {"version": 2, "units": {}, "cards": {}, "days": [], "kana": {}, "questions": [], "reviewed": {}, "timing": {}, "log": [],
             "undo": [], "overrides": [], "daily": {}, "seq": 0, "grades": [], "grader": None,
-            "checks": {}, "listening": {"recent": [], "total_ms": 0}, "bests": {}, "mine": []}
+            "checks": {}, "listening": {"recent": [], "total_ms": 0}, "bests": {}, "mine": [],
+            "limits": {"decks": {}, "all": {}}}
 
 
 def load_state(path: Path | None = None) -> dict[str, Any]:
@@ -127,6 +128,7 @@ def load_state(path: Path | None = None) -> dict[str, Any]:
         state["placement"] = raw["placement"]
     if raw.get("pace") in PACES:
         state["pace"] = raw["pace"]
+    state["limits"] = clean_limits(raw.get("limits"))
     if isinstance(raw.get("comeback"), str):
         state["comeback"] = raw["comeback"]
     if isinstance(raw.get("bests"), dict):
@@ -395,7 +397,8 @@ def _apply_grade(state: dict[str, Any], card_id: str, kind: tuple, outcome: dict
     before = dict(card) if existed else None
     today = _today().isoformat()
     was_review = not srs.is_learning(card)
-    intervals = srs.preview(card)
+    retention = deck_limits(state, deck_of(card_id))["retention"]
+    intervals = srs.preview(card, retention=retention)
     times = state["timing"].get(outcome["fmt"], [])
     reps = int(card.get("reps") or 0)
     auto = srs.rating_for(
@@ -434,7 +437,7 @@ def _apply_grade(state: dict[str, Any], card_id: str, kind: tuple, outcome: dict
         # First review of something marked known without being taught: a check on its unit.
         entry["check"] = _placement_check(state, kind, rating != srs.AGAIN)
     extras = {k: v for k, v in card.items() if k == "hook"}
-    card = {**srs.review(card, rating), **extras}
+    card = {**srs.review(card, rating, retention=retention), **extras}
     state["cards"][card_id] = card
     state["undo"] = (state["undo"] + [entry])[-UNDO_KEPT:]
     if forced is not None or len(state["grades"]) % RETUNE_EVERY == 0:
@@ -763,16 +766,148 @@ def set_pace(pace: str, *, path: Path | None = None) -> str:
     return _with_state(apply, path)
 
 
+# ---------- decks and limits ----------
+# Anki-style daily limits the learner can set, per deck and across all decks. Anything
+# left unset follows the pace, so the pace presets are just starting values. A set
+# review limit counts cards (like Anki) and is a hard cap: no catch-up doubling.
+# Only the course exists so far; mined sentences and imported decks join later.
+DECKS: dict[str, dict[str, str]] = {"course": {"label": "Course"}}
+LIMIT_RANGES: dict[str, tuple[float, float]] = {
+    "new_per_day": (0, 9999),
+    "max_reviews": (0, 9999),
+    "lesson_minutes": (0, 600),
+    "retention": (0.70, 0.97),
+}
+DECK_FIELDS = ("new_per_day", "max_reviews", "lesson_minutes", "retention")
+ALL_FIELDS = ("new_per_day", "max_reviews")
+REVIEW_ROWS_MAX = 200  # due cards sent to the page at once; the rest come on the next load
+
+
+def deck_of(card_id: str) -> str:
+    return "course"
+
+
+def _clean_values(raw: Any, fields: tuple[str, ...]) -> dict[str, float]:
+    out: dict[str, float] = {}
+    if not isinstance(raw, dict):
+        return out
+    for field in fields:
+        value = raw.get(field)
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            continue
+        low, high = LIMIT_RANGES[field]
+        value = min(high, max(low, value))
+        out[field] = round(float(value), 2) if field == "retention" else int(value)
+    return out
+
+
+def clean_limits(raw: Any) -> dict[str, Any]:
+    raw = raw if isinstance(raw, dict) else {}
+    decks = raw.get("decks") if isinstance(raw.get("decks"), dict) else {}
+    return {
+        "decks": {d: v for d in DECKS if (v := _clean_values(decks.get(d), DECK_FIELDS))},
+        "all": _clean_values(raw.get("all"), ALL_FIELDS),
+    }
+
+
+def deck_limits(state: dict[str, Any], deck: str) -> dict[str, Any]:
+    """What a deck's day holds: the learner's numbers, else the pace's. max_reviews None = the pace's budget."""
+    pace = pace_of(state)
+    own = state.get("limits", {}).get("decks", {}).get(deck, {})
+    return {
+        "new_per_day": own.get("new_per_day", pace["new_items"]),
+        "max_reviews": own.get("max_reviews"),
+        "lesson_minutes": own.get("lesson_minutes", pace["lesson_minutes"]),
+        "retention": own.get("retention", srs.DEFAULT_RETENTION),
+    }
+
+
+def all_limits(state: dict[str, Any]) -> dict[str, Any]:
+    own = state.get("limits", {}).get("all", {})
+    return {f: own.get(f) for f in ALL_FIELDS}
+
+
+def custom_limits(state: dict[str, Any]) -> bool:
+    lim = state.get("limits", {})
+    return bool(lim.get("all")) or any(lim.get("decks", {}).values())
+
+
+def limits_view(state: dict[str, Any]) -> dict[str, Any]:
+    """Settings view: every field with its value, the pace's default, and whether the learner set it."""
+    pace = pace_of(state)
+    defaults = {"new_per_day": pace["new_items"], "max_reviews": None, "lesson_minutes": pace["lesson_minutes"],
+                "retention": srs.DEFAULT_RETENTION}
+    lim = state.get("limits", {})
+    decks = {}
+    for deck, meta in DECKS.items():
+        own = lim.get("decks", {}).get(deck, {})
+        decks[deck] = {"label": meta["label"],
+                       "fields": {f: {"value": own.get(f, defaults[f]), "default": defaults[f], "set": f in own}
+                                  for f in DECK_FIELDS}}
+    own_all = lim.get("all", {})
+    return {"decks": decks,
+            "all": {f: {"value": own_all.get(f), "default": None, "set": f in own_all} for f in ALL_FIELDS},
+            "pace_reviews_minutes": pace["minutes"], "custom": custom_limits(state)}
+
+
+def set_limits(deck: str, values: dict[str, Any], *, path: Path | None = None) -> dict[str, Any]:
+    """Set (a number) or clear (None) limit fields for one deck, or for "all"."""
+    fields = ALL_FIELDS if deck == "all" else DECK_FIELDS
+    if deck != "all" and deck not in DECKS:
+        raise ValueError(f"unknown deck: {deck}")
+    unknown = set(values) - set(fields)
+    if unknown:
+        raise ValueError(f"unknown limit: {', '.join(sorted(unknown))}")
+
+    def apply(state: dict[str, Any]) -> dict[str, Any]:
+        lim = state["limits"]
+        current = dict(lim["all"] if deck == "all" else lim["decks"].get(deck, {}))
+        for field, value in values.items():
+            if value is None:
+                current.pop(field, None)
+            else:
+                current[field] = value
+        current = _clean_values(current, fields)
+        if deck == "all":
+            lim["all"] = current
+        elif current:
+            lim["decks"][deck] = current
+        else:
+            lim["decks"].pop(deck, None)
+        return limits_view(state)
+
+    return _with_state(apply, path)
+
+
+def reviews_done_today(state: dict[str, Any]) -> int:
+    today = _today().isoformat()
+    return sum(1 for r in state["log"] if r.get("d") == today)
+
+
+def _review_cap(state: dict[str, Any]) -> int | None:
+    """Cards per day the learner set (deck and overall, the tighter one), or None to use the pace's budget."""
+    caps = [c for c in (deck_limits(state, "course")["max_reviews"], all_limits(state)["max_reviews"]) if c is not None]
+    return min(caps) if caps else None
+
+
 def due_cost(state: dict[str, Any]) -> int:
     return sum(card_cost(c["kind"], c["skill"]) for c in due_cards(state, limit=10_000))
 
 
 def catching_up(state: dict[str, Any]) -> bool:
+    cap = _review_cap(state)
+    if cap is not None:
+        return len(due_cards(state, limit=10_000)) > cap * CATCH_UP_DAYS
     return due_cost(state) > pace_of(state)["reviews"] * CATCH_UP_DAYS
 
 
 def todays_reviews(state: dict[str, Any]) -> list[dict[str, Any]]:
     """Today's share of due cards: what fits in the budget left after today's reviews."""
+    cap = _review_cap(state)
+    if cap is not None:
+        # The learner's own number: a plain card count, the same every day.
+        left = max(0, cap - reviews_done_today(state))
+        return due_cards(state, limit=min(left, REVIEW_ROWS_MAX), budget=10**9) if left else []
     spent = state["reviewed"].get(_today().isoformat(), 0)
     # Coming back from a break gets a normal day: a doubled pile is how a break becomes quitting.
     returning = days_away(state) >= COMEBACK_DAYS or state.get("comeback") == _today().isoformat()
@@ -821,7 +956,6 @@ def plan_today(state: dict[str, Any]) -> dict[str, Any]:
     today = _today()
     iso = today.isoformat()
     yesterday = (today - timedelta(days=1)).isoformat()
-    pace = pace_of(state)
     reviews = todays_reviews(state)
     unit = next_unit(state)
     kana = next_kana_lesson(state)
@@ -839,8 +973,12 @@ def plan_today(state: dict[str, Any]) -> dict[str, Any]:
     # What's already been done today counts: the plan is worked out again after every step.
     day = state["daily"].get(iso, {})
     spent = float(day.get("lesson_min") or 0)
-    minutes_left = pace["lesson_minutes"] * share - spent
-    new_left = pace["new_items"] * share - int(day.get("new") or 0)
+    limits = deck_limits(state, "course")
+    new_cap = limits["new_per_day"]
+    if all_limits(state)["new_per_day"] is not None:
+        new_cap = min(new_cap, all_limits(state)["new_per_day"])
+    minutes_left = limits["lesson_minutes"] * share - spent
+    new_left = new_cap * share - int(day.get("new") or 0)
     started = spent > 0
     if set(state["days"]) <= {iso}:
         minutes_left += FIRST_DAY_EXTRA  # the very first day gets a real phrase, not only five vowels
@@ -891,8 +1029,12 @@ def plan_today(state: dict[str, Any]) -> dict[str, Any]:
             minutes_left -= need
             new_left -= new
 
-    kana_wanted = bool(kana) and iso not in state["kana"].values()
-    if kana_wanted and yesterday not in state["kana"].values():
+    # A limit of 0 means no lessons today, not "at least one small one".
+    paused = new_cap <= 0 or limits["lesson_minutes"] <= 0
+    kana_wanted = bool(kana) and iso not in state["kana"].values() and not paused
+    if paused:
+        pass
+    elif kana_wanted and yesterday not in state["kana"].values():
         try_kana()
         try_unit()
     else:
@@ -1142,7 +1284,8 @@ def day_summary(state: dict[str, Any]) -> dict[str, Any]:
                 and not state["units"][u["id"]].get("placed")]
     tomorrow = (_today() + timedelta(days=1)).isoformat()
     due_tomorrow = sum(1 for c in state["cards"].values() if not srs.is_learning(c) and str(c.get("due") or "") <= tomorrow)
-    due_tomorrow = min(due_tomorrow, pace_of(state)["reviews"])  # no more than a day's share ever comes up
+    cap = _review_cap(state)
+    due_tomorrow = min(due_tomorrow, pace_of(state)["reviews"] if cap is None else cap)  # no more than a day's share ever comes up
     return {
         "answers": answers,
         "right": int(day.get("right") or 0),
@@ -1219,6 +1362,7 @@ def today_payload(*, path: Path | None = None) -> dict[str, Any]:
         "day": day_summary(state),
         "milestones": milestones(state),
         "paces": {k: {"label": v["label"], "minutes": v["minutes"], "months": v["months"]} for k, v in PACES.items()},
+        "limits": limits_view(state),
         **plan_today(state),
     }
 
