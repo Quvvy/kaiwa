@@ -122,6 +122,27 @@ def placed_card(stability_days: float, due_day: date) -> dict[str, Any]:
     return {**_store(card, reps=1, lapses=0), "placed": True}
 
 
+def imported_card(stability_days: float, difficulty: float, last_review: datetime, *, reps: int = 1, lapses: int = 0,
+                  retention: float | None = None) -> dict[str, Any]:
+    """A card brought in from Anki with its FSRS memory: the same stability and difficulty, due
+    when that memory falls to this deck's retention (usually long ago, for an abandoned deck)."""
+    sched = scheduler(retention)
+    stab = max(0.01, float(stability_days))
+    diff = min(10.0, max(1.0, float(difficulty)))
+    days = sched._next_interval(stability=stab)  # whole days at the desired retention
+    card = Card(state=State.Review, stability=stab, difficulty=diff,
+                due=last_review + timedelta(days=days), last_review=last_review)
+    return {**_store(card, reps=max(1, reps), lapses=max(0, lapses)), "imported": True}
+
+
+def retrievability(stored: dict[str, Any], *, now: datetime | None = None) -> float:
+    """Chance of remembering it right now (0-1): easiest-to-recover first, for imported backlogs."""
+    try:
+        return float(SCHEDULER.get_card_retrievability(_card(stored), now or _now()))
+    except Exception:
+        return 0.0
+
+
 def ensure(card: dict[str, Any]) -> dict[str, Any]:
     """Cards saved before FSRS get converted on first touch."""
     return card if isinstance(card.get("fsrs"), dict) else from_legacy(card)

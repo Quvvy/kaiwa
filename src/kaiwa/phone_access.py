@@ -74,7 +74,7 @@ def is_remote(host: str | None, tailscale_login: str | None = None) -> bool:
 
 def refuses_remote(path: str, method: str) -> bool:
     """Anything that acts on the PC itself stays on the PC."""
-    if path in _LOCAL_ONLY_PATHS or path.startswith("/api/phone/"):
+    if path in _LOCAL_ONLY_PATHS or path.startswith(("/api/phone/", "/api/course/anki/")):
         return True
     return method not in {"GET", "HEAD"} and any(path.startswith(p) for p in _LOCAL_ONLY_PREFIXES)
 

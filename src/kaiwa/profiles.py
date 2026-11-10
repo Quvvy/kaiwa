@@ -355,6 +355,8 @@ def reset_active() -> tuple[ProfileMeta, Path]:
         from kaiwa.course.mined_media import remove_all  # the backup above kept a copy of the clips
 
         remove_all(profiles_dir() / reg.active)
+        for sub in ("imported", "imported_media"):  # decks brought in from Anki; the backup kept them
+            shutil.rmtree(profiles_dir() / reg.active / sub, ignore_errors=True)
     _touch_meta(reg, reg.active)
     _save_registry(reg)
     meta = get_meta(reg.active)

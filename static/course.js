@@ -476,11 +476,21 @@
       class: "mined-thumb", src: m.image_url, alt: "The scene", loading: "lazy", title: "Click to enlarge",
       onclick: (e) => e.currentTarget.classList.toggle("open"),
     }) : null;
+    // Imported decks (Kaishi) teach one word per sentence: its reading, meaning, voice and note.
+    const word = m.word && m.word_meaning ? el("div", { class: "mined-word-block" },
+      el("p", { class: "mined-word-line" },
+        el("strong", { lang: "ja", text: m.word }),
+        m.word_reading && m.word_reading !== m.word ? el("span", { class: "mined-word-reading", lang: "ja", text: m.word_reading }) : null,
+        el("span", { class: "mined-word-meaning", text: m.word_meaning }),
+        m.word_audio_url ? el("button", { type: "button", class: "secondary mined-word-play", "aria-label": `Hear ${m.word}`,
+          onclick: () => play(m.word, { clip: m.word_audio_url }) }, "▶") : null),
+      m.notes ? el("p", { class: "mined-note", text: m.notes }) : null) : null;
     return el("div", { class: "mined-back" },
       minedLine(m),
       m.kana && m.kana !== m.text ? el("p", { class: "mined-kana", lang: "ja", text: m.kana }) : null,
       el("p", { class: "mined-en", text: m.en }),
       m.note ? el("p", { class: "mined-note", text: m.note }) : null,
+      word,
       thumb || src ? el("div", { class: "mined-foot" }, thumb, src ? el("span", { class: "mined-source", text: src }) : null) : null);
   }
   function phraseBlock(p) {
@@ -659,7 +669,7 @@
   }
 
   // ---------- home ----------
-  const STEP_NAMES = { learn: "New phrases", words: "Words", grammar: "Grammar", listen: "Listen", speak: "Speak", mined: "New lines" };
+  const STEP_NAMES = { learn: "New phrases", words: "Words", grammar: "Grammar", listen: "Listen", speak: "Speak", mined: "New lines", kaishi: "New words" };
   /** Today's steps, decided by the server's pacing (state.plan_today). */
   function planSteps() {
     return [...(today.plan || [])];
@@ -673,6 +683,7 @@
     grammar: ["Grammar", "Just enough to see the pattern, then you use it. You'll put real sentences together yourself, and they come back later."],
     listen: ["Listen", "Listen first, no text. You won't catch everything, and you don't need to. Getting the gist from sound alone is the skill."],
     speak: ["Speak", "Answer in your own words if you can. Getting it out imperfectly teaches more than getting it perfect silently."],
+    kaishi: ["New words", "Words from Kaishi, each in a recorded sentence. Hear it and pick what it means; the word, its reading and its own audio are on the back. Each comes back until you catch it by ear."],
     mined: ["New lines", "Lines you mined from what you watch, in the real voice. Pick what it means; missing it the first time is normal, and the text is one click away. Each one comes back until you catch it by ear."],
     kana: ["Kana", "Each one comes with a picture, in case it helps you hold the shape at first. What really makes them stick is the practice that follows. You'll drop the pictures once reading is automatic."],
   };
@@ -697,6 +708,7 @@
     if (step === "review") return runReview(today.review);
     if (step === "recap") return runReview(today.recap || [], { title: "Recap", planStep: "recap" });
     if (step === "mined") return runReview(today.mined_new || [], { title: "New lines", planStep: "mined" });
+    if (step === "kaishi") return runReview(today.kaishi_new || [], { title: "New words", planStep: "kaishi" });
     if (step === "kana") return runKana(today.kana);
     return runUnitStep(today.unit, step, today.unit_steps || {});
   }
@@ -758,7 +770,7 @@
     const rows = [];
     if (today.review.length) {
       // Only today's share is shown: the rest waits for later days, never piles up here.
-      const secs = today.review.reduce((n, c) => n + ({ kana: 4, word: 4, listen: 8, speak: 12, mined: 12 }[c.kind === "phrase" ? c.skill : c.kind] || 8), 0);
+      const secs = today.review.reduce((n, c) => n + ({ kana: 4, word: 4, listen: 8, speak: 12, mined: 12, line: 12 }[c.kind === "phrase" ? c.skill : c.kind] || 8), 0);
       const n = today.review.length;
       rows.push(planRow("Review", `${n} card${n === 1 ? "" : "s"}, about ${Math.max(1, Math.round(secs / 60))} min`, false, open("review", () => runReview(today.review))));
     } else if (s.phrases_learned) {
@@ -769,6 +781,10 @@
       rows.push(planRow("New lines", `${n} from your shows`, false, open("mined", () => runStep("mined"))));
     } else if (today.mined_paused) {
       rows.push(planRow("New lines", "None today: your mined reviews come first", false, null));
+    }
+    if ((today.kaishi_new || []).length) {
+      const n = today.kaishi_new.length;
+      rows.push(planRow("New words", `${n} from Kaishi`, false, open("kaishi", () => runStep("kaishi"))));
     }
     if ((today.recap || []).length) {
       const n = today.recap.length;
@@ -878,8 +894,8 @@
         el("div", { class: "home-links" },
           el("button", { type: "button", class: "secondary", onclick: runMap, "data-tip": "All 20 units, what each lets you do, and how far you are" }, "Course map"),
           !fresh ? el("button", { type: "button", class: "secondary", onclick: runBook, "data-tip": "Everything you've learned, to look up and hear again" }, "Phrasebook") : null,
-          el("button", { type: "button", class: "secondary", onclick: runMining,
-            "data-tip": "Lines you mined from shows with asbplayer, and how to set it up" }, "Mined lines"),
+          el("button", { type: "button", class: "secondary", onclick: runDecks,
+            "data-tip": "Lines you mined from shows, and decks you brought in from Anki" }, "Your decks"),
           !fresh ? el("button", { type: "button", class: "secondary", onclick: runStats,
             "data-tip": "Retention, what's coming up, your cards, and how scheduling works" }, "Stats") : null),
         el("details", { class: "home-options", open: optionsOpen, ontoggle: (e) => { optionsOpen = e.target.open; } },
@@ -1435,7 +1451,7 @@
     const firstTry = new Map(); // queue item → right on first try?
     const history = [];         // answered items, for Ctrl+Z
     const MAX_REPEATS = 2;
-    prefetch(queue.filter((c) => !c.grammar && !c.mined).map((c) => [c.phrase ? c.phrase.jp : c.word ? c.word.jp : c.kana.char, {}]));
+    prefetch(queue.filter((c) => !c.grammar && !c.mined && !c.line).map((c) => [c.phrase ? c.phrase.jp : c.word ? c.word.jp : c.kana.char, {}]));
 
     // Upcoming recognition word cards get swapped for short listening sentences.
     const wordIds = queue.filter((c) => c.kind === "word" && c.format === "choice").map((c) => c.card_id);
@@ -1463,7 +1479,7 @@
       else if (card.kind === "grammar") buildCard(card);
       else if (card.kind === "phrase" && card.skill === "speak") speakCard(card);
       else if (card.kind === "phrase") listenCard(card);
-      else if (card.kind === "mined") (card.format === "recall" ? minedRecallCard : minedCard)(card);
+      else if (card.kind === "mined" || card.kind === "line") (card.format === "recall" ? minedRecallCard : minedCard)(card);
       else if (card.format === "produce") produceCard(card);
       else if (card.kind === "kana") kanaChoice(card);
       else wordChoice(card);
@@ -1676,11 +1692,11 @@
      * hidden (reading it would turn a listening card into a reading one) unless asked for.
      */
     function minedCard(card) {
-      const m = card.mined;
+      const m = card.mined || card.line;
       const voice = m.audio_url ? { clip: m.audio_url } : {};
       const text = el("p", { class: "sentence-jp mined-jp", lang: "ja", hidden: true, text: m.text });
       choiceCard(card, {
-        answer: m.en, options: shuffle([m.en, ...m.wrong]), audio: m.text, voice, fmt: "mined:listen", askJp: m.text,
+        answer: m.en, options: shuffle([m.en, ...m.wrong]), audio: m.text, voice, fmt: `${card.kind}:listen`, askJp: m.text,
         extra: (markHelped) => {
           const showText = el("button", { class: "secondary", type: "button", onclick: () => {
             markHelped(); text.hidden = false; showText.hidden = true; } }, "Show text", kbd("T"));
@@ -1697,7 +1713,7 @@
      * (and whether you needed the text) shades the grade.
      */
     function minedRecallCard(card) {
-      const m = card.mined;
+      const m = card.mined || card.line;
       const voice = m.audio_url ? { clip: m.audio_url } : {};
       const text = el("p", { class: "sentence-jp mined-jp", lang: "ja", hidden: true, text: m.text });
       const result = el("div", { class: "result", "aria-live": "polite" });
@@ -1713,7 +1729,7 @@
         if (current.answered) return;
         keys.choice = null;
         judgeRow.hidden = true;
-        answered(card, { correct: got, ms: revealMs, helped, fmt: "mined:recall", answer: got ? "got it" : "missed it" }, slot, nextBtn);
+        answered(card, { correct: got, ms: revealMs, helped, fmt: `${card.kind}:recall`, answer: got ? "got it" : "missed it" }, slot, nextBtn);
       };
       const judgeRow = el("div", { class: "mined-judge", hidden: true },
         el("button", { type: "button", class: "secondary", onclick: () => judge(false) }, el("span", { class: "choice-key", text: "1" }), "Missed it"),
@@ -1948,8 +1964,9 @@
      */
     async function leechHelp(card) {
       const item = card.word || card.phrase || (card.grammar && card.grammar.items[0]) || (card.kana && { jp: card.kana.char, en: card.kana.ro })
-        || (card.mined && { jp: card.mined.text, en: card.mined.en });
-      const voice = card.mined && card.mined.audio_url ? { clip: card.mined.audio_url } : {};
+        || ((card.mined || card.line) && { jp: (card.mined || card.line).text, en: (card.mined || card.line).en });
+      const line = card.mined || card.line;
+      const voice = line && line.audio_url ? { clip: line.audio_url } : {};
       const hookBox = el("div", { class: "leech-hook" }, el("p", { class: "pending", text: "Writing a memory hook…" }));
       current = null;
       frame({
@@ -1982,7 +1999,7 @@
 
     function finish() {
       current = null;
-      const onPlan = planStep === "review" || planStep === "recap" || planStep === "mined";
+      const onPlan = planStep === "review" || planStep === "recap" || planStep === "mined" || planStep === "kaishi";
       const go = async () => {
         if (!onPlan) return showHome();
         await refresh();
@@ -2039,6 +2056,191 @@
     const target = line == null ? null : svg("line", { x1: 0, x2: w, y1: (plotH - scale(line)).toFixed(1),
       y2: (plotH - scale(line)).toFixed(1), class: "target-line" });
     return svg("svg", { viewBox: `0 0 ${w} ${height}`, class: "chart", role: "img" }, bars, target, ticks);
+  }
+
+  /**
+   * Your decks: lines you mined, and decks brought in from Anki (Kaishi). Importing reads a copy
+   * of Anki's collection, so Anki itself is never changed. No due counts anywhere here.
+   */
+  async function runDecks() {
+    stopAudio();
+    screenId += 1;
+    askContext = null;
+    askPanel.refresh();
+    clearKeys();
+    const here = screenId;
+    root.replaceChildren(el("div", { class: "home" }, el("p", { class: "pending", text: "Loading…" })));
+    const [mined, kaishi, job] = await Promise.all([
+      api("/api/course/mined").catch(() => null),
+      api("/api/course/imported/kaishi").catch(() => null),
+      api("/api/course/anki/import/status").catch(() => null),
+    ]);
+    if (screenId !== here) return;
+    const card = (title, ...body) => el("section", { class: "deck-card" }, el("h3", { class: "deck-title", text: title }), ...body);
+
+    const minedCard = card("Mined lines",
+      el("p", { class: "stats-text", text: mined ? `${mined.total} line${mined.total === 1 ? "" : "s"} from your shows.` : "Lines you mine from shows." }),
+      el("button", { type: "button", class: "secondary", onclick: runMining }, "Open mined lines"));
+
+    let kaishiCard;
+    if (kaishi) {
+      const c = kaishi.counts;
+      kaishiCard = card(kaishi.label,
+        el("p", { class: "stats-text", text: `${c.studied} studied, ${c.new} new words waiting${c.paused ? `, ${c.paused} paused` : ""}. Brought in from Anki ${kaishi.imported_at ? new Date(kaishi.imported_at).toLocaleDateString() : ""}.` }),
+        el("p", { class: "stats-caption", text: "Studied cards come back a few a day, easiest first. New words start once you've finished the course." }),
+        el("div", { class: "deck-actions" },
+          el("button", { type: "button", class: "secondary", onclick: () => runImported("kaishi") }, "Browse"),
+          el("button", { type: "button", class: "secondary", onclick: () => runAnkiImport() }, "Update from Anki")));
+    } else {
+      kaishiCard = card("Bring in your Anki deck",
+        el("p", { class: "stats-text", text: "Kaishi 1.5k (or another sentence deck) comes in with its audio, pictures and your progress, so what you remember carries over. Anki itself isn't changed." }),
+        el("button", { type: "button", class: "lesson-primary", onclick: () => runAnkiImport() }, "Import from Anki"));
+    }
+    const running = job && job.running ? el("p", { class: "home-note", text: `Importing: ${job.stage} ${job.total ? `${job.done} of ${job.total}` : ""}` }) : null;
+    root.replaceChildren(el("div", { class: "home decks" },
+      el("div", { class: "lesson-top" },
+        el("button", { class: "secondary lesson-exit", type: "button", onclick: () => showHome() }, "Back"),
+        el("h2", { class: "lesson-title", text: "Your decks" })),
+      running, kaishiCard, minedCard));
+    keys.primary = showHome;
+    if (running) setTimeout(() => { if (screenId === here + 0 && learnVisible()) runDecks(); }, 1500);
+  }
+
+  /** Pick an Anki profile and deck, see what comes in, then import with progress. */
+  async function runAnkiImport() {
+    stopAudio();
+    screenId += 1;
+    clearKeys();
+    const here = screenId;
+    const page = (...body) => root.replaceChildren(el("div", { class: "home decks" },
+      el("div", { class: "lesson-top" },
+        el("button", { class: "secondary lesson-exit", type: "button", onclick: () => runDecks() }, "Back"),
+        el("h2", { class: "lesson-title", text: "Import from Anki" })), ...body));
+    page(el("p", { class: "pending", text: "Looking for Anki on this computer…" }));
+    let cols;
+    try {
+      cols = (await api("/api/course/anki/collections")).collections;
+    } catch (err) {
+      return page(el("p", { class: "verdict off", text: String(err.message || err) }));
+    }
+    if (screenId !== here) return;
+    if (!cols.length) {
+      return page(el("p", { class: "stats-text", text: "Kaiwa couldn't find Anki's data on this computer. Open Anki once (and let it finish syncing), then try again." }));
+    }
+    const status = el("div", { class: "anki-decks", "aria-live": "polite" });
+    const pickProfile = async (col) => {
+      status.replaceChildren(el("p", { class: "pending", text: "Reading your decks (Anki can stay open)…" }));
+      let decks;
+      try {
+        decks = (await api(`/api/course/anki/decks?path=${encodeURIComponent(col.path)}`)).decks;
+      } catch (err) {
+        status.replaceChildren(el("p", { class: "verdict off", text: String(err.message || err) }));
+        return;
+      }
+      if (!decks.length) {
+        status.replaceChildren(el("p", { class: "stats-text", text: "No sentence decks here (Kaiwa needs a sentence and its meaning on each card)." }));
+        return;
+      }
+      status.replaceChildren(...decks.map((d) => el("div", { class: "deck-card" },
+        el("h3", { class: "deck-title", text: d.name.split("::").pop() }),
+        el("p", { class: "stats-text", text: `${d.total} cards: ${d.studied} studied (your progress comes with them), ${d.new} new${d.suspended ? `, ${d.suspended} suspended (they come in paused)` : ""}.` }),
+        el("p", { class: "stats-caption", text: `Note type ${d.note_type}. Kaiwa found: ${d.roles.join(", ")}.` }),
+        el("button", { type: "button", class: "lesson-primary", onclick: (e) => startImport(col, d, e.currentTarget) }, "Import as Kaishi"))));
+    };
+    const startImport = async (col, d, btn) => {
+      btn.disabled = true;
+      try {
+        await postJson("/api/course/anki/import", { path: col.path, deck_id: d.id, deck: "kaishi" });
+      } catch (err) {
+        btn.disabled = false;
+        status.append(el("p", { class: "verdict off", text: String(err.message || err) }));
+        return;
+      }
+      const bar = el("div", { class: "home-bar" }, el("span", { style: "width:0%" }));
+      const line = el("p", { class: "stats-text", "aria-live": "polite", text: "Starting…" });
+      status.replaceChildren(line, bar);
+      const poll = async () => {
+        if (screenId !== here) return;
+        const j = await api("/api/course/anki/import/status").catch(() => null);
+        if (!j) return setTimeout(poll, 1000);
+        line.textContent = `${j.stage}${j.total ? ` ${j.done} of ${j.total}` : ""}`;
+        bar.firstChild.style.width = `${j.total ? Math.round((100 * j.done) / j.total) : 5}%`;
+        if (j.running) return setTimeout(poll, 600);
+        if (j.error) {
+          line.textContent = `Import failed: ${j.error}`;
+          return;
+        }
+        const r = j.result || {};
+        status.replaceChildren(
+          el("p", { class: "home-done", text: "Done." }),
+          el("p", { class: "stats-text", text: r.kept
+            ? `Updated ${r.rows} sentences. Your Kaiwa progress was kept for ${r.kept} cards${r.added ? `, and ${r.added} more came in` : ""}.`
+            : `${r.rows} sentences came in: ${r.added} with your Anki progress${r.paused ? ` (${r.paused} paused)` : ""}, ${r.new} new words for after the course.` }),
+          el("button", { type: "button", class: "lesson-primary", onclick: showHome }, "Back to today"));
+      };
+      poll();
+    };
+    const profiles = el("div", { class: "deck-actions" }, cols.map((c) =>
+      el("button", { type: "button", class: "secondary", onclick: () => pickProfile(c) }, `Anki profile: ${c.profile}`)));
+    page(el("p", { class: "stats-text", text: "Kaiwa reads a copy of your Anki collection, so Anki is never changed and can stay open. Reviews you do in Kaiwa stay in Kaiwa for now." }),
+      profiles, status);
+    if (cols.length === 1) pickProfile(cols[0]);
+  }
+
+  /** An imported deck's cards: search, see what's paused, and bring paused ones back. */
+  async function runImported(deck, { q = "", paused = false } = {}) {
+    stopAudio();
+    screenId += 1;
+    clearKeys();
+    const here = screenId;
+    let d;
+    try {
+      d = await api(`/api/course/imported/${deck}?q=${encodeURIComponent(q)}&paused=${paused ? 1 : 0}`);
+    } catch (err) {
+      root.replaceChildren(el("div", { class: "home" }, el("p", { class: "verdict off", text: String(err.message || err) })));
+      return;
+    }
+    if (screenId !== here) return;
+    const search = el("input", { type: "search", class: "imported-search", value: q, placeholder: "Search words, sentences or meanings", "aria-label": "Search" });
+    let timer = 0;
+    search.addEventListener("input", () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => runImported(deck, { q: search.value, paused }).then(() => {
+        const s = root.querySelector(".imported-search");
+        if (s) { s.focus(); s.setSelectionRange(s.value.length, s.value.length); }
+      }), 300);
+    });
+    const STATUS = { new: "new", learning: "learning", known: "known", paused: "paused" };
+    const rowFor = (r) => el("li", { class: "mined-row" },
+      el("button", { type: "button", class: "secondary mined-play", "aria-label": "Play",
+        onclick: () => play(r.text, r.audio_url ? { clip: r.audio_url } : {}) }, "▶"),
+      el("div", { class: "mined-main" },
+        el("p", { class: "mined-text", lang: "ja", text: r.text }),
+        el("p", { class: "mined-en", text: `${r.word ? `${r.word} · ` : ""}${r.en}` }),
+        el("p", { class: "mined-meta" },
+          el("span", { class: `mined-chip ${r.status === "known" ? "ready" : ""}`, text: STATUS[r.status] }),
+          r.status === "paused" ? el("button", { type: "button", class: "link-button", onclick: async () => {
+            await postJson(`/api/course/imported/${deck}/unpause`, { ids: [r.id] }).catch(() => {});
+            runImported(deck, { q, paused });
+          } }, "Unpause") : null)));
+    const c = d.counts;
+    root.replaceChildren(el("div", { class: "home mining" },
+      el("div", { class: "lesson-top" },
+        el("button", { class: "secondary lesson-exit", type: "button", onclick: () => runDecks() }, "Back"),
+        el("h2", { class: "lesson-title", text: d.label })),
+      el("p", { class: "stats-text", text: `${c.studied} studied, ${c.new} new, ${c.paused} paused (suspended in Anki).` }),
+      el("div", { class: "deck-actions" },
+        search,
+        el("label", { class: "home-romaji" }, el("input", { type: "checkbox", checked: paused, onchange: (e) => runImported(deck, { q, paused: e.target.checked }) }), " Paused only"),
+        c.paused ? el("button", { type: "button", class: "secondary", onclick: async (e) => {
+          const b = e.currentTarget;
+          if (b.dataset.armed !== "1") { b.dataset.armed = "1"; b.textContent = `Unpause all ${c.paused}: click again`; return; }
+          await postJson(`/api/course/imported/${deck}/unpause`, {}).catch(() => {});
+          runImported(deck, { q, paused });
+        } }, "Unpause all") : null),
+      d.rows.length ? el("ul", { class: "mined-list" }, d.rows.map(rowFor)) : el("p", { class: "status", text: "Nothing matches." }),
+      d.rows.length >= 200 ? el("p", { class: "stats-caption", text: "Showing the first 200. Search to find others." }) : null));
+    keys.primary = () => runDecks();
   }
 
   /**
@@ -2111,7 +2313,7 @@
     const more = d.total > d.rows.length ? el("p", { class: "stats-caption", text: `Showing the newest ${d.rows.length} of ${d.total}.` }) : null;
     root.replaceChildren(el("div", { class: "home mining" },
       el("div", { class: "lesson-top" },
-        el("button", { class: "secondary lesson-exit", type: "button", onclick: () => showHome() }, "Back"),
+        el("button", { class: "secondary lesson-exit", type: "button", onclick: () => runDecks() }, "Back"),
         el("h2", { class: "lesson-title", text: "Mined lines" })),
       notes, setup, list, more));
     keys.primary = showHome;

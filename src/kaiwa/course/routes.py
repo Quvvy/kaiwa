@@ -144,6 +144,88 @@ def mined_retry(row_id: str) -> dict[str, Any]:
     return {"ok": True}
 
 
+# ---------- decks imported from Anki (Kaishi) ----------
+
+class AnkiImportBody(BaseModel):
+    path: str = Field(min_length=1, max_length=1000)
+    deck_id: int
+    deck: str = "kaishi"
+
+
+class UnpauseBody(BaseModel):
+    ids: list[str] | None = None  # None: every paused card of the deck
+
+
+@router.get("/anki/collections")
+def anki_collections() -> dict[str, Any]:
+    from kaiwa.course import anki_import
+
+    return {"collections": anki_import.find_collections()}
+
+
+@router.get("/anki/decks")
+async def anki_decks(path: str) -> dict[str, Any]:
+    from kaiwa.course import anki_import
+
+    if not anki_import.is_collection_path(path):
+        raise HTTPException(status_code=400, detail="That isn't an Anki collection on this computer.")
+    try:
+        return {"decks": await asyncio.to_thread(anki_import.list_decks, path)}
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Couldn't read that collection: {exc}") from exc
+
+
+@router.post("/anki/import")
+def anki_import_start(body: AnkiImportBody) -> dict[str, Any]:
+    from kaiwa.course import anki_import, imported
+
+    if not anki_import.is_collection_path(body.path):
+        raise HTTPException(status_code=400, detail="That isn't an Anki collection on this computer.")
+    if body.deck not in imported.LABELS:
+        raise HTTPException(status_code=400, detail="Unknown deck.")
+    path = state.state_path()  # pinned now: a profile switch mid-import can't redirect it
+    started = imported.start(lambda report: state.import_anki_deck(body.path, body.deck_id, deck=body.deck, path=path, report=report))
+    if not started:
+        raise HTTPException(status_code=409, detail="An import is already running.")
+    return {"ok": True}
+
+
+@router.get("/anki/import/status")
+def anki_import_status() -> dict[str, Any]:
+    from kaiwa.course import imported
+
+    return dict(imported.job)
+
+
+@router.get("/imported/{deck}")
+def imported_list(deck: str, q: str = "", paused: bool = False) -> dict[str, Any]:
+    out = state.imported_overview(deck, query=q, paused_only=paused)
+    if out is None:
+        raise HTTPException(status_code=404, detail="Nothing imported for that deck yet.")
+    return out
+
+
+@router.post("/imported/{deck}/unpause")
+def imported_unpause(deck: str, body: UnpauseBody) -> dict[str, Any]:
+    return {"unpaused": state.unpause_imported(deck, body.ids)}
+
+
+@router.get("/imported/media/{name}")
+def imported_media_file(name: str) -> Response:
+    """An imported card's sentence or word audio, or its picture. Only files a row uses."""
+    from kaiwa.course import imported
+
+    profile = state.state_path().parent
+    rows = imported.all_rows(profile).values()
+    if not any(name in (r.get("audio"), r.get("word_audio"), r.get("image")) for r in rows):
+        raise HTTPException(status_code=404, detail="No such file.")
+    path = mined_media.path_for(imported.media_dir(profile), name)
+    if path is None:
+        raise HTTPException(status_code=404, detail="No such file.")
+    return FileResponse(path, media_type=mined_media.MIME[mined_media.ext_of(name)],
+                        headers={"Cache-Control": "private, max-age=86400", "X-Content-Type-Options": "nosniff"})
+
+
 @router.get("/mined/media/{name}")
 def mined_media_file(name: str) -> Response:
     """A mined line's clip or screenshot. Only files a kept line uses, only from its folder."""

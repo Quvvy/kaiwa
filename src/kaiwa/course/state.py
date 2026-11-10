@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Any
 
 from kaiwa import jsonio
-from kaiwa.course import build, drills, grader, mined, my_phrases, srs
+from kaiwa.course import build, drills, grader, imported, mined, my_phrases, srs
 from kaiwa.course.kana import KANA_LESSONS, KANA_ROMAJI, LESSON_BY_ID, lesson_chars
 from kaiwa.course.kana_hooks import alike, hook_for
 from kaiwa.course.missions import CULTURE, MISSIONS
@@ -43,6 +43,8 @@ _GRAMMAR: dict[str, dict[str, Any]] = {}
 # Mined lines of the profile loaded last, by row id. Rebound (never mutated) on every load,
 # so a background reader always sees one consistent profile.
 _MINED: dict[str, dict[str, Any]] = {}
+# Sentences from decks imported from Anki (Kaishi), by row id, for the profile loaded last.
+_LINES: dict[str, dict[str, Any]] = {}
 for _unit in UNITS:
     for _g in _unit.get("grammar", []):
         if build.items_for(_g["id"]):
@@ -94,7 +96,7 @@ RETENTION_MIN_REVIEWS = 20
 # five minutes. Due cards beyond it wait for later days instead of piling up, so a
 # missed week never turns into a wall of reviews.
 # Mined lines only count toward their own deck's card limit, never this budget.
-CARD_COST = {"kana": 1, "word": 1, "listen": 2, "speak": 3, "grammar": 2, "mined": 3}
+CARD_COST = {"kana": 1, "word": 1, "listen": 2, "speak": 3, "grammar": 2, "mined": 3, "line": 3}
 
 
 def card_cost(kind: str, skill: str) -> int:
@@ -109,7 +111,10 @@ def _empty() -> dict[str, Any]:
 
 
 def load_state(path: Path | None = None) -> dict[str, Any]:
-    raw = jsonio.read_json_dict(path or state_path())
+    path = path or state_path()
+    global _LINES
+    _LINES = imported.all_rows(Path(path).parent)  # cached by file time; rebound, never mutated
+    raw = jsonio.read_json_dict(path)
     if raw is None:
         return _empty()
     state = _empty()
@@ -369,6 +374,8 @@ def _card_kind(card_id: str) -> tuple[str, str, str] | None:
         return "grammar", item, skill
     if item in _MINED and skill == "listen":
         return "mined", item, skill
+    if item in _LINES and skill == "listen":
+        return "line", item, skill
     return None
 
 
@@ -569,6 +576,8 @@ def _card_payload(kind: str, item: str) -> dict[str, Any]:
         return {"grammar": _GRAMMAR[item]}
     if kind == "mined":
         return {"mined": mined.public_row(_MINED[item])}
+    if kind == "line":
+        return {"line": imported.public_row(_LINES[item])}
     return {"kana": _kana_item(item, KANA_ROMAJI[item])}
 
 
@@ -581,7 +590,7 @@ def answer_format(kind: str, skill: str, card: dict[str, Any]) -> str:
     """
     if kind == "phrase":
         return "speak" if skill == "speak" else "choice"
-    if kind == "mined":
+    if kind in ("mined", "line"):
         # Pick the meaning while new or slipping; once it holds, recall it unaided. A mined
         # line's three options never change, so choice alone ends up testing the options.
         if (is_leech(card) and srs.stability(card) < LEECH_STABLE_DAYS) or not srs.known(card):
@@ -624,8 +633,8 @@ def card_item(card_id: str) -> dict[str, Any] | None:
     if kind[0] == "grammar":
         g = payload["grammar"]
         return {"kind": "grammar", "jp": g["items"][0]["jp"], "en": g["items"][0]["en"], "note": g["rule"]}
-    if kind[0] == "mined":
-        m = payload["mined"]
+    if kind[0] in ("mined", "line"):
+        m = payload.get("mined") or payload["line"]
         return {"kind": "mined", "jp": m["text"], "en": m["en"], "note": m["note"]}
     item = payload.get("phrase") or payload.get("word")
     return {"kind": kind[0], "jp": item["jp"], "en": item["en"], "note": item.get("note", "")}
@@ -641,7 +650,7 @@ def retention(state: dict[str, Any], *, days: int = RETENTION_DAYS) -> dict[str,
     if len(rows) < RETENTION_MIN_REVIEWS:
         return None
     groups = {"kana": "kana", "word": "words", "phrase:listen": "phrases heard", "phrase:speak": "phrases said", "grammar": "grammar",
-              "mined": "mined lines"}
+              "mined": "mined lines", "line": "Kaishi lines"}
     by_kind = {}
     for key, label in groups.items():
         part = [r for r in rows if r.get("k") == key]
@@ -674,8 +683,10 @@ def _answered_today(card: dict[str, Any]) -> bool:
     return bool(last) and srs.study_day(datetime.fromisoformat(last)).isoformat() == _today().isoformat()
 
 
-def _reviewable(card_id: str, kind: tuple[str, str, str] | None) -> bool:
+def _reviewable(card_id: str, kind: tuple[str, str, str] | None, card: dict[str, Any] | None = None) -> bool:
     """A mined line being prepared again (its text was edited) sits out until it's ready."""
+    if card is not None and card.get("paused"):
+        return False  # suspended in Anki: kept, but out of reviews until you unpause it
     return kind is not None and (kind[0] != "mined" or _MINED[kind[1]]["status"] == "ready")
 
 
@@ -691,7 +702,7 @@ def due_cards(state: dict[str, Any], *, limit: int = 20, budget: int | None = No
     rows = []
     for card_id, card in state["cards"].items():
         kind = _card_kind(card_id)
-        if not _reviewable(card_id, kind) or srs.is_learning(card) or str(card.get("due") or "") > today:
+        if not _reviewable(card_id, kind, card) or srs.is_learning(card) or str(card.get("due") or "") > today:
             continue
         if deck is not None and deck_of(card_id) != deck:
             continue
@@ -748,7 +759,7 @@ def recap_cards(state: dict[str, Any]) -> list[dict[str, Any]]:
     rows = []
     for card_id, card in state["cards"].items():
         kind = _card_kind(card_id)
-        if _reviewable(card_id, kind) and srs.is_learning(card) and str(card.get("due") or "") <= today:
+        if _reviewable(card_id, kind, card) and srs.is_learning(card) and str(card.get("due") or "") <= today:
             rows.append((srs.due_at(card), card_id, kind))
     rows.sort(key=lambda r: r[0])
     picked = rows[:RECAP_LIMIT]
@@ -794,7 +805,7 @@ FIRST_DAY_EXTRA = 4.0
 # Rough minutes a lesson step takes, including its share of the same-day recap.
 WORD_MINUTES = 0.3
 STEP_MINUTES = {"grammar": 5.5, "listen": 3.5, "speak": 3.5}
-REVIEW_SECONDS = {"kana": 4, "word": 5, "listen": 8, "speak": 12, "grammar": 15, "mined": 12}
+REVIEW_SECONDS = {"kana": 4, "word": 5, "listen": 8, "speak": 12, "grammar": 15, "mined": 12, "line": 12}
 
 
 def pace_of(state: dict[str, Any]) -> dict[str, Any]:
@@ -821,6 +832,9 @@ DECK_FIELDS = ("new_per_day", "max_reviews", "lesson_minutes", "retention")
 DECKS: dict[str, dict[str, Any]] = {
     "course": {"label": "Course", "fields": DECK_FIELDS},
     # Lines mined from shows: a handful a day, and a hard review cap so they never pile up.
+    # Imported from Anki: a gentle daily share of the backlog, easiest to recover first.
+    "kaishi": {"label": "Kaishi 1.5k", "fields": ("new_per_day", "max_reviews", "retention"),
+               "defaults": {"new_per_day": 10, "max_reviews": 20}},
     "mined": {"label": "Mined", "fields": ("new_per_day", "max_reviews", "retention"),
               "defaults": {"new_per_day": 10, "max_reviews": 50}},
 }
@@ -835,7 +849,12 @@ REVIEW_ROWS_MAX = 200  # due cards sent to the page at once; the rest come on th
 
 
 def deck_of(card_id: str) -> str:
-    return "mined" if card_id.startswith("mined.") else "course"
+    prefix = card_id.split(".", 1)[0]
+    return prefix if prefix in ("mined", "kaishi") else "course"
+
+
+# Decks besides the course, in the order their reviews and new cards come.
+SIDE_DECKS = ("mined", "kaishi")
 
 
 def _clean_values(raw: Any, fields: tuple[str, ...]) -> dict[str, float]:
@@ -970,10 +989,22 @@ def _course_reviews(state: dict[str, Any]) -> list[dict[str, Any]]:
     return due_cards(state, limit=80, budget=max(0, budget - spent), deck="course")
 
 
+def _side_reviews(state: dict[str, Any], deck: str) -> list[dict[str, Any]]:
+    """A side deck's share of today's reviews, within its card limit. Imported decks come back
+    easiest-to-recover first, so catching up on an old backlog starts with wins."""
+    cap = _review_cap(state, deck)
+    left = max(0, (cap if cap is not None else 0) - reviews_done_today(state, deck))
+    if not left:
+        return []
+    if deck == "mined":
+        return due_cards(state, limit=min(left, REVIEW_ROWS_MAX), budget=10**9, deck=deck)
+    due = due_cards(state, limit=10_000, budget=10**9, deck=deck)
+    due.sort(key=lambda c: -srs.retrievability(state["cards"][c["card_id"]]))
+    return due[: min(left, REVIEW_ROWS_MAX)]
+
+
 def _mined_reviews(state: dict[str, Any]) -> list[dict[str, Any]]:
-    cap = _review_cap(state, "mined")
-    left = max(0, (cap if cap is not None else 0) - reviews_done_today(state, "mined"))
-    return due_cards(state, limit=min(left, REVIEW_ROWS_MAX), budget=10**9, deck="mined") if left else []
+    return _side_reviews(state, "mined")
 
 
 def _interleave(main: list[dict[str, Any]], extra: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -995,17 +1026,55 @@ def _interleave(main: list[dict[str, Any]], extra: list[dict[str, Any]]) -> list
 
 def todays_reviews(state: dict[str, Any]) -> list[dict[str, Any]]:
     """Today's share of due cards: each deck's share within its limit, then the overall limit."""
-    rows = _interleave(_course_reviews(state), _mined_reviews(state))
+    rows = _course_reviews(state)
+    for deck in SIDE_DECKS:
+        rows = _interleave(rows, _side_reviews(state, deck))
     overall = all_limits(state)["max_reviews"]
     if overall is not None:
         rows = rows[: max(0, overall - reviews_done_today(state))]
     return rows
 
 
-def mined_backlog(state: dict[str, Any]) -> bool:
-    """More mined reviews due than two days' worth: hold new lines until it shrinks."""
-    cap = _review_cap(state, "mined") or 0
-    return len(due_cards(state, limit=10_000, deck="mined")) > cap * CATCH_UP_DAYS
+def mined_backlog(state: dict[str, Any], deck: str = "mined") -> bool:
+    """More of a deck's reviews due than two days' worth: hold its new cards until it shrinks."""
+    cap = _review_cap(state, deck) or 0
+    return len(due_cards(state, limit=10_000, deck=deck)) > cap * CATCH_UP_DAYS
+
+
+def _course_word_keys() -> set[str]:
+    """The course's words (as written and in hiragana), so an imported deck skips what it taught."""
+    from kaiwa.course.speech_check import to_hiragana
+
+    keys: set[str] = set()
+    for w in _WORDS.values():
+        keys.add(w["jp"])
+        keys.add(to_hiragana(w["jp"]))
+    return keys
+
+
+def todays_imported_new(state: dict[str, Any], deck: str = "kaishi") -> list[dict[str, Any]]:
+    """New words from an imported deck: only once the course is done, in the deck's own order,
+    skipping words the course already taught, within the deck's and the overall new limits."""
+    if next_unit(state) is not None or mined_backlog(state, deck):
+        return []
+    day = state["daily"].get(_today().isoformat(), {})
+    done = int((day.get("new_by_deck") or {}).get(deck) or 0)
+    left = deck_limits(state, deck)["new_per_day"] - done
+    overall = all_limits(state)["new_per_day"]
+    if overall is not None:
+        left = min(left, overall - int(day.get("new") or 0))
+    if left <= 0:
+        return []
+    taught = _course_word_keys()
+    out = []
+    for rid, row in sorted(((k, v) for k, v in _LINES.items() if k.startswith(deck + ".")), key=lambda kv: kv[1].get("order", 0)):
+        cid = f"{rid}:listen"
+        if cid in state["cards"] or row.get("word") in taught or row.get("word_reading") in taught:
+            continue
+        out.append(_card_row(cid, ("line", rid, "listen"), srs.new_card()))
+        if len(out) >= left:
+            break
+    return out
 
 
 def todays_mined_new(state: dict[str, Any]) -> list[dict[str, Any]]:
@@ -1080,9 +1149,13 @@ def plan_today(state: dict[str, Any]) -> dict[str, Any]:
         plan.append("review")
     # New mined lines are their own deck: offered even on a course catch-up day.
     mined_new = todays_mined_new(state)
-    mined_extra = {"mined_new": mined_new, "mined_paused": not mined_new and mined_backlog(state)}
+    kaishi_new = todays_imported_new(state, "kaishi")
+    mined_extra = {"mined_new": mined_new, "mined_paused": not mined_new and mined_backlog(state), "kaishi_new": kaishi_new}
     if mined_new:
         plan.append("mined")
+    if kaishi_new:
+        plan.append("kaishi")
+    mined_new = mined_new + kaishi_new  # both count toward the overall new limit and today's minutes
     if catching_up(state):
         if recap_cards(state):
             plan.append("recap")
@@ -1420,7 +1493,8 @@ def day_summary(state: dict[str, Any]) -> dict[str, Any]:
     # No more than a day's share of each deck ever comes up.
     cap = _review_cap(state)
     due_tomorrow = min(due_by_deck.get("course", 0), pace_of(state)["reviews"] if cap is None else cap)
-    due_tomorrow += min(due_by_deck.get("mined", 0), _review_cap(state, "mined") or 0)
+    for deck in SIDE_DECKS:
+        due_tomorrow += min(due_by_deck.get(deck, 0), _review_cap(state, deck) or 0)
     return {
         "answers": answers,
         "right": int(day.get("right") or 0),
@@ -1534,7 +1608,7 @@ def course_stats(*, path: Path | None = None) -> dict[str, Any]:
 
     # Coming up: real reviews due on each of the next 30 days (overdue counts as today).
     forecast = [0] * 30
-    mined_now = 0
+    side_now: dict[str, int] = {}
     for cid, card in state["cards"].items():
         if srs.is_learning(card):
             continue
@@ -1542,14 +1616,17 @@ def course_stats(*, path: Path | None = None) -> dict[str, Any]:
             offset = (date.fromisoformat(str(card.get("due"))[:10]) - today).days
         except ValueError:
             continue
-        if offset <= 0 and deck_of(cid) == "mined":
-            mined_now += 1  # only a day's share of these ever comes up, so only that is shown
+        if card.get("paused"):
+            continue
+        if offset <= 0 and deck_of(cid) in SIDE_DECKS:
+            side_now[deck_of(cid)] = side_now.get(deck_of(cid), 0) + 1  # only a day's share of these ever comes up, so only that is shown
         elif offset < 30:
             forecast[max(0, offset)] += 1
-    forecast[0] += min(mined_now, _review_cap(state, "mined") or mined_now)
+    for deck, n in side_now.items():
+        forecast[0] += min(n, _review_cap(state, deck) or n)  # only a day's share of each deck ever comes up
 
     # Your cards, by kind and stage.
-    kinds = {"kana": "Kana", "word": "Words", "phrase": "Phrases", "grammar": "Grammar", "mined": "Mined lines"}
+    kinds = {"kana": "Kana", "word": "Words", "phrase": "Phrases", "grammar": "Grammar", "mined": "Mined lines", "line": "Kaishi"}
     stages = {k: {"new": 0, "learning": 0, "young": 0, "mature": 0} for k in kinds}
     intervals = [0] * len(INTERVAL_BUCKETS)
     for cid, card in state["cards"].items():
@@ -2207,5 +2284,98 @@ def complete_mission(unit_id: str, *, path: Path | None = None) -> str:
         row.setdefault("mission", _today().isoformat())
         _mark_day(state)
         return row["mission"]
+
+    return _with_state(apply, path)
+
+
+# ---------- decks imported from Anki ----------
+
+def import_anki_deck(collection: str, deck_id: int, *, deck: str = "kaishi", path: Path | None = None,
+                     report=None) -> dict[str, Any]:
+    """Bring an Anki deck in: its sentences (rows file), media, and for each studied card its FSRS
+    memory. Cards Kaiwa already has keep Kaiwa's progress (re-importing only adds and updates text).
+    Suspended cards come in paused. The Anki collection is read from a copy and never changed."""
+    from kaiwa.course import anki_import
+
+    if deck not in DECKS or deck in ("course", "mined"):
+        raise ValueError(f"not an import deck: {deck}")
+    path = path or state_path()
+    profile = Path(path).parent
+    say = report or (lambda *_a: None)
+    say("Reading Anki…", 0, 0)
+    read = anki_import.read_deck(collection, deck_id)
+    rows = imported.build_rows(deck, read, anki_import.media_dir(collection), imported.media_dir(profile),
+                               progress=lambda n, t: say("Copying audio and pictures…", n, t))
+    old = imported.load(profile, deck) or {}
+    imported.save(profile, deck, {
+        "deck": deck, "name": read["name"], "source": str(collection), "anki_deck_id": int(deck_id),
+        "imported_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "first_imported_at": old.get("first_imported_at") or datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "anki_reviews": read["reviews"], "rows": rows,
+    })
+    say("Carrying your progress over…", len(rows), len(rows))
+    retention = deck_limits(load_state(path), deck)["retention"]
+
+    def apply(state: dict[str, Any]) -> dict[str, Any]:
+        added = kept = paused = new = 0
+        for row in rows:
+            a = row["anki"]
+            cid = f"{row['id']}:listen"
+            if cid in state["cards"]:
+                kept += 1
+                continue
+            if a.get("stability") is None or not a.get("last_review"):
+                new += 1
+                continue
+            card = srs.imported_card(a["stability"], a.get("difficulty") or 5.0, datetime.fromisoformat(a["last_review"]),
+                                     reps=a.get("reps") or 1, lapses=a.get("lapses") or 0, retention=retention)
+            if a.get("suspended"):
+                card["paused"] = True
+                paused += 1
+            state["cards"][cid] = card
+            added += 1
+        return {"rows": len(rows), "added": added, "kept": kept, "paused": paused, "new": new}
+
+    return {"deck": deck, "name": read["name"], **_with_state(apply, path)}
+
+
+def imported_overview(deck: str = "kaishi", *, path: Path | None = None, query: str = "", paused_only: bool = False,
+                      limit: int = 200) -> dict[str, Any] | None:
+    """An imported deck's page: what came in, and its cards with their status (no due counts)."""
+    path = path or state_path()
+    data = imported.load(Path(path).parent, deck)
+    if not data:
+        return None
+    state = load_state(path)
+    rows = data["rows"]
+    counts = {"rows": len(rows), "studied": 0, "paused": 0, "new": 0}
+    out = []
+    q = query.strip().casefold()
+    for row in rows:
+        card = state["cards"].get(f"{row['id']}:listen")
+        status = "new" if card is None else "paused" if card.get("paused") else "known" if srs.known(card) else "learning"
+        counts["new" if card is None else "paused" if card.get("paused") else "studied"] += 1
+        if paused_only and status != "paused":
+            continue
+        if q and q not in row["text"].casefold() and q not in row.get("word", "").casefold() and q not in row.get("en", "").casefold():
+            continue
+        if len(out) < limit:
+            out.append({**imported.public_row(row), "status": status})
+    return {"deck": deck, "label": DECKS[deck]["label"], "name": data.get("name"), "imported_at": data.get("imported_at"),
+            "anki_reviews": data.get("anki_reviews", 0), "counts": counts, "rows": out}
+
+
+def unpause_imported(deck: str, ids: list[str] | None, *, path: Path | None = None) -> int:
+    """Bring paused (suspended-in-Anki) cards back into reviews: the given ids, or all of the deck."""
+
+    def apply(state: dict[str, Any]) -> int:
+        n = 0
+        for cid, card in state["cards"].items():
+            if not card.get("paused") or deck_of(cid) != deck:
+                continue
+            if ids is None or cid.split(":")[0] in ids:
+                card.pop("paused", None)
+                n += 1
+        return n
 
     return _with_state(apply, path)
