@@ -10,7 +10,7 @@
   --surface-2: #f5f6f8;
   --ink: #1b1d21;
   --ink-2: #4f5661;
-  --ink-3: #7c838e;
+  --ink-3: #646b75;
   --line: #dadde2;
   --line-strong: #acb2bb;
   --accent: #1f5fbf;
@@ -52,7 +52,7 @@
   --surface-2: #282c31;
   --ink: #e8eaed;
   --ink-2: #aab0b8;
-  --ink-3: #7a818b;
+  --ink-3: #929aa4;
   --line: #353a40;
   --line-strong: #525962;
   --accent: #6aa3f0;
@@ -78,7 +78,7 @@
     --surface-2: #282c31;
     --ink: #e8eaed;
     --ink-2: #aab0b8;
-    --ink-3: #7a818b;
+    --ink-3: #929aa4;
     --line: #353a40;
     --line-strong: #525962;
     --accent: #6aa3f0;
@@ -577,6 +577,33 @@ body:not([data-mode="chat"]) .header-chats {
   font-size: 13px;
 }
 
+/* Before the first message: the note sits in the middle under 会話, not pinned to a corner. */
+#log:not(:has(.bubble)) {
+  justify-content: center;
+}
+
+#log:not(:has(.bubble)) .chat-disclaimer {
+  align-self: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  max-width: 420px;
+  margin-bottom: 48px;
+  font-size: 14px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+#log:not(:has(.bubble)) .chat-disclaimer::before {
+  content: "会話" / "";
+  font-family: var(--font-jp);
+  font-size: 40px;
+  line-height: 1.2;
+  letter-spacing: 0.02em;
+  color: var(--ink-2);
+}
+
 .bubble {
   max-width: min(80%, 620px);
   padding: 8px 12px;
@@ -704,10 +731,9 @@ body:not([data-mode="chat"]) .header-chats {
   box-shadow: 0 0 0 1px var(--warn);
 }
 
+/* Its buttons now live on the latest Kaiwa reply (see markLastSimpler). */
 .composer-session {
-  display: flex;
-  gap: 4px;
-  flex-wrap: wrap;
+  display: none;
 }
 
 .composer-session button {

@@ -1081,6 +1081,12 @@
       logEl.querySelectorAll(".bubble.bot").forEach((el) => {
         el.classList.toggle("is-last", el === activeWrap);
       });
+      // Replay and Ask again act on the latest reply, so they sit on it: Replay, Simpler, Ask again.
+      const actions = activeWrap && activeWrap.querySelector(".bubble-actions");
+      if (!actions) return;
+      for (const btn of [replayLastBtn, againBtn]) if (btn) btn.classList.add("secondary");
+      actions.prepend(replayLastBtn);
+      if (againBtn) actions.append(againBtn);
     }
 
     function lastBotBubble() {

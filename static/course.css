@@ -35,13 +35,28 @@
 .home-title span {
   font-weight: 400;
   color: var(--ink-2);
-  margin-left: 6px;
+  margin-left: 8px;
+}
+
+/* Today's Japanese, set large: the one thing on home that carries weight. */
+.home-title-jp {
+  font-family: var(--font-jp);
+  font-size: clamp(36px, 6vw, 52px);
+  font-weight: 400;
+  line-height: 1.2;
+  letter-spacing: 0.02em;
+  color: var(--ink);
+  margin-top: 4px;
+}
+
+.home-title-jp + .home-title {
+  margin-top: 4px;
 }
 
 .home-goal {
-  margin-top: 6px;
+  margin-top: 8px;
   color: var(--ink-2);
-  font-size: 15.5px;
+  font-size: 16px;
 }
 
 .home-progress {
@@ -54,7 +69,6 @@
   background: var(--line);
   border-radius: 2px;
   overflow: hidden;
-  margin-top: -4px;
 }
 
 .home-bar span {
@@ -101,7 +115,7 @@
 .plan-row.done::before {
   content: "✓";
   color: var(--ok);
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .plan-row.done .plan-detail {
@@ -319,17 +333,17 @@
   width: 100%;
   min-height: 46px;
   border: 1px solid var(--accent);
-  background: var(--accent-soft);
-  color: var(--accent);
-  font-size: 15.5px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 16px;
   font-weight: 600;
   touch-action: none;
   --level: 0;
 }
 
 .hold:hover {
-  background: color-mix(in srgb, var(--accent) 16%, var(--surface));
-  border-color: var(--accent);
+  background: var(--accent-press);
+  border-color: var(--accent-press);
 }
 
 .hold-level {
@@ -1297,16 +1311,16 @@ body:not([data-mode="learn"]) .ask-dock {
 }
 
 .grade-chip {
-  min-height: 26px;
+  min-height: 28px;
   padding: 0 8px;
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 400;
   background: linear-gradient(var(--btn-top), var(--btn-bottom));
   border: 1px solid var(--line-strong);
   color: var(--ink);
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
 }
 
 .grade-chip:hover {
@@ -1656,18 +1670,72 @@ body:not([data-mode="learn"]) .ask-dock {
 /* ---------- daily pace ---------- */
 .pace-row {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
+  flex-direction: column;
+  gap: 8px;
   margin-top: 8px;
 }
 
 .pace-label {
   color: var(--ink-2);
   font-size: 14px;
-  margin-right: 6px;
+  margin-right: 8px;
 }
 
+/* Three paces side by side, each a name over what it costs. */
+.pace-options {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+}
+
+.pace-option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-height: 0;
+  padding: 8px 12px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  color: var(--ink);
+  cursor: pointer;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: left;
+}
+
+.pace-option:hover {
+  background: var(--surface-2);
+}
+
+.pace-option.on {
+  background: var(--surface-2);
+  border-color: var(--accent);
+}
+
+.pace-option:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.pace-minutes {
+  color: var(--ink-3);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+@media (max-width: 520px) {
+  .pace-options {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Still used by the tab strips elsewhere. */
 .pace-chip {
   background: transparent;
   border: 1px solid var(--line);
@@ -1675,19 +1743,14 @@ body:not([data-mode="learn"]) .ask-dock {
   color: var(--ink-2);
   cursor: pointer;
   font: inherit;
-  font-size: 13.5px;
-  padding: 4px 11px;
+  font-size: 14px;
+  padding: 4px 12px;
 }
 
 .pace-chip.on {
   border-color: var(--accent, var(--ink));
   color: var(--ink);
   font-weight: 600;
-}
-
-.pace-minutes {
-  color: var(--ink-3);
-  font-weight: 400;
 }
 
 /* ---------- which sounds didn't come through ---------- */
@@ -2239,7 +2302,7 @@ button.secondary.pressed {
   border-bottom: 1px solid var(--line);
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   padding-bottom: 12px;
 }
 

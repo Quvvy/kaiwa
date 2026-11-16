@@ -833,7 +833,8 @@
         unit
           ? el("div", { class: "home-unit" },
               el("p", { class: "home-kicker", text: `Unit ${unit.number} of ${s.units_total}` }),
-              el("h1", { class: "home-title" }, unit.title, " ", el("span", { lang: "ja", text: unit.title_jp })),
+              unit.title_jp ? el("p", { class: "home-title-jp", lang: "ja", text: unit.title_jp }) : null,
+              el("h1", { class: "home-title", text: unit.title }),
               el("p", { class: "home-goal", text: unit.goal }))
           : el("div", { class: "home-unit" },
               el("h1", { class: "home-title", text: `You've finished all ${s.units_total} units` }),
@@ -851,8 +852,10 @@
           el("p", { class: "can-do-label", text: "And when? People who pick a time are more likely to keep it up." }),
           reminderRow()) : null,
         weekRow(s),
-        el("div", { class: "home-bar", role: "progressbar", "aria-label": "Phrases learned", "aria-valuenow": String(pct), "aria-valuemin": "0", "aria-valuemax": "100" },
-          el("span", { style: `width:${pct}%` })),
+        pct > 0
+          ? el("div", { class: "home-bar", role: "progressbar", "aria-label": "Phrases learned", "aria-valuenow": String(pct), "aria-valuemin": "0", "aria-valuemax": "100" },
+              el("span", { style: `width:${pct}%` }))
+          : null,
         steps.length
           ? el("div", { class: "home-actions" },
               el("button", { type: "button", class: "lesson-primary", onclick: runNext },
@@ -1048,14 +1051,15 @@
   function paceRow() {
     return el("div", { class: "pace-row", role: "group", "aria-label": "Daily pace" },
       el("span", { class: "pace-label", text: "Daily pace" }),
-      Object.entries(today.paces || {}).map(([key, p]) => el("button", {
-        type: "button", class: "pace-chip" + (key === today.pace ? " on" : ""), "aria-pressed": String(key === today.pace),
-        onclick: async () => {
-          if (key === today.pace) return;
-          await postJson("/api/course/pace", { pace: key }).catch(() => {});
-          showHome();
-        },
-      }, p.label, el("span", { class: "pace-minutes", text: ` ~${p.minutes} min a day, course in ~${p.months} months` }))));
+      el("div", { class: "pace-options" },
+        Object.entries(today.paces || {}).map(([key, p]) => el("button", {
+          type: "button", class: "pace-option" + (key === today.pace ? " on" : ""), "aria-pressed": String(key === today.pace),
+          onclick: async () => {
+            if (key === today.pace) return;
+            await postJson("/api/course/pace", { pace: key }).catch(() => {});
+            showHome();
+          },
+        }, p.label, el("span", { class: "pace-minutes", text: `~${p.minutes} min a day · ~${p.months} months` })))));
   }
   /**
    * Anki-style daily limits, per deck and overall. A blank box follows the pace, so the
@@ -2718,6 +2722,7 @@
             lessonGrade(`${p.id}:speak`, { correct: r.band !== "off", band: r.band, fmt: "phrase:speak:learn" });
           }
           if (r.band !== "good") play(p.jp);
+          promoteNext();
         } catch (err) {
           result.replaceChildren(el("p", { class: "verdict off", text: String(err.message || err) }));
         }
@@ -2725,7 +2730,12 @@
       const last = i === phrases.length - 1;
       const actions = [];
       if (i > 0) actions.push(el("button", { type: "button", class: "secondary", onclick: () => { i -= 1; show(); } }, "Back"));
-      actions.push(primaryButton(last ? "Quick check" : "Next", next));
+      // Saying it is the point of this card, so Next stays quiet until it has been said once.
+      // Enter still moves on: nothing is blocked, only the emphasis changes.
+      const nextBtn = primaryButton(last ? "Quick check" : "Next", next);
+      const promoteNext = () => nextBtn.classList.remove("secondary");
+      if (!spoken.has(p.id)) nextBtn.classList.add("secondary");
+      actions.push(nextBtn);
       frame({
         title: `New phrases, unit ${unit.number}`,
         index: i,

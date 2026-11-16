@@ -209,6 +209,13 @@
   function picker({ compact = false } = {}) {
     const wrap = document.createElement("div");
     wrap.className = "mic-picker" + (compact ? " compact" : "");
+    // Inside a lesson or Chat the picker is a fix, not a setting: it stays out of sight
+    // until the mic fails or a recording comes back silent. Settings → Speech always shows it.
+    const reveal = () => { wrap.hidden = false; };
+    if (compact) {
+      wrap.hidden = true;
+      document.addEventListener("kaiwa-mic-problem", reveal);
+    }
     const select = document.createElement("select");
     select.setAttribute("aria-label", "Microphone");
     const meter = document.createElement("span");
@@ -226,6 +233,7 @@
         note.textContent = "";
       } catch (err) {
         note.textContent = String(err.message || err);
+        reveal();
       }
       let list = [];
       try { list = await devices(); } catch (_) {}
@@ -239,6 +247,7 @@
         select.append(opt);
       }
       if (!list.length) {
+        reveal();
         const opt = document.createElement("option");
         opt.textContent = "No microphone found";
         select.append(opt);
@@ -255,7 +264,10 @@
       }
     });
     const tick = () => {
-      if (!wrap.isConnected) return;
+      if (!wrap.isConnected) {
+        document.removeEventListener("kaiwa-mic-problem", reveal);
+        return;
+      }
       bar.style.width = Math.round(level() * 100) + "%";
       requestAnimationFrame(tick);
     };
@@ -289,6 +301,7 @@
     },
     /** What to say when a recording came back silent. */
     noSoundMessage() {
+      document.dispatchEvent(new Event("kaiwa-mic-problem"));
       if (REMOTE) return "No sound from the microphone. Check nothing is covering it, then try again.";
       return `No sound from ${currentLabel() || "the selected microphone"}. Pick another microphone below.`;
     },
