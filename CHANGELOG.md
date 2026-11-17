@@ -7,10 +7,11 @@ and this project aims to follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-Study lab branch: see `HAM_LOG.md` for each change and why.
+## [2.2.0] — 2026-11-17
 
 ### Added
 
+- **Kaishi from Anki:** Learn → Your decks → Import from Anki brings in a sentence deck (Kaishi 1.5k matches exactly) with its audio, pictures and your Anki progress, reading a copy so Anki is never changed. Overdue cards come back easiest first at 10 new and 20 reviews a day, so there's no backlog wall. Re-importing keeps Kaiwa's progress.
 - **Grammar reviews:** grammar points come back on a schedule, as sentences you put together from tiles.
 - **Missions:** a real little scene at the end of each unit.
 - **Course map and phrasebook:** every unit and everything you've learned, searchable with audio.
@@ -23,6 +24,7 @@ Study lab branch: see `HAM_LOG.md` for each change and why.
 - **What trips you up lately** on the stats page.
 - **Sentence mining (asbplayer):** point asbplayer's AnkiConnect URL at `http://127.0.0.1:8787/ankiconnect` and lines you mine from YouTube or Tsugi's player become **New lines** in your day: the real clip, three meanings to pick from, and the kanji line, a kana line and a short note on the back. See **Mined lines** on the Learn page for setup.
 - **Daily limits** under Learn → Options: new per day, max reviews per day, lesson minutes and desired retention, for the course and for mined lines, plus an overall cap. Blank boxes follow the pace.
+- **Mined lines** show the scene's screenshot on the back, and once a line holds it becomes listen-and-recall instead of picking from three meanings.
 
 ### Changed
 
@@ -32,6 +34,11 @@ Study lab branch: see `HAM_LOG.md` for each change and why.
 - A streak survives a missed day once you've earned a rest day, and study days end at 4 a.m.
 - Kana get a picture for every character, and drills offer the kana that really get confused.
 - The home screen puts Start first, says how long today takes, and tucks away options.
+- Learn home sets the unit's Japanese large above its title, and daily pace is one three-option control.
+- In lessons, Hold and say it is the main button, and Next stays quiet until a new phrase has been said once.
+- The microphone picker only appears in lessons and Chat when something is wrong with the mic.
+- **Chat** opens with a centered note under 会話, and Replay, Simpler and Ask again sit on Kaiwa's latest reply.
+- Muted text meets WCAG AA contrast in light and dark.
 
 ### Fixed
 
