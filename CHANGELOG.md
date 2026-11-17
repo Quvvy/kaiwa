@@ -7,6 +7,31 @@ and this project aims to follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [2.2.1] — 2026-11-17
+
+Fixes from the review of the study lab work. See `HAM_LOG.md` for each one and why.
+
+### Changed
+
+- **Daily pace** is Regular or Intensive. Relaxed saved little time and often stalled; a learner on Relaxed moves to the default. Each pace's minutes and months are marked as estimates from a simulation.
+- The day's time estimate uses one table of review times and counts the start of the next unit when today finishes one.
+- Claims the evidence doesn't support are softened, two culture notes are corrected, and My phrases say they're AI-written.
+
+### Fixed
+
+- Sentence building accepts other natural word orders, and は no longer offers が as the wrong tile.
+- The missed-sounds line shows the Japanese as written (コーヒー, not こおひい), and marks a shortened long vowel.
+- A catch-up day stays reviews-only after its reviews are done, and "That's today" and tomorrow's count include cards still settling.
+- Tomorrow's line doesn't promise a lesson during a backlog, and units finished in the evening show on the end-of-day screen.
+- Redoing a finished step no longer changes a learned card's schedule.
+- A damaged pace, card date or lesson time no longer takes down the Learn page.
+- Losing the connection after a save offers Try again instead of freezing.
+- Milestones count what's been recalled, not what's been taught.
+- A mission only counts when its goal was reached, and Take a part doesn't claim success.
+- The T key works on by-ear cards, and reviews fetch the voice they'll play.
+- Kept corrections carry the corrected line's own English, and Chat's Keep shows what it saved.
+- The calendar event uses your pace instead of a stale fifteen minutes.
+
 ## [2.2.0] — 2026-11-17
 
 ### Added
