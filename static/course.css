@@ -1732,6 +1732,7 @@ body:not([data-mode="learn"]) .ask-dock {
 
 @media (max-width: 520px) {
   .pace-options {
+    grid-auto-flow: row;
     grid-template-columns: 1fr;
   }
 }

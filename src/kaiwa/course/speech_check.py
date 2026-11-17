@@ -174,7 +174,10 @@ def _written_parts(target: str) -> list[tuple[str, int]]:
         for seg in _kks.convert(piece):
             orig = seg.get("orig", "")
             if orig == seg.get("hira") or orig == seg.get("kana"):
-                parts.extend((ch, len(normalize(ch))) for ch in orig)  # kana: mark sound by sound
+                # Kana: mark sound by sound. Each character holds what it adds in context,
+                # so ー counts as the vowel it lengthens (コー → こお).
+                parts.extend((ch, len(normalize(orig[:k + 1])) - len(normalize(orig[:k])))
+                             for k, ch in enumerate(orig))
             elif orig:
                 parts.append((orig, len(normalize(seg.get("hira") or orig))))  # kanji: all or nothing
     return parts

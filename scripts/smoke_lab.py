@@ -411,7 +411,10 @@ def diff_shows_real_japanese() -> None:
     runs = spot_differences("コーヒーをください。", "ください")
     _check(joined(runs) == "コーヒーをください。", "the target keeps its katakana and long vowels")
     _check(runs[0] == {"text": "コーヒーを", "ok": False}, "the long vowel is marked with its sound")
-    _check(all(r["ok"] for r in spot_differences("コーヒーをください。", "こひをください")), "a heard line marks nothing")
+    _check(all(r["ok"] for r in spot_differences("コーヒーをください。", "こーひーをください")), "a heard line marks nothing")
+    # Long vowels count, so a shortened one is what gets marked.
+    _check([r["text"] for r in spot_differences("コーヒーをください。", "こひをください") if not r["ok"]] == ["ー", "ー"],
+           "a shortened long vowel is marked, not the whole word")
     runs = spot_differences("もう一度", "もう")
     _check(joined(runs) == "もう一度" and runs[-1] == {"text": "一度", "ok": False}, "kanji stay kanji, marked whole")
 
